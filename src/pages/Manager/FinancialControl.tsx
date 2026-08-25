@@ -12,7 +12,8 @@ import {
   Banknote,
   Send,
   PieChart,
-  Activity
+  Activity,
+  CheckCircle2
 } from 'lucide-react';
 import {
   BarChart,
