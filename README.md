@@ -71,3 +71,7 @@ export default defineConfig([
   },
 ])
 ```
+
+## Cloudflare Pages Deployment
+This project is configured to build and deploy static assets automatically to Cloudflare Pages.
+
