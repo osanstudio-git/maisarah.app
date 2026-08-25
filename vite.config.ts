@@ -38,6 +38,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        maximumFileSizeToCacheInBytes: 4000000,
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.origin === (typeof globalThis !== 'undefined' && 'location' in globalThis ? (globalThis as any).location.origin : ''),
