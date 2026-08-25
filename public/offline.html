@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ميسرة | غير متصل بالإنترنت</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f9fafb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: #1f2937;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 400px;
+        }
+        .logo {
+            width: 80px;
+            height: 80px;
+            background-color: #A11212;
+            color: white;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            font-weight: 900;
+            margin: 0 auto 2rem;
+            box-shadow: 0 10px 25px -5px rgba(161, 18, 18, 0.2);
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            color: #111827;
+        }
+        p {
+            font-size: 14px;
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+        .btn {
+            display: inline-block;
+            background-color: #A11212;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            transition: transform 0.2s;
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">م</div>
+        <h1>أنت غير متصل حالياً</h1>
+        <p>يرجى التحقق من اتصالك بالإنترنت للمتابعة. سيتم إعادة تحميل الصفحة تلقائياً عند استعادة الاتصال.</p>
+        <a href="/" class="btn">إعادة المحاولة</a>
+    </div>
+    <script>
+        window.addEventListener('online', () => {
+            window.location.reload();
+        });
+    </script>
+</body>
+</html>
