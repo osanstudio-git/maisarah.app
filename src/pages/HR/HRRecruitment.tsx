@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
 import {
-  UserPlus, Search, ChevronRight, FileText, X, AlertCircle, CheckCircle2, ClipboardCheck, Eye
+  UserPlus, Search, ChevronRight, FileText, X, AlertCircle, CheckCircle2, ClipboardCheck, Eye, Trash2, AlertTriangle
 } from 'lucide-react';
 
 interface Candidate {
@@ -11,7 +11,7 @@ interface Candidate {
   name: string;
   role: string;
   dept: string;
-  stage: 'cv_received' | 'shortlisted' | 'interview_scheduled' | 'interview_done' | 'offered';
+  stage: 'cv_received' | 'shortlisted' | 'interview_scheduled' | 'interview_done' | 'offered' | 'on_hold' | 'rejected';
   score: number;
   email: string;
   phone: string;
@@ -55,6 +55,7 @@ export default function HRRecruitment() {
     type: 'success'
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [candidateToDelete, setCandidateToDelete] = useState<Candidate | null>(null);
 
   const [newCandidate, setNewCandidate] = useState({
     name: '',
@@ -83,6 +84,37 @@ export default function HRRecruitment() {
       console.error('Error fetching candidates:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteCandidate = async () => {
+    if (!candidateToDelete) return;
+    try {
+      const { error } = await supabase
+        .from('hr_recruits')
+        .delete()
+        .eq('id', candidateToDelete.id);
+        
+      if (error) throw error;
+      
+      setCandidates(prev => prev.filter(c => c.id !== candidateToDelete.id));
+      setCandidateToDelete(null);
+      
+      setNotification({
+        show: true,
+        title: isAr ? 'تم الحذف' : 'Candidate Deleted',
+        message: isAr 
+          ? 'تم حذف بيانات المرشح بنجاح من قاعدة البيانات.' 
+          : 'Candidate profile permanently removed from the system.',
+        type: 'success'
+      });
+    } catch (err: any) {
+      setNotification({
+        show: true,
+        title: isAr ? 'خطأ في الحذف' : 'Deletion Error',
+        message: err.message || 'Error deleting candidate',
+        type: 'error'
+      });
     }
   };
 
@@ -348,7 +380,9 @@ export default function HRRecruitment() {
     { id: 'shortlisted', label: isAr ? 'قائمة الفرز' : 'Shortlisted' },
     { id: 'interview_scheduled', label: isAr ? 'المقابلات' : 'Interviews' },
     { id: 'interview_done', label: isAr ? 'تقييم المقابلة' : 'Evaluations' },
-    { id: 'offered', label: isAr ? 'العروض الوظيفية' : 'Offered' }
+    { id: 'offered', label: isAr ? 'العروض الوظيفية' : 'Offered' },
+    { id: 'on_hold', label: isAr ? 'قيد الانتظار' : 'On Hold' },
+    { id: 'rejected', label: isAr ? 'المستبعدين' : 'Rejected' }
   ];
 
   // Apply Search, Filter & Sort criteria
@@ -458,7 +492,8 @@ export default function HRRecruitment() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#A11212]"></div>
         </div>
       ) : viewMode === 'pipeline' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 overflow-x-auto pb-4">
+        <div className="overflow-x-auto pb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-7 gap-4 min-w-[1450px]">
           {STAGES.map(stg => {
             const colCandidates = filteredCandidates.filter(c => c.stage === stg.id);
             const isDraggingOverThis = activeDragStage === stg.id;
@@ -567,6 +602,7 @@ export default function HRRecruitment() {
               </div>
             );
           })}
+          </div>
         </div>
       ) : (
         <div className="bg-white rounded-3xl border border-gray-100 shadow-xs overflow-hidden">
@@ -605,7 +641,9 @@ export default function HRRecruitment() {
                           c.stage === 'interview_done' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
                           c.stage === 'interview_scheduled' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
                           c.stage === 'shortlisted' ? 'bg-orange-50 text-orange-700 border border-orange-100' :
-                          'bg-gray-150 text-gray-600'
+                          c.stage === 'on_hold' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+                          c.stage === 'rejected' ? 'bg-red-50 text-red-700 border border-red-100' :
+                          'bg-gray-100 text-gray-600 border border-gray-200'
                         }`}>
                           {c.stage.replace('_', ' ')}
                           {c.stage === 'offered' && ` (${completedTasks}/4)`}
@@ -640,6 +678,13 @@ export default function HRRecruitment() {
                               <FileText size={14} />
                             </button>
                           )}
+                          <button
+                            onClick={() => setCandidateToDelete(c)}
+                            className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition-colors"
+                            title={isAr ? 'حذف المرشح' : 'Delete Candidate'}
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -663,8 +708,24 @@ export default function HRRecruitment() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-scale-up">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">Applicant Dossier Sheet</h3>
-              <button onClick={() => setSelectedCandidate(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={18} className="text-gray-400" /></button>
+              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                {isAr ? 'ملف المرشح' : 'Applicant Dossier Sheet'}
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setCandidateToDelete(selectedCandidate);
+                    setSelectedCandidate(null);
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title={isAr ? 'حذف المرشح' : 'Delete Candidate'}
+                >
+                  <Trash2 size={16} />
+                </button>
+                <button onClick={() => setSelectedCandidate(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                  <X size={18} className="text-gray-400" />
+                </button>
+              </div>
             </div>
             
             <div className="p-6 space-y-4">
@@ -1167,6 +1228,39 @@ export default function HRRecruitment() {
                 className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] hover:shadow-lg transition-all cursor-pointer"
               >
                 {isAr ? 'تأكيد التوظيف' : 'Confirm & Offer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {candidateToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 text-center space-y-4 animate-scale-up">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-[#A11212] flex items-center justify-center mb-2 mx-auto">
+              <AlertTriangle size={24} />
+            </div>
+            <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">{isAr ? 'حذف مرشح' : 'Delete Candidate'}</h3>
+            <p className="text-xs text-gray-550 leading-relaxed font-bold">
+              {isAr 
+                ? `هل أنت متأكد من حذف ملف المرشح ${candidateToDelete.name}؟ لا يمكن التراجع عن هذا الإجراء.`
+                : `Are you sure you want to permanently delete the recruitment profile of ${candidateToDelete.name}? This action cannot be undone.`}
+            </p>
+            <div className="pt-2 flex gap-3">
+              <button 
+                type="button"
+                onClick={() => setCandidateToDelete(null)} 
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button 
+                type="button"
+                onClick={handleDeleteCandidate} 
+                className="flex-1 py-3 bg-[#A11212] text-white rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors cursor-pointer"
+              >
+                {isAr ? 'حذف نهائي' : 'Delete Permanently'}
               </button>
             </div>
           </div>

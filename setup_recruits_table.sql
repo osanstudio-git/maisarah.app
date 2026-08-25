@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.hr_recruits (
     phone TEXT,
     role TEXT NOT NULL,          -- e.g. 'Senior Auditor', 'Tax Consultant'
     dept TEXT NOT NULL,          -- e.g. 'Audit', 'Tax & VAT'
-    stage TEXT NOT NULL CHECK (stage IN ('cv_received', 'shortlisted', 'interview_scheduled', 'interview_done', 'offered')),
+    stage TEXT NOT NULL CHECK (stage IN ('cv_received', 'shortlisted', 'interview_scheduled', 'interview_done', 'offered', 'on_hold', 'rejected')),
     score INTEGER DEFAULT 0 CHECK (score BETWEEN 0 AND 100),
     onboarding_tasks JSONB DEFAULT '{"contract_signed": false, "bank_details_submitted": false, "documents_uploaded": false, "it_assets_ready": false}',
     resume_name TEXT,
