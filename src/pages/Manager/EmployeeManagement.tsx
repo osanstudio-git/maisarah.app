@@ -1026,7 +1026,6 @@ const EmployeeManagement = () => {
                   <option value="Nasser Al-Riyami">{isAr ? 'ناصر الريامي (رئيس قسم التدقيق)' : 'Nasser Al-Riyami (Head of Audit)'}</option>
                   <option value="Khalfan Al-Abri">{isAr ? 'خلفان العبري (رئيس قسم الضرائب)' : 'Khalfan Al-Abri (Head of Tax & VAT)'}</option>
                   <option value="Mazis Al-Balushi">{isAr ? 'مازن البلوشي (رئيس قسم مسك الدفاتر)' : 'Mazis Al-Balushi (Head of Bookkeeping)'}</option>
-                  <option value="Fatma Al-Harthy">{isAr ? 'فاطمة الحارثي (إدارة الموارد البشرية)' : 'Fatma Al-Harthy (HR Manager)'}</option>
                 </select>
               </div>
 
