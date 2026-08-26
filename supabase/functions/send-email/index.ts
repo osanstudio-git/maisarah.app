@@ -40,7 +40,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: from || 'onboarding@resend.dev',
+        from: from || 'onboarding@app.maisarah.net',
         to: Array.isArray(to) ? to : [to],
         subject,
         html,
