@@ -209,11 +209,16 @@ const EmployeeManagement = () => {
 
   const handleOpenPlacementModal = (placement: any) => {
     setSelectedPlacement(placement);
+    const defaultDept = placement.dept === 'Tax & VAT' ? 'tax_vat' : placement.dept === 'Audit' ? 'audit' : 'bookkeeping';
+    let defaultHOD = 'Nasser Al-Riyami';
+    if (defaultDept === 'tax_vat') defaultHOD = 'Khalfan Al-Abri';
+    if (defaultDept === 'bookkeeping') defaultHOD = 'Mazis Al-Balushi';
+
     setPlacementData({
       role: placement.role || 'Senior Auditor',
       customRole: '',
-      dept: placement.dept === 'Tax & VAT' ? 'tax_vat' : placement.dept === 'Audit' ? 'audit' : 'bookkeeping',
-      supervisor: 'Fatma Al-Harthy',
+      dept: defaultDept,
+      supervisor: defaultHOD,
       startDate: new Date().toISOString().split('T')[0]
     });
     setPlacementError(null);
@@ -981,7 +986,17 @@ const EmployeeManagement = () => {
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'القسم المعين' : 'Designated Department'}</label>
                   <select
                     value={placementData.dept}
-                    onChange={(e) => setPlacementData({ ...placementData, dept: e.target.value })}
+                    onChange={(e) => {
+                      const newDept = e.target.value;
+                      let defaultHOD = 'Nasser Al-Riyami';
+                      if (newDept === 'tax_vat') defaultHOD = 'Khalfan Al-Abri';
+                      if (newDept === 'bookkeeping') defaultHOD = 'Mazis Al-Balushi';
+                      setPlacementData({
+                        ...placementData,
+                        dept: newDept,
+                        supervisor: defaultHOD
+                      });
+                    }}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
                   >
                     <option value="audit">{isAr ? 'التدقيق (Audit)' : 'Audit'}</option>
@@ -1003,14 +1018,16 @@ const EmployeeManagement = () => {
 
               <div>
                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'المشرف المباشر / رئيس القسم' : 'Immediate Supervisor (HOD)'}</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Fatma Al-Harthy"
+                <select
                   value={placementData.supervisor}
                   onChange={(e) => setPlacementData({ ...placementData, supervisor: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark"
-                />
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
+                >
+                  <option value="Nasser Al-Riyami">{isAr ? 'ناصر الريامي (رئيس قسم التدقيق)' : 'Nasser Al-Riyami (Head of Audit)'}</option>
+                  <option value="Khalfan Al-Abri">{isAr ? 'خلفان العبري (رئيس قسم الضرائب)' : 'Khalfan Al-Abri (Head of Tax & VAT)'}</option>
+                  <option value="Mazis Al-Balushi">{isAr ? 'مازن البلوشي (رئيس قسم مسك الدفاتر)' : 'Mazis Al-Balushi (Head of Bookkeeping)'}</option>
+                  <option value="Fatma Al-Harthy">{isAr ? 'فاطمة الحارثي (إدارة الموارد البشرية)' : 'Fatma Al-Harthy (HR Manager)'}</option>
+                </select>
               </div>
 
               <div className="pt-4 flex gap-3">
