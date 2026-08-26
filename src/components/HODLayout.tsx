@@ -95,18 +95,13 @@ const HODLayout = () => {
         flex flex-col
       `}>
         {/* Brand Header */}
-        <div className="p-8 border-b border-gray-100 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-[#A11212] text-white rounded-2xl mx-auto flex items-center justify-center font-black text-2xl shadow-md mb-3">
-              HOD
-            </div>
-            <h2 className="text-xl font-black text-gray-900 tracking-tight">
-              Maisarah<span className="text-[#A11212]">OS</span>
-            </h2>
-            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-[#A11212] text-[10px] font-black uppercase tracking-wider rounded-full">
-              <Briefcase size={10} />
-              <span>{deptName} Head</span>
-            </div>
+        <div className="p-6 border-b border-gray-100 flex flex-col items-center gap-2">
+          <div className="p-3 rounded-2xl shadow-sm border border-gray-100 w-full flex items-center justify-center bg-gray-50/50">
+            <img src="/logo.png" alt="Maisarah Logo" className="h-10 object-contain" />
+          </div>
+          <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-[#A11212] text-[10px] font-black uppercase tracking-wider rounded-full">
+            <Briefcase size={10} />
+            <span>{deptName} Head</span>
           </div>
         </div>
 

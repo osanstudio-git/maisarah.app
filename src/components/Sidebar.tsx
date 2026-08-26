@@ -143,16 +143,13 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
         `}
       >
         {/* Logo Area */}
-        <div className={`p-6 flex items-center gap-3 ${isAr ? 'flex-row' : 'flex-row'}`}>
-          <div className="w-10 h-10 bg-white rounded flex items-center justify-center text-brand-dark font-bold text-xl flex-shrink-0">
-            {isAr ? 'م' : 'M'}
+        <div className="p-6 border-b border-white/5 bg-[#A11212]/10 flex flex-col items-center justify-center text-center gap-2">
+          <div className="bg-white p-3 rounded-2xl shadow-sm border border-white/10 w-full flex items-center justify-center">
+            <img src="/logo.png" alt="Maisarah Logo" className="h-10 object-contain" />
           </div>
-          <div className={isAr ? 'text-right' : 'text-left'}>
-            <h1 className="text-xl font-bold leading-none">{isAr ? 'ميسرة' : 'Maisarah'}</h1>
-            <p className="text-[10px] text-red-200 mt-1 uppercase tracking-wider font-bold">
-              {isAr ? 'النظام المالي' : 'Financial System'}
-            </p>
-          </div>
+          <p className="text-[9px] text-red-200 uppercase tracking-widest font-black mt-1">
+            {isAr ? 'المنصة المالية والتدقيق' : 'FINANCIAL & AUDITING PLATFORM'}
+          </p>
         </div>
 
         {/* Navigation */}

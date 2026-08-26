@@ -67,10 +67,12 @@ const Login = () => {
       <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden relative z-10">
         
         {/* Header */}
-        <div className="bg-brand-dark px-10 py-12 text-center relative overflow-hidden">
+        <div className="bg-brand-dark px-10 py-10 text-center relative overflow-hidden flex flex-col items-center gap-3">
           <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent" />
-          <h1 className="text-4xl font-black text-white mb-3 tracking-[0.2em] uppercase">MAISARAH</h1>
-          <p className="text-red-100/70 text-sm font-medium tracking-wide">{t('auth.loginSubtitle')}</p>
+          <div className="bg-white p-3.5 rounded-2xl shadow-md max-w-[240px] flex items-center justify-center relative z-10 border border-white/10">
+            <img src="/logo.png" alt="Maisarah Logo" className="h-10 object-contain" />
+          </div>
+          <p className="text-red-100/70 text-xs font-semibold tracking-wider relative z-10 uppercase">{t('auth.loginSubtitle')}</p>
         </div>
 
         <div className="p-10">

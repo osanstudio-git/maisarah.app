@@ -56,14 +56,13 @@ const HRLayout = () => {
         flex flex-col
       `}>
         {/* Branding */}
-        <div className="p-8 border-b border-gray-100 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-[#A11212] text-white rounded-2xl mx-auto flex items-center justify-center font-black text-2xl shadow-md mb-3">
-              HR
-            </div>
-            <h2 className="text-xl font-black text-gray-900 tracking-tight">Maisarah<span className="text-[#A11212]">OS</span></h2>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Human Resources</p>
+        <div className="p-6 border-b border-gray-100 flex flex-col items-center gap-2">
+          <div className="p-3 rounded-2xl shadow-sm border border-gray-100 w-full flex items-center justify-center bg-gray-50/50">
+            <img src="/logo.png" alt="Maisarah Logo" className="h-10 object-contain" />
           </div>
+          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">
+            {isAr ? 'إدارة الموارد البشرية' : 'HUMAN RESOURCES'}
+          </p>
         </div>
 
         {/* Navigation */}
