@@ -71,6 +71,7 @@ const EmployeeManagement = () => {
     accessRole: 'employee'
   });
   const [placementError, setPlacementError] = useState<string | null>(null);
+  const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [isPlacing, setIsPlacing] = useState(false);
   const [notification, setNotification] = useState<{ show: boolean; title: string; message: string; type: 'success' | 'error' }>({
     show: false,
@@ -643,7 +644,13 @@ const EmployeeManagement = () => {
                                     {isOnline && <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />}
                                   </div>
                                   <div>
-                                    <p className="font-black text-gray-900 text-sm">{isAr ? emp.name_ar : emp.name_en}</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingEmployee(emp)}
+                                      className="font-black text-gray-900 text-sm hover:text-brand-dark hover:underline focus:outline-none text-left cursor-pointer"
+                                    >
+                                      {isAr ? emp.name_ar : emp.name_en}
+                                    </button>
                                     <p className="text-[10px] font-bold text-gray-400">{emp.email}</p>
                                   </div>
                                 </div>
@@ -1109,6 +1116,133 @@ const EmployeeManagement = () => {
                 }`}
               >
                 {isAr ? 'حسناً' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── View Employee Details Modal (Dossier) ────────────────────────── */}
+      {viewingEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Users className="text-brand-dark" size={20} />
+                {isAr ? 'ملف الموظف التفصيلي' : 'Employee Corporate Dossier'}
+              </h3>
+              <button 
+                onClick={() => setViewingEmployee(null)} 
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200 transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto space-y-6">
+              {/* Profile Card Summary */}
+              <div className="flex items-center gap-5 p-5 bg-gray-50 rounded-2xl border border-gray-150">
+                <div className="w-16 h-16 bg-brand-dark text-white rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg shadow-brand-dark/20 flex-shrink-0">
+                  {(isAr ? viewingEmployee.name_ar : viewingEmployee.name_en).charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xl font-black text-gray-900 truncate">
+                    {isAr ? viewingEmployee.name_ar : viewingEmployee.name_en}
+                  </h4>
+                  <p className="text-xs text-gray-550 font-bold truncate mt-1">
+                    {viewingEmployee.role} · {viewingEmployee.department_id === 'tax_vat' ? (isAr ? 'الضرائب وضريبة القيمة المضافة' : 'Tax & VAT') : viewingEmployee.department_id === 'audit' ? (isAr ? 'التدقيق' : 'Audit') : (isAr ? 'مسك الدفاتر' : 'Bookkeeping')}
+                  </p>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mt-2.5 ${
+                    viewingEmployee.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${viewingEmployee.status === 'active' ? 'bg-green-500' : 'bg-orange-500'}`} />
+                    {viewingEmployee.status === 'active' ? (isAr ? 'نشط' : 'Active') : (isAr ? 'في إجازة' : 'On Leave')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Detail Grid */}
+              <div className="grid grid-cols-2 gap-6">
+                {/* Section A: Contact Details */}
+                <div className="space-y-4">
+                  <h5 className="text-xs font-black text-brand-dark uppercase tracking-wider border-b border-gray-100 pb-2">
+                    {isAr ? 'معلومات الاتصال' : 'Contact Information'}
+                  </h5>
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'البريد الإلكتروني:' : 'Email Address:'}</span>
+                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.email}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم الهاتف:' : 'Phone Number:'}</span>
+                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.phone}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section B: Employment Contract */}
+                <div className="space-y-4">
+                  <h5 className="text-xs font-black text-brand-dark uppercase tracking-wider border-b border-gray-100 pb-2">
+                    {isAr ? 'تفاصيل التوظيف' : 'Employment Details'}
+                  </h5>
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تاريخ الانضمام:' : 'Joined Date:'}</span>
+                      <span className="font-bold text-gray-900">{viewingEmployee.joinedAt || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'المسمى الوظيفي:' : 'Job Position:'}</span>
+                      <span className="font-bold text-gray-900 capitalize">{viewingEmployee.role}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Performance Metrics */}
+              <div className="space-y-4">
+                <h5 className="text-xs font-black text-brand-dark uppercase tracking-wider border-b border-gray-100 pb-2">
+                  {isAr ? 'مؤشرات الأداء المهني' : 'Workforce Performance Metrics'}
+                </h5>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
+                    <span className="text-2xl font-black text-brand-dark">{viewingEmployee.tasksCompleted || 0}</span>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'المهام المكتملة' : 'Tasks Completed'}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
+                    <span className="text-2xl font-black text-orange-600">{viewingEmployee.activeJobs || 0}</span>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'المهام النشطة' : 'Active Jobs'}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
+                    <span className="text-2xl font-black text-red-600">{viewingEmployee.delays || 0}</span>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'حالات التأخير' : 'Delays'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Tracker */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-gray-700">{isAr ? 'معدل إكمال المهام الكلي' : 'Overall Task Completion Rate'}</span>
+                  <span className="text-xs font-black text-brand-dark">{viewingEmployee.completionRate}%</span>
+                </div>
+                <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-brand-dark h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${viewingEmployee.completionRate}%` }} 
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button 
+                onClick={() => setViewingEmployee(null)} 
+                className="px-6 py-2.5 bg-brand-dark text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-gray-800 transition-colors cursor-pointer"
+              >
+                {isAr ? 'إغلاق' : 'Close'}
               </button>
             </div>
           </div>
