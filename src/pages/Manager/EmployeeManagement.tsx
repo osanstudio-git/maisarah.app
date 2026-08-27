@@ -67,7 +67,8 @@ const EmployeeManagement = () => {
     customRole: '',
     dept: 'audit',
     supervisor: 'Fatma Al-Harthy',
-    startDate: ''
+    startDate: '',
+    accessRole: 'employee'
   });
   const [placementError, setPlacementError] = useState<string | null>(null);
   const [isPlacing, setIsPlacing] = useState(false);
@@ -219,7 +220,8 @@ const EmployeeManagement = () => {
       customRole: '',
       dept: defaultDept,
       supervisor: defaultHOD,
-      startDate: new Date().toISOString().split('T')[0]
+      startDate: new Date().toISOString().split('T')[0],
+      accessRole: 'employee'
     });
     setPlacementError(null);
   };
@@ -251,7 +253,7 @@ const EmployeeManagement = () => {
         options: {
           data: {
             full_name: selectedPlacement.name,
-            role: 'employee',
+            role: placementData.accessRole,
             department_id: targetDept
           }
         }
@@ -292,7 +294,7 @@ const EmployeeManagement = () => {
         id: userId,
         full_name: selectedPlacement.name,
         email: selectedPlacement.email,
-        role: 'employee',
+        role: placementData.accessRole,
         department_id: targetDept
       }, { onConflict: 'id' });
 
@@ -852,8 +854,12 @@ const EmployeeManagement = () => {
                     <div>
                       <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">{isAr ? 'الصلاحية' : 'Role'}</label>
                       <select value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-brand-dark outline-none">
-                        <option value="employee">{isAr ? 'موظف' : 'Employee'}</option>
-                        <option value="manager">{isAr ? 'مدير' : 'Manager'}</option>
+                        <option value="employee">{isAr ? 'موظف قياسي' : 'Standard Employee'}</option>
+                        <option value="department_head">{isAr ? 'رئيس قسم (HOD)' : 'Department Head (HOD)'}</option>
+                        <option value="accountant">{isAr ? 'محاسب' : 'Accountant'}</option>
+                        <option value="hr">{isAr ? 'إدارة الموارد البشرية (HR)' : 'HR Manager'}</option>
+                        <option value="manager">{isAr ? 'مدير تنفيذي' : 'Executive Manager'}</option>
+                        <option value="crm">{isAr ? 'علاقات العملاء (CRM)' : 'CRM Coordinator'}</option>
                       </select>
                     </div>
                   </div>
@@ -979,6 +985,21 @@ const EmployeeManagement = () => {
                     className="mt-2 w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark animate-scale-up"
                   />
                 )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'مستوى الصلاحية في النظام' : 'System Access Level'}</label>
+                <select
+                  value={placementData.accessRole}
+                  onChange={(e) => setPlacementData({ ...placementData, accessRole: e.target.value })}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
+                >
+                  <option value="employee">{isAr ? 'موظف قياسي' : 'Standard Employee'}</option>
+                  <option value="department_head">{isAr ? 'رئيس قسم (HOD)' : 'Department Head (HOD)'}</option>
+                  <option value="accountant">{isAr ? 'محاسب' : 'Accountant'}</option>
+                  <option value="hr">{isAr ? 'مدير الموارد البشرية (HR)' : 'HR Manager'}</option>
+                  <option value="crm">{isAr ? 'علاقات العملاء (CRM)' : 'CRM Coordinator'}</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
