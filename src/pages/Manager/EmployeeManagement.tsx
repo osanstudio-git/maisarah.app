@@ -93,9 +93,10 @@ const EmployeeManagement = () => {
   });
   const [placementError, setPlacementError] = useState<string | null>(null);
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
-  const [dossierTab, setDossierTab] = useState<'general' | 'job' | 'financials' | 'performance' | 'edit'>('general');
+  const [dossierTab, setDossierTab] = useState<'general' | 'job' | 'financials' | 'performance'>('general');
   const [isSavingDossier, setIsSavingDossier] = useState(false);
   const [dossierError, setDossierError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [editFormData, setEditFormData] = useState({
     fullName: '',
     phone: '',
@@ -147,6 +148,7 @@ const EmployeeManagement = () => {
       });
       setDossierTab('general');
       setDossierError(null);
+      setIsEditing(false);
     }
   }, [viewingEmployee]);
 
@@ -1372,50 +1374,45 @@ const EmployeeManagement = () => {
             {/* Tabs Navigation */}
             <div className="px-6 bg-gray-50 border-b border-gray-100 flex gap-2 overflow-x-auto scrollbar-none">
               <button
-                onClick={() => setDossierTab('general')}
-                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                onClick={() => { if (!isEditing) setDossierTab('general'); }}
+                disabled={isEditing}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${
                   dossierTab === 'general' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
                 }`}
               >
                 {isAr ? 'البيانات الشخصية' : 'Personal Info'}
               </button>
               <button
-                onClick={() => setDossierTab('job')}
-                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                onClick={() => { if (!isEditing) setDossierTab('job'); }}
+                disabled={isEditing}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${
                   dossierTab === 'job' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
                 }`}
               >
                 {isAr ? 'الوظيفة والقسم' : 'Job & Dept'}
               </button>
               <button
-                onClick={() => setDossierTab('financials')}
-                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                onClick={() => { if (!isEditing) setDossierTab('financials'); }}
+                disabled={isEditing}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${
                   dossierTab === 'financials' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
                 }`}
               >
                 {isAr ? 'المالية والرواتب' : 'Financials'}
               </button>
               <button
-                onClick={() => setDossierTab('performance')}
-                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                onClick={() => { if (!isEditing) setDossierTab('performance'); }}
+                disabled={isEditing}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${
                   dossierTab === 'performance' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
                 }`}
               >
                 {isAr ? 'الأداء والتقارير' : 'Performance'}
               </button>
-              <button
-                onClick={() => setDossierTab('edit')}
-                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
-                  dossierTab === 'edit' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
-                }`}
-              >
-                <Pencil size={12} />
-                {isAr ? 'تعديل البيانات' : 'Edit Profile'}
-              </button>
             </div>
 
             {/* Content */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 min-h-[400px]">
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 min-h-[400px] mb-2">
               
               {/* Error state */}
               {dossierError && (
@@ -1427,196 +1424,9 @@ const EmployeeManagement = () => {
 
               {/* Tab 1: General Info */}
               {dossierTab === 'general' && (
-                <div className="space-y-6 animate-scale-up">
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'البريد الإلكتروني:' : 'Email Address:'}</span>
-                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.email}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم الهاتف:' : 'Phone Number:'}</span>
-                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.phone || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم الهوية المدنية:' : 'Civil ID Number:'}</span>
-                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.civilId || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم جواز السفر:' : 'Passport Number:'}</span>
-                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.passportNo || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم الإقامة الكفيل:' : 'Residency Card:'}</span>
-                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.residencyNo || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'الجنسية:' : 'Nationality:'}</span>
-                      <span className="font-bold text-gray-900">{viewingEmployee.nationality || 'Omani'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تاريخ الميلاد:' : 'Date of Birth:'}</span>
-                      <span className="font-bold text-gray-900">{viewingEmployee.dob || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'الجنس:' : 'Gender:'}</span>
-                      <span className="font-bold text-gray-900">{viewingEmployee.gender || 'Male'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'الحالة الاجتماعية:' : 'Marital Status:'}</span>
-                      <span className="font-bold text-gray-900">{viewingEmployee.maritalStatus || 'Single'}</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-xs">
-                    <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'نوع السكن وتفاصيله:' : 'Accommodation Details:'}</span>
-                    <span className="font-black text-gray-950 block">{viewingEmployee.accommodationStatus}</span>
-                    {viewingEmployee.accommodationDetails && (
-                      <span className="font-bold text-gray-650 block mt-1 bg-white p-2 rounded-lg border border-gray-100">{viewingEmployee.accommodationDetails}</span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 2: Job & Department */}
-              {dossierTab === 'job' && (
-                <div className="space-y-6 animate-scale-up">
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'القسم المعين:' : 'Designated Department:'}</span>
-                      <span className="font-bold text-gray-900 capitalize">
-                        {viewingEmployee.department_id === 'tax_vat' ? 'Tax & VAT' : viewingEmployee.department_id === 'audit' ? 'Audit' : 'Bookkeeping/Others'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'المسمى الوظيفي الفعلي:' : 'Job Position Title:'}</span>
-                      <span className="font-bold text-gray-900">{viewingEmployee.job_title || 'Senior Auditor'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'المشرف المباشر (HOD):' : 'Immediate Supervisor (HOD):'}</span>
-                      <span className="font-bold text-gray-900">{viewingEmployee.immediateSupervisor || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'مستوى الصلاحية في النظام:' : 'System Access Role:'}</span>
-                      <span className="font-bold text-brand-dark capitalize">{viewingEmployee.role}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تاريخ التوظيف:' : 'Joined Date:'}</span>
-                      <span className="font-bold text-gray-900">{viewingEmployee.joinedAt || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تصنيف الموظف:' : 'Employee Classification:'}</span>
-                      <span className="font-bold text-gray-900">{viewingEmployee.type || 'Experienced'}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 3: Financials & Allowances */}
-              {dossierTab === 'financials' && (
-                <div className="space-y-6 animate-scale-up">
-                  <div className="bg-gray-50 p-5 rounded-3xl border border-gray-150 space-y-4">
-                    <h4 className="text-xs font-black text-brand-dark uppercase tracking-widest border-b border-gray-200 pb-2">
-                      {isAr ? 'تفاصيل الراتب والبدلات الشهري' : 'Monthly Salary Structure'}
-                    </h4>
-                    <div className="space-y-3 text-xs">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-505 font-bold">{isAr ? 'الراتب الأساسي:' : 'Basic Salary:'}</span>
-                        <span className="font-black text-gray-900">OMR {viewingEmployee.basicSalary || 0}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-505 font-bold">{isAr ? 'بدل النقل:' : 'Transport Allowance:'}</span>
-                        <span className="font-bold text-gray-900">OMR {viewingEmployee.allowances?.transport || 0}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-505 font-bold">{isAr ? 'بدل السكن:' : 'Housing Allowance:'}</span>
-                        <span className="font-bold text-gray-900">OMR {viewingEmployee.allowances?.housing || 0}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-505 font-bold">{isAr ? 'بدلات أخرى:' : 'Other Allowances:'}</span>
-                        <span className="font-bold text-gray-900">OMR {viewingEmployee.allowances?.other || 0}</span>
-                      </div>
-                      <div className="h-px bg-gray-200 my-2" />
-                      <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100">
-                        <span className="text-gray-900 font-black">{isAr ? 'إجمالي الراتب المستحق:' : 'Total Monthly Salary:'}</span>
-                        <span className="text-base font-black text-brand-dark">
-                          OMR {(viewingEmployee.basicSalary || 0) + (viewingEmployee.allowances?.transport || 0) + (viewingEmployee.allowances?.housing || 0) + (viewingEmployee.allowances?.other || 0)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 4: Performance & Lists */}
-              {dossierTab === 'performance' && (
-                <div className="space-y-6 animate-scale-up">
-                  {/* Task metrics */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
-                      <span className="text-2xl font-black text-brand-dark">{viewingEmployee.tasksCompleted || 0}</span>
-                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'المهام المكتملة' : 'Tasks Completed'}</p>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
-                      <span className="text-2xl font-black text-orange-600">{viewingEmployee.activeJobs || 0}</span>
-                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'المهام النشطة' : 'Active Jobs'}</p>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
-                      <span className="text-2xl font-black text-red-600">{viewingEmployee.delays || 0}</span>
-                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'حالات التأخير' : 'Delays'}</p>
-                    </div>
-                  </div>
-
-                  {/* Completion Rate */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-gray-700">{isAr ? 'معدل إكمال المهام الكلي' : 'Overall Task Completion Rate'}</span>
-                      <span className="text-xs font-black text-brand-dark">{viewingEmployee.completionRate}%</span>
-                    </div>
-                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                      <div 
-                        className="bg-brand-dark h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${viewingEmployee.completionRate}%` }} 
-                      />
-                    </div>
-                  </div>
-
-                  {/* Corporate Records lists */}
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150">
-                      <h6 className="font-black text-gray-900 border-b border-gray-200 pb-1.5 mb-2">{isAr ? 'التعليم والتأهيل' : 'Education'}</h6>
-                      {viewingEmployee.education && viewingEmployee.education.length > 0 ? (
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          {viewingEmployee.education.map((edu: any, i: number) => (
-                            <li key={i}>{edu.degree} - {edu.school}</li>
-                          ))}
-                        </ul>
-                      ) : <p className="text-gray-400 italic">{isAr ? 'لا يوجد سجلات' : 'No records uploaded'}</p>}
-                    </div>
-
-                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150">
-                      <h6 className="font-black text-gray-900 border-b border-gray-200 pb-1.5 mb-2">{isAr ? 'الترقيات والعلاوات الاستثنائية' : 'Promotions & History'}</h6>
-                      {viewingEmployee.promotions && viewingEmployee.promotions.length > 0 ? (
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          {viewingEmployee.promotions.map((p: any, i: number) => (
-                            <li key={i}>{p.title} ({p.date})</li>
-                          ))}
-                        </ul>
-                      ) : <p className="text-gray-400 italic">{isAr ? 'لا يوجد ترقيات سابقة' : 'No previous promotions'}</p>}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 5: Edit Profile Form */}
-              {dossierTab === 'edit' && (
-                <form onSubmit={handleSaveDossierChanges} className="space-y-6 animate-scale-up text-xs font-bold text-gray-600">
-                  
-                  {/* Section A: Personal Information */}
-                  <div className="space-y-4">
-                    <h5 className="text-[10px] font-black text-brand-dark uppercase tracking-widest border-b border-gray-100 pb-1.5">
-                      {isAr ? '1. البيانات الشخصية وبيانات الاتصال' : '1. Personal & Contact Details'}
-                    </h5>
-                    <div className="grid grid-cols-2 gap-4">
+                isEditing ? (
+                  <div className="space-y-6 animate-scale-up text-xs font-bold text-gray-650">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                       <div>
                         <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الاسم الكامل:' : 'Full Name:'}</label>
                         <input required type="text" value={editFormData.fullName} onChange={e => setEditFormData({ ...editFormData, fullName: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
@@ -1645,32 +1455,94 @@ const EmployeeManagement = () => {
                         <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'تاريخ الميلاد:' : 'Date of Birth:'}</label>
                         <input type="date" value={editFormData.dob} onChange={e => setEditFormData({ ...editFormData, dob: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الجنس:' : 'Gender:'}</label>
-                          <select value={editFormData.gender} onChange={e => setEditFormData({ ...editFormData, gender: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark cursor-pointer">
-                            <option value="Male">{isAr ? 'ذكر' : 'Male'}</option>
-                            <option value="Female">{isAr ? 'أنثى' : 'Female'}</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الحالة الاجتماعية:' : 'Marital Status:'}</label>
-                          <select value={editFormData.maritalStatus} onChange={e => setEditFormData({ ...editFormData, maritalStatus: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark cursor-pointer">
-                            <option value="Single">{isAr ? 'أعزب' : 'Single'}</option>
-                            <option value="Married">{isAr ? 'متزوج' : 'Married'}</option>
-                            <option value="Divorced">{isAr ? 'مطلق' : 'Divorced'}</option>
-                          </select>
-                        </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الجنس:' : 'Gender:'}</label>
+                        <select value={editFormData.gender} onChange={e => setEditFormData({ ...editFormData, gender: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                          <option value="Male">{isAr ? 'ذكر' : 'Male'}</option>
+                          <option value="Female">{isAr ? 'أنثى' : 'Female'}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الحالة الاجتماعية:' : 'Marital Status:'}</label>
+                        <select value={editFormData.maritalStatus} onChange={e => setEditFormData({ ...editFormData, maritalStatus: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                          <option value="Single">{isAr ? 'أعزب' : 'Single'}</option>
+                          <option value="Married">{isAr ? 'متزوج' : 'Married'}</option>
+                          <option value="Divorced">{isAr ? 'مطلق' : 'Divorced'}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'حالة السكن الموفر:' : 'Accommodation Status:'}</label>
+                        <select value={editFormData.accommodationStatus} onChange={e => setEditFormData({ ...editFormData, accommodationStatus: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                          <option value="Lives with family">{isAr ? 'يسكن مع عائلته' : 'Lives with family'}</option>
+                          <option value="Company Accommodation">{isAr ? 'سكن موفر من الشركة' : 'Company Accommodation'}</option>
+                          <option value="Rent Allowance">{isAr ? 'بدل سكن نقدي' : 'Rent Allowance'}</option>
+                        </select>
                       </div>
                     </div>
+                    {editFormData.accommodationStatus === 'Company Accommodation' && (
+                      <div className="pt-2">
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'تفاصيل السكن / الغرفة:' : 'Accommodation Details:'}</label>
+                        <input type="text" value={editFormData.accommodationDetails} onChange={e => setEditFormData({ ...editFormData, accommodationDetails: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" placeholder="e.g. Room 304, Building B" />
+                      </div>
+                    )}
                   </div>
+                ) : (
+                  <div className="space-y-6 animate-scale-up">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'البريد الإلكتروني:' : 'Email Address:'}</span>
+                        <span className="font-bold text-gray-900 select-all">{viewingEmployee.email}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم الهاتف:' : 'Phone Number:'}</span>
+                        <span className="font-bold text-gray-900 select-all">{viewingEmployee.phone || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم الهوية المدنية:' : 'Civil ID Number:'}</span>
+                        <span className="font-bold text-gray-900 select-all">{viewingEmployee.civilId || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم جواز السفر:' : 'Passport Number:'}</span>
+                        <span className="font-bold text-gray-900 select-all">{viewingEmployee.passportNo || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم الإقامة الكفيل:' : 'Residency Card:'}</span>
+                        <span className="font-bold text-gray-900 select-all">{viewingEmployee.residencyNo || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'الجنسية:' : 'Nationality:'}</span>
+                        <span className="font-bold text-gray-900">{viewingEmployee.nationality || 'Omani'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تاريخ الميلاد:' : 'Date of Birth:'}</span>
+                        <span className="font-bold text-gray-900">{viewingEmployee.dob || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'الجنس:' : 'Gender:'}</span>
+                        <span className="font-bold text-gray-900">{viewingEmployee.gender || 'Male'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'الحالة الاجتماعية:' : 'Marital Status:'}</span>
+                        <span className="font-bold text-gray-900">{viewingEmployee.maritalStatus || 'Single'}</span>
+                      </div>
+                    </div>
 
-                  {/* Section B: Job & Department info */}
-                  <div className="space-y-4">
-                    <h5 className="text-[10px] font-black text-brand-dark uppercase tracking-widest border-b border-gray-100 pb-1.5">
-                      {isAr ? '2. هيكل الوظيفة والقسم المعين' : '2. Job Position & Department Layout'}
-                    </h5>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-xs">
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'نوع السكن وتفاصيله:' : 'Accommodation Details:'}</span>
+                      <span className="font-black text-gray-950 block">{viewingEmployee.accommodationStatus}</span>
+                      {viewingEmployee.accommodationDetails && (
+                        <span className="font-bold text-gray-650 block mt-1 bg-white p-2 rounded-lg border border-gray-100">{viewingEmployee.accommodationDetails}</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              )}
+
+              {/* Tab 2: Job & Department */}
+              {dossierTab === 'job' && (
+                isEditing ? (
+                  <div className="space-y-6 animate-scale-up text-xs font-bold text-gray-655">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                       <div>
                         <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'المسمى الوظيفي الفعلي:' : 'Designated Job Position:'}</label>
                         <select value={editFormData.jobTitle} onChange={e => setEditFormData({ ...editFormData, jobTitle: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark cursor-pointer">
@@ -1735,82 +1607,229 @@ const EmployeeManagement = () => {
                         </select>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                  </div>
+                ) : (
+                  <div className="space-y-6 animate-scale-up">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
                       <div>
-                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'حالة السكن الموفر:' : 'Accommodation Status:'}</label>
-                        <select value={editFormData.accommodationStatus} onChange={e => setEditFormData({ ...editFormData, accommodationStatus: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark cursor-pointer">
-                          <option value="Lives with family">{isAr ? 'يسكن مع عائلته' : 'Lives with family'}</option>
-                          <option value="Company Accommodation">{isAr ? 'سكن موفر من الشركة' : 'Company Accommodation'}</option>
-                          <option value="Rent Allowance">{isAr ? 'بدل سكن نقدي' : 'Rent Allowance'}</option>
-                        </select>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'القسم المعين:' : 'Designated Department:'}</span>
+                        <span className="font-bold text-gray-900 capitalize">
+                          {viewingEmployee.department_id === 'tax_vat' ? 'Tax & VAT' : viewingEmployee.department_id === 'audit' ? 'Audit' : 'Bookkeeping/Others'}
+                        </span>
                       </div>
-                      {editFormData.accommodationStatus === 'Company Accommodation' && (
-                        <div>
-                          <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'تفاصيل السكن / الغرفة:' : 'Accommodation Details:'}</label>
-                          <input type="text" value={editFormData.accommodationDetails} onChange={e => setEditFormData({ ...editFormData, accommodationDetails: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" placeholder="e.g. Room 304, Building B" />
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'المسمى الوظيفي الفعلي:' : 'Job Position Title:'}</span>
+                        <span className="font-bold text-gray-900">{viewingEmployee.job_title || 'Senior Auditor'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'المشرف المباشر (HOD):' : 'Immediate Supervisor (HOD):'}</span>
+                        <span className="font-bold text-gray-900">{viewingEmployee.immediateSupervisor || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'مستوى الصلاحية في النظام:' : 'System Access Role:'}</span>
+                        <span className="font-bold text-brand-dark capitalize">{viewingEmployee.role}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تاريخ التوظيف:' : 'Joined Date:'}</span>
+                        <span className="font-bold text-gray-900">{viewingEmployee.joinedAt || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تصنيف الموظف:' : 'Employee Classification:'}</span>
+                        <span className="font-bold text-gray-900">{viewingEmployee.type || 'Experienced'}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              )}
+
+              {/* Tab 3: Financials & Allowances */}
+              {dossierTab === 'financials' && (
+                isEditing ? (
+                  <div className="space-y-6 animate-scale-up text-xs font-bold text-gray-655">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الراتب الأساسي (ريال):' : 'Basic Salary (OMR):'}</label>
+                        <input type="number" value={editFormData.basicSalary} onChange={e => setEditFormData({ ...editFormData, basicSalary: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'بدل النقل (ريال):' : 'Transport Allowance (OMR):'}</label>
+                        <input type="number" value={editFormData.transportAllowance} onChange={e => setEditFormData({ ...editFormData, transportAllowance: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'بدل السكن (ريال):' : 'Housing Allowance (OMR):'}</label>
+                        <input type="number" value={editFormData.housingAllowance} onChange={e => setEditFormData({ ...editFormData, housingAllowance: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'بدلات أخرى (ريال):' : 'Other Allowance (OMR):'}</label>
+                        <input type="number" value={editFormData.otherAllowance} onChange={e => setEditFormData({ ...editFormData, otherAllowance: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6 animate-scale-up">
+                    <div className="bg-gray-50 p-5 rounded-3xl border border-gray-150 space-y-4">
+                      <h4 className="text-xs font-black text-brand-dark uppercase tracking-widest border-b border-gray-200 pb-2">
+                        {isAr ? 'تفاصيل الراتب والبدلات الشهري' : 'Monthly Salary Structure'}
+                      </h4>
+                      <div className="space-y-3 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-505 font-bold">{isAr ? 'الراتب الأساسي:' : 'Basic Salary:'}</span>
+                          <span className="font-black text-gray-900">OMR {viewingEmployee.basicSalary || 0}</span>
                         </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Section C: Financials & Salary */}
-                  <div className="space-y-4">
-                    <h5 className="text-[10px] font-black text-brand-dark uppercase tracking-widest border-b border-gray-100 pb-1.5">
-                      {isAr ? '3. الهيكل المالي والبدلات (بالريال العماني)' : '3. Financial Allowances (OMR)'}
-                    </h5>
-                    <div className="grid grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الأساسي:' : 'Basic Salary:'}</label>
-                        <input type="number" value={editFormData.basicSalary} onChange={e => setEditFormData({ ...editFormData, basicSalary: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'بدل النقل:' : 'Transport:'}</label>
-                        <input type="number" value={editFormData.transportAllowance} onChange={e => setEditFormData({ ...editFormData, transportAllowance: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'بدل السكن:' : 'Housing:'}</label>
-                        <input type="number" value={editFormData.housingAllowance} onChange={e => setEditFormData({ ...editFormData, housingAllowance: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'بدلات أخرى:' : 'Other:'}</label>
-                        <input type="number" value={editFormData.otherAllowance} onChange={e => setEditFormData({ ...editFormData, otherAllowance: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark" />
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-550 font-bold">{isAr ? 'بدل النقل:' : 'Transport Allowance:'}</span>
+                          <span className="font-bold text-gray-900">OMR {viewingEmployee.allowances?.transport || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-550 font-bold">{isAr ? 'بدل السكن:' : 'Housing Allowance:'}</span>
+                          <span className="font-bold text-gray-900">OMR {viewingEmployee.allowances?.housing || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-550 font-bold">{isAr ? 'بدلات أخرى:' : 'Other Allowances:'}</span>
+                          <span className="font-bold text-gray-900">OMR {viewingEmployee.allowances?.other || 0}</span>
+                        </div>
+                        <div className="h-px bg-gray-200 my-2" />
+                        <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100">
+                          <span className="text-gray-900 font-black">{isAr ? 'إجمالي الراتب المستحق:' : 'Total Monthly Salary:'}</span>
+                          <span className="text-base font-black text-brand-dark">
+                            OMR {(viewingEmployee.basicSalary || 0) + (viewingEmployee.allowances?.transport || 0) + (viewingEmployee.allowances?.housing || 0) + (viewingEmployee.allowances?.other || 0)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
+                )
+              )}
 
-                  {/* Submission buttons */}
-                  <div className="pt-2 flex justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setDossierTab('general')}
-                      className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors cursor-pointer"
-                    >
-                      {isAr ? 'إلغاء' : 'Cancel'}
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSavingDossier}
-                      className="px-6 py-2.5 bg-[#A11212] text-white rounded-xl font-black uppercase tracking-wider hover:bg-[#800e0e] transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
-                    >
-                      {isSavingDossier ? (
-                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                      ) : (
-                        isAr ? 'حفظ التعديلات' : 'Save Changes'
-                      )}
-                    </button>
+              {/* Tab 4: Performance & Lists */}
+              {dossierTab === 'performance' && (
+                <div className="space-y-6 animate-scale-up">
+                  {/* Task metrics */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
+                      <span className="text-2xl font-black text-brand-dark">{viewingEmployee.tasksCompleted || 0}</span>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'المهام المكتملة' : 'Tasks Completed'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
+                      <span className="text-2xl font-black text-orange-600">{viewingEmployee.activeJobs || 0}</span>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'المهام النشطة' : 'Active Jobs'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
+                      <span className="text-2xl font-black text-red-600">{viewingEmployee.delays || 0}</span>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'حالات التأخير' : 'Delays'}</p>
+                    </div>
                   </div>
-                </form>
+
+                  {/* Completion Rate */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-gray-700">{isAr ? 'معدل إكمال المهام الكلي' : 'Overall Task Completion Rate'}</span>
+                      <span className="text-xs font-black text-brand-dark">{viewingEmployee.completionRate}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-brand-dark h-full rounded-full transition-all duration-500" 
+                        style={{ width: `${viewingEmployee.completionRate}%` }} 
+                      />
+                    </div>
+                  </div>
+
+                  {/* Corporate Records lists */}
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150">
+                      <h6 className="font-black text-gray-900 border-b border-gray-200 pb-1.5 mb-2">{isAr ? 'التعليم والتأهيل' : 'Education'}</h6>
+                      {viewingEmployee.education && viewingEmployee.education.length > 0 ? (
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          {viewingEmployee.education.map((edu: any, i: number) => (
+                            <li key={i}>{edu.degree} - {edu.school}</li>
+                          ))}
+                        </ul>
+                      ) : <p className="text-gray-400 italic">{isAr ? 'لا يوجد سجلات' : 'No records uploaded'}</p>}
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150">
+                      <h6 className="font-black text-gray-900 border-b border-gray-200 pb-1.5 mb-2">{isAr ? 'الترقيات والعلاوات الاستثنائية' : 'Promotions & History'}</h6>
+                      {viewingEmployee.promotions && viewingEmployee.promotions.length > 0 ? (
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          {viewingEmployee.promotions.map((p: any, i: number) => (
+                            <li key={i}>{p.title} ({p.date})</li>
+                          ))}
+                        </ul>
+                      ) : <p className="text-gray-400 italic">{isAr ? 'لا يوجد ترقيات سابقة' : 'No previous promotions'}</p>}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
-              <button 
-                onClick={() => setViewingEmployee(null)} 
-                className="px-6 py-2.5 bg-brand-dark text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-gray-800 transition-colors cursor-pointer"
-              >
-                {isAr ? 'إغلاق' : 'Close'}
-              </button>
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
+              {isEditing ? (
+                <>
+                  <button 
+                    onClick={() => {
+                      setIsEditing(false);
+                      if (viewingEmployee) {
+                        setEditFormData({
+                          fullName: viewingEmployee.name_en || '',
+                          phone: viewingEmployee.phone || '',
+                          civilId: viewingEmployee.civilId || '',
+                          passportNo: viewingEmployee.passportNo || '',
+                          residencyNo: viewingEmployee.residencyNo || '',
+                          nationality: viewingEmployee.nationality || 'Omani',
+                          dob: viewingEmployee.dob || '',
+                          gender: viewingEmployee.gender || 'Male',
+                          maritalStatus: viewingEmployee.maritalStatus || 'Single',
+                          jobTitle: viewingEmployee.job_title || 'Senior Auditor',
+                          department_id: viewingEmployee.department_id || 'audit',
+                          accessRole: viewingEmployee.role || 'employee',
+                          immediateSupervisor: viewingEmployee.immediateSupervisor || 'Nasser Al-Riyami',
+                          joinedDate: viewingEmployee.joinedAt || '',
+                          employeeType: viewingEmployee.type || 'Experienced',
+                          accommodationStatus: viewingEmployee.accommodationStatus || 'Lives with family',
+                          accommodationDetails: viewingEmployee.accommodationDetails || '',
+                          basicSalary: viewingEmployee.basicSalary || 0,
+                          transportAllowance: viewingEmployee.allowances?.transport || 0,
+                          housingAllowance: viewingEmployee.allowances?.housing || 0,
+                          otherAllowance: viewingEmployee.allowances?.other || 0
+                        });
+                      }
+                    }} 
+                    className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-750 rounded-xl text-xs font-bold uppercase transition-colors cursor-pointer"
+                  >
+                    {isAr ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button 
+                    onClick={handleSaveDossierChanges}
+                    disabled={isSavingDossier}
+                    className="px-6 py-2.5 bg-[#A11212] hover:bg-[#800e0e] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    {isSavingDossier ? (
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    ) : (
+                      isAr ? 'حفظ التغييرات' : 'Save Changes'
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {dossierTab !== 'performance' ? (
+                    <button 
+                      onClick={() => setIsEditing(true)}
+                      className="px-5 py-2.5 bg-brand-dark hover:bg-gray-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Pencil size={12} />
+                      {isAr ? 'تعديل البيانات' : 'Edit Profile'}
+                    </button>
+                  ) : <div />}
+                  <button 
+                    onClick={() => setViewingEmployee(null)} 
+                    className="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-750 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    {isAr ? 'إغلاق' : 'Close'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
