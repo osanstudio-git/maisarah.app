@@ -401,15 +401,23 @@ const EmployeeManagement = () => {
     try {
       if (editingEmployee) {
         // Edit Mode
-        const updateData: any = {
+        // Update security access profiles table
+        const profileUpdate = {
           full_name: formData.fullName,
-          phone: formData.phone,
           role: formData.role,
           department_id: formData.department_id
         };
+        const { error: profileError } = await supabase.from('profiles').update(profileUpdate).eq('id', editingEmployee.id);
+        if (profileError) throw profileError;
 
-        const { error: updateError } = await supabase.from('profiles').update(updateData).eq('id', editingEmployee.id);
-        if (updateError) throw updateError;
+        // Update core employee records table (which actually stores phone number)
+        const employeeUpdate = {
+          full_name: formData.fullName,
+          phone: formData.phone,
+          dept: formData.department_id === 'tax_vat' ? 'Tax & VAT' : formData.department_id === 'audit' ? 'Audit' : 'Bookkeeping'
+        };
+        const { error: employeeError } = await supabase.from('hr_employees').update(employeeUpdate).eq('id', editingEmployee.id);
+        if (employeeError) throw employeeError;
 
         setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? { ...emp, name_en: formData.fullName, name_ar: formData.fullName, phone: formData.phone, role: formData.role, department_id: formData.department_id } : emp));
         setIsModalOpen(false);
