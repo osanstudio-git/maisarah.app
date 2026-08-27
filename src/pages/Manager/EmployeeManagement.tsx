@@ -28,7 +28,8 @@ interface Employee {
   name_en: string;
   email: string;
   phone: string;
-  role: string;
+  role: string; // System access role (e.g. employee, department_head)
+  job_title: string; // Designated Job title (e.g. Senior Auditor)
   status: string;
   tasksCompleted: number;
   activeJobs: number;
@@ -36,6 +37,26 @@ interface Employee {
   completionRate: number;
   joinedAt: string;
   department_id?: string;
+  civilId?: string;
+  passportNo?: string;
+  residencyNo?: string;
+  nationality?: string;
+  dob?: string;
+  gender?: string;
+  maritalStatus?: string;
+  immediateSupervisor?: string;
+  basicSalary?: number;
+  type?: string;
+  accommodationStatus?: string;
+  accommodationDetails?: string;
+  allowances?: { transport: number; housing: number; other: number };
+  education?: any[];
+  experience?: any[];
+  family?: any[];
+  emergencyContact?: { name: string; relation: string; phone: string };
+  promotions?: any[];
+  disciplinaries?: any[];
+  bonuses?: any[];
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +93,63 @@ const EmployeeManagement = () => {
   });
   const [placementError, setPlacementError] = useState<string | null>(null);
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
+  const [dossierTab, setDossierTab] = useState<'general' | 'job' | 'financials' | 'performance' | 'edit'>('general');
+  const [isSavingDossier, setIsSavingDossier] = useState(false);
+  const [dossierError, setDossierError] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    fullName: '',
+    phone: '',
+    civilId: '',
+    passportNo: '',
+    residencyNo: '',
+    nationality: 'Omani',
+    dob: '',
+    gender: 'Male',
+    maritalStatus: 'Single',
+    jobTitle: 'Senior Auditor',
+    department_id: 'audit',
+    accessRole: 'employee',
+    immediateSupervisor: 'Nasser Al-Riyami',
+    joinedDate: '',
+    employeeType: 'Experienced',
+    accommodationStatus: 'Lives with family',
+    accommodationDetails: '',
+    basicSalary: 0,
+    transportAllowance: 0,
+    housingAllowance: 0,
+    otherAllowance: 0
+  });
+
+  useEffect(() => {
+    if (viewingEmployee) {
+      setEditFormData({
+        fullName: viewingEmployee.name_en || '',
+        phone: viewingEmployee.phone || '',
+        civilId: viewingEmployee.civilId || '',
+        passportNo: viewingEmployee.passportNo || '',
+        residencyNo: viewingEmployee.residencyNo || '',
+        nationality: viewingEmployee.nationality || 'Omani',
+        dob: viewingEmployee.dob || '',
+        gender: viewingEmployee.gender || 'Male',
+        maritalStatus: viewingEmployee.maritalStatus || 'Single',
+        jobTitle: viewingEmployee.job_title || 'Senior Auditor',
+        department_id: viewingEmployee.department_id || 'audit',
+        accessRole: viewingEmployee.role || 'employee',
+        immediateSupervisor: viewingEmployee.immediateSupervisor || 'Nasser Al-Riyami',
+        joinedDate: viewingEmployee.joinedAt || '',
+        employeeType: viewingEmployee.type || 'Experienced',
+        accommodationStatus: viewingEmployee.accommodationStatus || 'Lives with family',
+        accommodationDetails: viewingEmployee.accommodationDetails || '',
+        basicSalary: viewingEmployee.basicSalary || 0,
+        transportAllowance: viewingEmployee.allowances?.transport || 0,
+        housingAllowance: viewingEmployee.allowances?.housing || 0,
+        otherAllowance: viewingEmployee.allowances?.other || 0
+      });
+      setDossierTab('general');
+      setDossierError(null);
+    }
+  }, [viewingEmployee]);
+
   const [isPlacing, setIsPlacing] = useState(false);
   const [notification, setNotification] = useState<{ show: boolean; title: string; message: string; type: 'success' | 'error' }>({
     show: false,
@@ -129,34 +207,66 @@ const EmployeeManagement = () => {
     try {
       const { data: profiles, error: profErr } = await supabase
         .from('profiles')
-        .select('*')
-        .in('role', ['employee', 'manager']);
+        .select('*');
 
       if (profErr) throw profErr;
 
-      // Map DB profiles to Employee interface, generating some mock stats for the dashboard
+      const { data: hrEmployees, error: hrErr } = await supabase
+        .from('hr_employees')
+        .select('*');
+
+      if (hrErr) throw hrErr;
+
+      // Map DB profiles to Employee interface, joining with hr_employees details
       const mapped: Employee[] = (profiles || []).map(p => {
+        const hrEmp = (hrEmployees || []).find(h => h.id === p.id);
+        
+        // Mock stats for completion rate if not present
         const total = Math.floor(Math.random() * 40 + 10);
         const done = Math.floor(total * (0.5 + Math.random() * 0.5));
+        
         return {
           id: p.id,
-          name_en: p.full_name || 'Unknown',
-          name_ar: p.full_name || 'غير معروف',
-          email: p.email || '',
-          phone: p.phone || '',
-          role: p.role,
-          status: Math.random() > 0.1 ? 'active' : 'on_leave',
+          name_en: hrEmp?.full_name || p.full_name || 'Unknown',
+          name_ar: p.full_name || hrEmp?.full_name || 'غير معروف',
+          email: p.email || hrEmp?.email || '',
+          phone: hrEmp?.phone || '',
+          role: p.role, // access role
+          job_title: hrEmp?.role || 'Senior Auditor', // designated job position
+          status: hrEmp?.status || (Math.random() > 0.1 ? 'active' : 'on_leave'),
           tasksCompleted: done,
           activeJobs: total - done,
           delays: Math.floor(Math.random() * 3),
           completionRate: Math.round((done / total) * 100),
-          joinedAt: p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : '2024-01-01',
-          // Randomly assign department for visual purposes if not saved
-          department_id: p.department_id || getAllDepartments()[Math.floor(Math.random() * getAllDepartments().length)].id,
+          joinedAt: hrEmp?.joined_date || (p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : '2024-01-01'),
+          department_id: p.department_id || 'audit',
+          
+          // Additional Dossier Details
+          civilId: hrEmp?.civil_id || '',
+          passportNo: hrEmp?.passport_no || '',
+          residencyNo: hrEmp?.residency_no || '',
+          nationality: hrEmp?.nationality || 'Omani',
+          dob: hrEmp?.dob || '',
+          gender: hrEmp?.gender || 'Male',
+          maritalStatus: hrEmp?.marital_status || 'Single',
+          immediateSupervisor: hrEmp?.immediate_supervisor || 'Nasser Al-Riyami',
+          basicSalary: Number(hrEmp?.basic_salary || 0),
+          type: hrEmp?.employee_type || 'Experienced',
+          accommodationStatus: hrEmp?.accommodation_status || 'Lives with family',
+          accommodationDetails: hrEmp?.accommodation_details || '',
+          allowances: hrEmp?.allowances || { transport: 0, housing: 0, other: 0 },
+          education: hrEmp?.education || [],
+          experience: hrEmp?.experience || [],
+          family: hrEmp?.family || [],
+          emergencyContact: hrEmp?.emergency_contact || { name: '', relation: '', phone: '' },
+          promotions: hrEmp?.promotions || [],
+          disciplinaries: hrEmp?.disciplinaries || [],
+          bonuses: hrEmp?.bonuses || []
         };
       });
 
-      setEmployees(mapped);
+      // Filter out Executive manager profile in employee directory view
+      setEmployees(mapped.filter(emp => emp.email !== 'manager@maisarah.om'));
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -473,6 +583,104 @@ const EmployeeManagement = () => {
   const handleShareWhatsApp = () => {
     const text = `Hi ${formData.fullName},\n\nYour Maisarah Platform account is ready.\nEmail: ${createdCredentials.email}\nPassword: ${createdCredentials.password}\nLogin here: ${window.location.origin}/login`;
     window.open(`https://wa.me/${formData.phone.replace(/\s+/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleSaveDossierChanges = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!viewingEmployee) return;
+    setIsSavingDossier(true);
+    setDossierError(null);
+
+    try {
+      // 1. Update security access profiles table
+      const profileUpdate = {
+        full_name: editFormData.fullName,
+        role: editFormData.accessRole,
+        department_id: editFormData.department_id
+      };
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update(profileUpdate)
+        .eq('id', viewingEmployee.id);
+
+      if (profileError) throw profileError;
+
+      // 2. Update core employee records table (which stores phone, civil id, salary, allowances, etc.)
+      const employeeUpdate = {
+        full_name: editFormData.fullName,
+        phone: editFormData.phone,
+        role: editFormData.jobTitle,
+        dept: editFormData.department_id === 'tax_vat' ? 'Tax & VAT' : editFormData.department_id === 'audit' ? 'Audit' : 'Bookkeeping',
+        employee_type: editFormData.employeeType,
+        joined_date: editFormData.joinedDate,
+        immediate_supervisor: editFormData.immediateSupervisor,
+        accommodation_status: editFormData.accommodationStatus,
+        accommodation_details: editFormData.accommodationDetails,
+        basic_salary: Number(editFormData.basicSalary || 0),
+        allowances: {
+          transport: Number(editFormData.transportAllowance || 0),
+          housing: Number(editFormData.housingAllowance || 0),
+          other: Number(editFormData.otherAllowance || 0)
+        },
+        civil_id: editFormData.civilId,
+        passport_no: editFormData.passportNo,
+        residency_no: editFormData.residencyNo,
+        nationality: editFormData.nationality,
+        dob: editFormData.dob,
+        gender: editFormData.gender,
+        marital_status: editFormData.maritalStatus
+      };
+      const { error: employeeError } = await supabase
+        .from('hr_employees')
+        .update(employeeUpdate)
+        .eq('id', viewingEmployee.id);
+
+      if (employeeError) throw employeeError;
+
+      // Update local state in employees list
+      const updatedEmployee: Employee = {
+        ...viewingEmployee,
+        name_en: editFormData.fullName,
+        name_ar: editFormData.fullName,
+        phone: editFormData.phone,
+        role: editFormData.accessRole,
+        job_title: editFormData.jobTitle,
+        department_id: editFormData.department_id,
+        civilId: editFormData.civilId,
+        passportNo: editFormData.passportNo,
+        residencyNo: editFormData.residencyNo,
+        nationality: editFormData.nationality,
+        dob: editFormData.dob,
+        gender: editFormData.gender,
+        maritalStatus: editFormData.maritalStatus,
+        immediateSupervisor: editFormData.immediateSupervisor,
+        basicSalary: Number(editFormData.basicSalary || 0),
+        type: editFormData.employeeType,
+        accommodationStatus: editFormData.accommodationStatus,
+        accommodationDetails: editFormData.accommodationDetails,
+        allowances: {
+          transport: Number(editFormData.transportAllowance || 0),
+          housing: Number(editFormData.housingAllowance || 0),
+          other: Number(editFormData.otherAllowance || 0)
+        }
+      };
+
+      setEmployees(prev => prev.map(emp => emp.id === viewingEmployee.id ? updatedEmployee : emp));
+      setViewingEmployee(updatedEmployee);
+      setDossierTab('general');
+      
+      // Show dynamic notification modal
+      setNotification({
+        show: true,
+        title: isAr ? 'تم حفظ التعديلات' : 'Changes Saved',
+        message: isAr ? 'تم تحديث بيانات الموظف بنجاح في النظام.' : 'Employee details have been successfully updated in the system.',
+        type: 'success'
+      });
+    } catch (err: any) {
+      setDossierError(err.message || 'Failed to update employee details');
+    } finally {
+      setIsSavingDossier(false);
+    }
   };
 
   // ── Computed Stats ───────────────────────────────────────────────────────
@@ -1130,7 +1338,7 @@ const EmployeeManagement = () => {
             <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 <Users className="text-brand-dark" size={20} />
-                {isAr ? 'ملف الموظف التفصيلي' : 'Employee Corporate Dossier'}
+                {isAr ? 'ملف الموظف التفصيلي الشامل' : 'Comprehensive Employee Dossier'}
               </h3>
               <button 
                 onClick={() => setViewingEmployee(null)} 
@@ -1140,100 +1348,459 @@ const EmployeeManagement = () => {
               </button>
             </div>
 
-            {/* Content */}
-            <div className="p-6 overflow-y-auto space-y-6">
-              {/* Profile Card Summary */}
-              <div className="flex items-center gap-5 p-5 bg-gray-50 rounded-2xl border border-gray-150">
-                <div className="w-16 h-16 bg-brand-dark text-white rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg shadow-brand-dark/20 flex-shrink-0">
-                  {(isAr ? viewingEmployee.name_ar : viewingEmployee.name_en).charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-xl font-black text-gray-900 truncate">
-                    {isAr ? viewingEmployee.name_ar : viewingEmployee.name_en}
-                  </h4>
-                  <p className="text-xs text-gray-550 font-bold truncate mt-1">
-                    {viewingEmployee.role} · {viewingEmployee.department_id === 'tax_vat' ? (isAr ? 'الضرائب وضريبة القيمة المضافة' : 'Tax & VAT') : viewingEmployee.department_id === 'audit' ? (isAr ? 'التدقيق' : 'Audit') : (isAr ? 'مسك الدفاتر' : 'Bookkeeping')}
-                  </p>
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mt-2.5 ${
-                    viewingEmployee.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${viewingEmployee.status === 'active' ? 'bg-green-500' : 'bg-orange-500'}`} />
-                    {viewingEmployee.status === 'active' ? (isAr ? 'نشط' : 'Active') : (isAr ? 'في إجازة' : 'On Leave')}
-                  </span>
-                </div>
+            {/* Profile Card Summary */}
+            <div className="px-6 pt-5 pb-2 flex items-center gap-5 bg-white">
+              <div className="w-16 h-16 bg-brand-dark text-white rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg shadow-brand-dark/20 flex-shrink-0 animate-scale-up">
+                {(isAr ? viewingEmployee.name_ar : viewingEmployee.name_en).charAt(0)}
               </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xl font-black text-gray-900 truncate">
+                  {isAr ? viewingEmployee.name_ar : viewingEmployee.name_en}
+                </h4>
+                <p className="text-xs text-gray-550 font-bold truncate mt-1">
+                  {viewingEmployee.job_title || 'Senior Auditor'} · {viewingEmployee.department_id === 'tax_vat' ? (isAr ? 'الضرائب وضريبة القيمة المضافة' : 'Tax & VAT') : viewingEmployee.department_id === 'audit' ? (isAr ? 'التدقيق' : 'Audit') : (isAr ? 'مسك الدفاتر' : 'Bookkeeping')}
+                </p>
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mt-2.5 ${
+                  viewingEmployee.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${viewingEmployee.status === 'active' ? 'bg-green-500' : 'bg-orange-500'}`} />
+                  {viewingEmployee.status === 'active' ? (isAr ? 'نشط' : 'Active') : (isAr ? 'في إجازة' : 'On Leave')}
+                </span>
+              </div>
+            </div>
 
-              {/* Detail Grid */}
-              <div className="grid grid-cols-2 gap-6">
-                {/* Section A: Contact Details */}
-                <div className="space-y-4">
-                  <h5 className="text-xs font-black text-brand-dark uppercase tracking-wider border-b border-gray-100 pb-2">
-                    {isAr ? 'معلومات الاتصال' : 'Contact Information'}
-                  </h5>
-                  <div className="space-y-3 text-xs">
+            {/* Tabs Navigation */}
+            <div className="px-6 bg-gray-50 border-b border-gray-100 flex gap-2 overflow-x-auto scrollbar-none">
+              <button
+                onClick={() => setDossierTab('general')}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                  dossierTab === 'general' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
+                }`}
+              >
+                {isAr ? 'البيانات الشخصية' : 'Personal Info'}
+              </button>
+              <button
+                onClick={() => setDossierTab('job')}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                  dossierTab === 'job' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
+                }`}
+              >
+                {isAr ? 'الوظيفة والقسم' : 'Job & Dept'}
+              </button>
+              <button
+                onClick={() => setDossierTab('financials')}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                  dossierTab === 'financials' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
+                }`}
+              >
+                {isAr ? 'المالية والرواتب' : 'Financials'}
+              </button>
+              <button
+                onClick={() => setDossierTab('performance')}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                  dossierTab === 'performance' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
+                }`}
+              >
+                {isAr ? 'الأداء والتقارير' : 'Performance'}
+              </button>
+              <button
+                onClick={() => setDossierTab('edit')}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                  dossierTab === 'edit' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
+                }`}
+              >
+                <Pencil size={12} />
+                {isAr ? 'تعديل البيانات' : 'Edit Profile'}
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 min-h-[400px]">
+              
+              {/* Error state */}
+              {dossierError && (
+                <div className="p-4 rounded-xl bg-red-50 text-red-700 text-xs font-bold flex items-center gap-2">
+                  <AlertTriangle size={16} />
+                  {dossierError}
+                </div>
+              )}
+
+              {/* Tab 1: General Info */}
+              {dossierTab === 'general' && (
+                <div className="space-y-6 animate-scale-up">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
                     <div>
                       <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'البريد الإلكتروني:' : 'Email Address:'}</span>
                       <span className="font-bold text-gray-900 select-all">{viewingEmployee.email}</span>
                     </div>
                     <div>
                       <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم الهاتف:' : 'Phone Number:'}</span>
-                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.phone}</span>
+                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.phone || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم الهوية المدنية:' : 'Civil ID Number:'}</span>
+                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.civilId || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم جواز السفر:' : 'Passport Number:'}</span>
+                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.passportNo || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'رقم الإقامة الكفيل:' : 'Residency Card:'}</span>
+                      <span className="font-bold text-gray-900 select-all">{viewingEmployee.residencyNo || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'الجنسية:' : 'Nationality:'}</span>
+                      <span className="font-bold text-gray-900">{viewingEmployee.nationality || 'Omani'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تاريخ الميلاد:' : 'Date of Birth:'}</span>
+                      <span className="font-bold text-gray-900">{viewingEmployee.dob || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'الجنس:' : 'Gender:'}</span>
+                      <span className="font-bold text-gray-900">{viewingEmployee.gender || 'Male'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'الحالة الاجتماعية:' : 'Marital Status:'}</span>
+                      <span className="font-bold text-gray-900">{viewingEmployee.maritalStatus || 'Single'}</span>
                     </div>
                   </div>
-                </div>
 
-                {/* Section B: Employment Contract */}
-                <div className="space-y-4">
-                  <h5 className="text-xs font-black text-brand-dark uppercase tracking-wider border-b border-gray-100 pb-2">
-                    {isAr ? 'تفاصيل التوظيف' : 'Employment Details'}
-                  </h5>
-                  <div className="space-y-3 text-xs">
+                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-xs">
+                    <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'نوع السكن وتفاصيله:' : 'Accommodation Details:'}</span>
+                    <span className="font-black text-gray-950 block">{viewingEmployee.accommodationStatus}</span>
+                    {viewingEmployee.accommodationDetails && (
+                      <span className="font-bold text-gray-650 block mt-1 bg-white p-2 rounded-lg border border-gray-100">{viewingEmployee.accommodationDetails}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Job & Department */}
+              {dossierTab === 'job' && (
+                <div className="space-y-6 animate-scale-up">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
                     <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تاريخ الانضمام:' : 'Joined Date:'}</span>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'القسم المعين:' : 'Designated Department:'}</span>
+                      <span className="font-bold text-gray-900 capitalize">
+                        {viewingEmployee.department_id === 'tax_vat' ? 'Tax & VAT' : viewingEmployee.department_id === 'audit' ? 'Audit' : 'Bookkeeping/Others'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'المسمى الوظيفي الفعلي:' : 'Job Position Title:'}</span>
+                      <span className="font-bold text-gray-900">{viewingEmployee.job_title || 'Senior Auditor'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'المشرف المباشر (HOD):' : 'Immediate Supervisor (HOD):'}</span>
+                      <span className="font-bold text-gray-900">{viewingEmployee.immediateSupervisor || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'مستوى الصلاحية في النظام:' : 'System Access Role:'}</span>
+                      <span className="font-bold text-brand-dark capitalize">{viewingEmployee.role}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تاريخ التوظيف:' : 'Joined Date:'}</span>
                       <span className="font-bold text-gray-900">{viewingEmployee.joinedAt || 'N/A'}</span>
                     </div>
                     <div>
-                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'المسمى الوظيفي:' : 'Job Position:'}</span>
-                      <span className="font-bold text-gray-900 capitalize">{viewingEmployee.role}</span>
+                      <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تصنيف الموظف:' : 'Employee Classification:'}</span>
+                      <span className="font-bold text-gray-900">{viewingEmployee.type || 'Experienced'}</span>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Performance Metrics */}
-              <div className="space-y-4">
-                <h5 className="text-xs font-black text-brand-dark uppercase tracking-wider border-b border-gray-100 pb-2">
-                  {isAr ? 'مؤشرات الأداء المهني' : 'Workforce Performance Metrics'}
-                </h5>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
-                    <span className="text-2xl font-black text-brand-dark">{viewingEmployee.tasksCompleted || 0}</span>
-                    <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'المهام المكتملة' : 'Tasks Completed'}</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
-                    <span className="text-2xl font-black text-orange-600">{viewingEmployee.activeJobs || 0}</span>
-                    <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'المهام النشطة' : 'Active Jobs'}</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
-                    <span className="text-2xl font-black text-red-600">{viewingEmployee.delays || 0}</span>
-                    <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'حالات التأخير' : 'Delays'}</p>
+              {/* Tab 3: Financials & Allowances */}
+              {dossierTab === 'financials' && (
+                <div className="space-y-6 animate-scale-up">
+                  <div className="bg-gray-50 p-5 rounded-3xl border border-gray-150 space-y-4">
+                    <h4 className="text-xs font-black text-brand-dark uppercase tracking-widest border-b border-gray-200 pb-2">
+                      {isAr ? 'تفاصيل الراتب والبدلات الشهري' : 'Monthly Salary Structure'}
+                    </h4>
+                    <div className="space-y-3 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-505 font-bold">{isAr ? 'الراتب الأساسي:' : 'Basic Salary:'}</span>
+                        <span className="font-black text-gray-900">OMR {viewingEmployee.basicSalary || 0}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-505 font-bold">{isAr ? 'بدل النقل:' : 'Transport Allowance:'}</span>
+                        <span className="font-bold text-gray-900">OMR {viewingEmployee.allowances?.transport || 0}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-505 font-bold">{isAr ? 'بدل السكن:' : 'Housing Allowance:'}</span>
+                        <span className="font-bold text-gray-900">OMR {viewingEmployee.allowances?.housing || 0}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-505 font-bold">{isAr ? 'بدلات أخرى:' : 'Other Allowances:'}</span>
+                        <span className="font-bold text-gray-900">OMR {viewingEmployee.allowances?.other || 0}</span>
+                      </div>
+                      <div className="h-px bg-gray-200 my-2" />
+                      <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100">
+                        <span className="text-gray-900 font-black">{isAr ? 'إجمالي الراتب المستحق:' : 'Total Monthly Salary:'}</span>
+                        <span className="text-base font-black text-brand-dark">
+                          OMR {(viewingEmployee.basicSalary || 0) + (viewingEmployee.allowances?.transport || 0) + (viewingEmployee.allowances?.housing || 0) + (viewingEmployee.allowances?.other || 0)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Progress Tracker */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-gray-700">{isAr ? 'معدل إكمال المهام الكلي' : 'Overall Task Completion Rate'}</span>
-                  <span className="text-xs font-black text-brand-dark">{viewingEmployee.completionRate}%</span>
+              {/* Tab 4: Performance & Lists */}
+              {dossierTab === 'performance' && (
+                <div className="space-y-6 animate-scale-up">
+                  {/* Task metrics */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
+                      <span className="text-2xl font-black text-brand-dark">{viewingEmployee.tasksCompleted || 0}</span>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'المهام المكتملة' : 'Tasks Completed'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
+                      <span className="text-2xl font-black text-orange-600">{viewingEmployee.activeJobs || 0}</span>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'المهام النشطة' : 'Active Jobs'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-center">
+                      <span className="text-2xl font-black text-red-600">{viewingEmployee.delays || 0}</span>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-1.5">{isAr ? 'حالات التأخير' : 'Delays'}</p>
+                    </div>
+                  </div>
+
+                  {/* Completion Rate */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-gray-700">{isAr ? 'معدل إكمال المهام الكلي' : 'Overall Task Completion Rate'}</span>
+                      <span className="text-xs font-black text-brand-dark">{viewingEmployee.completionRate}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-brand-dark h-full rounded-full transition-all duration-500" 
+                        style={{ width: `${viewingEmployee.completionRate}%` }} 
+                      />
+                    </div>
+                  </div>
+
+                  {/* Corporate Records lists */}
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150">
+                      <h6 className="font-black text-gray-900 border-b border-gray-200 pb-1.5 mb-2">{isAr ? 'التعليم والتأهيل' : 'Education'}</h6>
+                      {viewingEmployee.education && viewingEmployee.education.length > 0 ? (
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          {viewingEmployee.education.map((edu: any, i: number) => (
+                            <li key={i}>{edu.degree} - {edu.school}</li>
+                          ))}
+                        </ul>
+                      ) : <p className="text-gray-400 italic">{isAr ? 'لا يوجد سجلات' : 'No records uploaded'}</p>}
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150">
+                      <h6 className="font-black text-gray-900 border-b border-gray-200 pb-1.5 mb-2">{isAr ? 'الترقيات والعلاوات الاستثنائية' : 'Promotions & History'}</h6>
+                      {viewingEmployee.promotions && viewingEmployee.promotions.length > 0 ? (
+                        <ul className="list-disc list-inside space-y-1 text-gray-700">
+                          {viewingEmployee.promotions.map((p: any, i: number) => (
+                            <li key={i}>{p.title} ({p.date})</li>
+                          ))}
+                        </ul>
+                      ) : <p className="text-gray-400 italic">{isAr ? 'لا يوجد ترقيات سابقة' : 'No previous promotions'}</p>}
+                    </div>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-brand-dark h-full rounded-full transition-all duration-500" 
-                    style={{ width: `${viewingEmployee.completionRate}%` }} 
-                  />
-                </div>
-              </div>
+              )}
+
+              {/* Tab 5: Edit Profile Form */}
+              {dossierTab === 'edit' && (
+                <form onSubmit={handleSaveDossierChanges} className="space-y-6 animate-scale-up text-xs font-bold text-gray-600">
+                  
+                  {/* Section A: Personal Information */}
+                  <div className="space-y-4">
+                    <h5 className="text-[10px] font-black text-brand-dark uppercase tracking-widest border-b border-gray-100 pb-1.5">
+                      {isAr ? '1. البيانات الشخصية وبيانات الاتصال' : '1. Personal & Contact Details'}
+                    </h5>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الاسم الكامل:' : 'Full Name:'}</label>
+                        <input required type="text" value={editFormData.fullName} onChange={e => setEditFormData({ ...editFormData, fullName: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'رقم الهاتف:' : 'Phone Number:'}</label>
+                        <input required type="tel" value={editFormData.phone} onChange={e => setEditFormData({ ...editFormData, phone: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'رقم الهوية المدنية:' : 'Civil ID:'}</label>
+                        <input type="text" value={editFormData.civilId} onChange={e => setEditFormData({ ...editFormData, civilId: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'رقم جواز السفر:' : 'Passport No:'}</label>
+                        <input type="text" value={editFormData.passportNo} onChange={e => setEditFormData({ ...editFormData, passportNo: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'رقم الإقامة / الكفيل:' : 'Residency Card:'}</label>
+                        <input type="text" value={editFormData.residencyNo} onChange={e => setEditFormData({ ...editFormData, residencyNo: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الجنسية:' : 'Nationality:'}</label>
+                        <input type="text" value={editFormData.nationality} onChange={e => setEditFormData({ ...editFormData, nationality: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'تاريخ الميلاد:' : 'Date of Birth:'}</label>
+                        <input type="date" value={editFormData.dob} onChange={e => setEditFormData({ ...editFormData, dob: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الجنس:' : 'Gender:'}</label>
+                          <select value={editFormData.gender} onChange={e => setEditFormData({ ...editFormData, gender: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                            <option value="Male">{isAr ? 'ذكر' : 'Male'}</option>
+                            <option value="Female">{isAr ? 'أنثى' : 'Female'}</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الحالة الاجتماعية:' : 'Marital Status:'}</label>
+                          <select value={editFormData.maritalStatus} onChange={e => setEditFormData({ ...editFormData, maritalStatus: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                            <option value="Single">{isAr ? 'أعزب' : 'Single'}</option>
+                            <option value="Married">{isAr ? 'متزوج' : 'Married'}</option>
+                            <option value="Divorced">{isAr ? 'مطلق' : 'Divorced'}</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section B: Job & Department info */}
+                  <div className="space-y-4">
+                    <h5 className="text-[10px] font-black text-brand-dark uppercase tracking-widest border-b border-gray-100 pb-1.5">
+                      {isAr ? '2. هيكل الوظيفة والقسم المعين' : '2. Job Position & Department Layout'}
+                    </h5>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'المسمى الوظيفي الفعلي:' : 'Designated Job Position:'}</label>
+                        <select value={editFormData.jobTitle} onChange={e => setEditFormData({ ...editFormData, jobTitle: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                          <option value="Senior Auditor">Senior Auditor</option>
+                          <option value="Tax Consultant">Tax Consultant</option>
+                          <option value="Junior Associate">Junior Associate</option>
+                          <option value="Head of Audit">Head of Audit</option>
+                          <option value="Head of Tax & VAT">Head of Tax & VAT</option>
+                          <option value="Head of Bookkeeping">Head of Bookkeeping</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'القسم المعين:' : 'Designated Department:'}</label>
+                        <select
+                          value={editFormData.department_id}
+                          onChange={(e) => {
+                            const newDept = e.target.value;
+                            let defaultHOD = 'Nasser Al-Riyami';
+                            if (newDept === 'tax_vat') defaultHOD = 'Khalfan Al-Abri';
+                            if (newDept === 'bookkeeping') defaultHOD = 'Mazis Al-Balushi';
+                            setEditFormData({
+                              ...editFormData,
+                              department_id: newDept,
+                              immediateSupervisor: defaultHOD
+                            });
+                          }}
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark cursor-pointer"
+                        >
+                          <option value="audit">{isAr ? 'التدقيق (Audit)' : 'Audit'}</option>
+                          <option value="tax_vat">{isAr ? 'الضرائب وضريبة القيمة المضافة (Tax & VAT)' : 'Tax & VAT'}</option>
+                          <option value="bookkeeping">{isAr ? 'إمساك الدفاتر (Bookkeeping)' : 'Bookkeeping/Others'}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الصلاحية في النظام:' : 'System Access Role:'}</label>
+                        <select value={editFormData.accessRole} onChange={e => setEditFormData({ ...editFormData, accessRole: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                          <option value="employee">{isAr ? 'موظف قياسي' : 'Standard Employee'}</option>
+                          <option value="department_head">{isAr ? 'رئيس قسم (HOD)' : 'Department Head (HOD)'}</option>
+                          <option value="accountant">{isAr ? 'محاسب' : 'Accountant'}</option>
+                          <option value="hr">{isAr ? 'إدارة الموارد البشرية (HR)' : 'HR Manager'}</option>
+                          <option value="manager">{isAr ? 'مدير تنفيذي' : 'Executive Manager'}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'المشرف المباشر (HOD):' : 'Immediate Supervisor (HOD):'}</label>
+                        <select value={editFormData.immediateSupervisor} onChange={e => setEditFormData({ ...editFormData, immediateSupervisor: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                          <option value="Nasser Al-Riyami">Nasser Al-Riyami (Head of Audit)</option>
+                          <option value="Khalfan Al-Abri">Khalfan Al-Abri (Head of Tax & VAT)</option>
+                          <option value="Mazis Al-Balushi">Mazis Al-Balushi (Head of Bookkeeping)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'تاريخ التوظيف:' : 'Joined Date:'}</label>
+                        <input type="date" value={editFormData.joinedDate} onChange={e => setEditFormData({ ...editFormData, joinedDate: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'تصنيف الموظف:' : 'Employee Type:'}</label>
+                        <select value={editFormData.employeeType} onChange={e => setEditFormData({ ...editFormData, employeeType: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                          <option value="Experienced">{isAr ? 'خبرة' : 'Experienced'}</option>
+                          <option value="Trainee">{isAr ? 'متدرب' : 'Trainee'}</option>
+                          <option value="Temporary">{isAr ? 'مؤقت' : 'Temporary'}</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'حالة السكن الموفر:' : 'Accommodation Status:'}</label>
+                        <select value={editFormData.accommodationStatus} onChange={e => setEditFormData({ ...editFormData, accommodationStatus: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                          <option value="Lives with family">{isAr ? 'يسكن مع عائلته' : 'Lives with family'}</option>
+                          <option value="Company Accommodation">{isAr ? 'سكن موفر من الشركة' : 'Company Accommodation'}</option>
+                          <option value="Rent Allowance">{isAr ? 'بدل سكن نقدي' : 'Rent Allowance'}</option>
+                        </select>
+                      </div>
+                      {editFormData.accommodationStatus === 'Company Accommodation' && (
+                        <div>
+                          <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'تفاصيل السكن / الغرفة:' : 'Accommodation Details:'}</label>
+                          <input type="text" value={editFormData.accommodationDetails} onChange={e => setEditFormData({ ...editFormData, accommodationDetails: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark" placeholder="e.g. Room 304, Building B" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Section C: Financials & Salary */}
+                  <div className="space-y-4">
+                    <h5 className="text-[10px] font-black text-brand-dark uppercase tracking-widest border-b border-gray-100 pb-1.5">
+                      {isAr ? '3. الهيكل المالي والبدلات (بالريال العماني)' : '3. Financial Allowances (OMR)'}
+                    </h5>
+                    <div className="grid grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'الأساسي:' : 'Basic Salary:'}</label>
+                        <input type="number" value={editFormData.basicSalary} onChange={e => setEditFormData({ ...editFormData, basicSalary: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'بدل النقل:' : 'Transport:'}</label>
+                        <input type="number" value={editFormData.transportAllowance} onChange={e => setEditFormData({ ...editFormData, transportAllowance: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'بدل السكن:' : 'Housing:'}</label>
+                        <input type="number" value={editFormData.housingAllowance} onChange={e => setEditFormData({ ...editFormData, housingAllowance: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'بدلات أخرى:' : 'Other:'}</label>
+                        <input type="number" value={editFormData.otherAllowance} onChange={e => setEditFormData({ ...editFormData, otherAllowance: Number(e.target.value) })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-dark" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Submission buttons */}
+                  <div className="pt-2 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setDossierTab('general')}
+                      className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors cursor-pointer"
+                    >
+                      {isAr ? 'إلغاء' : 'Cancel'}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingDossier}
+                      className="px-6 py-2.5 bg-[#A11212] text-white rounded-xl font-black uppercase tracking-wider hover:bg-[#800e0e] transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                    >
+                      {isSavingDossier ? (
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                      ) : (
+                        isAr ? 'حفظ التعديلات' : 'Save Changes'
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
 
             {/* Footer */}
