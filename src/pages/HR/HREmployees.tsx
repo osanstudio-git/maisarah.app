@@ -35,7 +35,7 @@ interface Employee {
   experience: Array<{ role: string; company: string; duration: string }>;
   family: Array<{ name: string; relation: string; dob: string }>;
   emergencyContact: { name: string; relation: string; phone: string };
-  documents: Array<{ name: string; type: string; expiry: string; status: 'active' | 'expired' | 'warning' }>;
+  documents: Array<{ name: string; type: string; expiry: string; status: 'active' | 'expired' | 'warning'; url?: string }>;
   promotions: Array<{ from: string; to: string; date: string }>;
   disciplinaries: Array<{ type: string; reason: string; date: string; action: string }>;
   bonuses: Array<{ amount: number; reason: string; date: string }>;
@@ -629,15 +629,123 @@ export default function HREmployees() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const mockDocs = [
-      ...formData.uploadedFiles.map(f => ({
+    // 1. Determine final target ID for the employee
+    let targetId = formData.id;
+    let isNew = false;
+    let tempPassword = '';
+    let accessRole = 'employee';
+    let departmentId = 'audit';
+
+    if (!isEditMode) {
+      isNew = true;
+      targetId = `EMP-${Math.floor(100 + Math.random() * 900)}`; // Fallback mock ID
+      tempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
+      
+      // Determine access role
+      const normalizedDept = (formData.dept || '').toLowerCase();
+      const normalizedRole = (formData.role || '').toLowerCase();
+      
+      if (normalizedDept.includes('hr') || normalizedRole.includes('hr manager')) {
+        accessRole = 'hr';
+      } else if (normalizedDept.includes('finance') || normalizedDept.includes('account') || normalizedRole.includes('accountant')) {
+        accessRole = 'accountant';
+      } else if (normalizedRole.includes('head') || normalizedRole.includes('hod') || normalizedRole.includes('director')) {
+        accessRole = 'department_head';
+      }
+      
+      // Map department ID
+      if (normalizedDept.includes('tax') || normalizedDept.includes('vat')) {
+        departmentId = 'tax_vat';
+      } else if (normalizedDept.includes('book') || normalizedDept.includes('ledger')) {
+        departmentId = 'bookkeeping';
+      } else if (normalizedDept.includes('advis') || normalizedDept.includes('consult')) {
+        departmentId = 'business_advisory';
+      } else if (normalizedDept.includes('success') || normalizedDept.includes('client')) {
+        departmentId = 'client_success';
+      }
+
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        });
+        
+        const { data: authData, error: authError } = await tempClient.auth.signUp({
+          email: formData.email,
+          password: tempPassword,
+          options: {
+            data: {
+              full_name: formData.name,
+              role: accessRole,
+              department_id: departmentId
+            }
+          }
+        });
+        
+        if (authError) throw authError;
+        
+        if (authData.user) {
+          targetId = authData.user.id;
+          
+          setNotification({
+            show: true,
+            title: isAr ? 'تم تسجيل الموظف' : 'Employee Registered',
+            message: isAr 
+              ? `تم إنشاء الحساب بنجاح. البريد الإلكتروني: ${formData.email} | كلمة المرور المؤقتة: ${tempPassword}`
+              : `Employee auth account created successfully. Email: ${formData.email} | Temporary Password: ${tempPassword}`,
+            type: 'success'
+          });
+        }
+      } catch (err: any) {
+        console.error("Failed to create live auth user:", err.message);
+        targetId = crypto.randomUUID();
+      }
+    }
+
+    // 2. Upload actual files to Supabase Storage
+    const uploadedDocs: Array<{ name: string; type: string; expiry: string; status: 'active' | 'warning' | 'expired'; url?: string }> = [];
+
+    for (const f of formData.uploadedFiles) {
+      let docUrl: string | undefined = undefined;
+      
+      if (f.file) {
+        try {
+          const filePath = `employees/${targetId}/${f.name}`;
+          
+          // Upload to Supabase 'documents' bucket
+          const { error: uploadError } = await supabase.storage
+            .from('documents')
+            .upload(filePath, f.file, {
+              cacheControl: '3600',
+              upsert: true
+            });
+
+          if (!uploadError) {
+            const { data } = supabase.storage
+              .from('documents')
+              .getPublicUrl(filePath);
+            docUrl = data.publicUrl;
+          } else {
+            console.warn("Storage upload failed, fallback to local URL:", uploadError);
+            docUrl = URL.createObjectURL(f.file);
+          }
+        } catch (err) {
+          console.warn("Failed to upload file to storage, using object URL fallback:", err);
+          docUrl = URL.createObjectURL(f.file);
+        }
+      }
+      
+      uploadedDocs.push({
         name: f.name,
         type: f.type,
         expiry: '2029-12-31',
-        status: 'active' as const
-      }))
-    ];
+        status: 'active',
+        url: docUrl
+      });
+    }
 
+    // 3. Save / Update employees list
     if (isEditMode) {
       const updatedList = employees.map(emp => {
         if (emp.id === formData.id) {
@@ -683,82 +791,15 @@ export default function HREmployees() {
               relation: formData.emergencyRelation,
               phone: formData.emergencyPhone
             },
-            documents: [...emp.documents, ...mockDocs.filter(d => !emp.documents.some(ed => ed.name === d.name))]
+            documents: [...emp.documents, ...uploadedDocs.filter(d => !emp.documents.some(ed => ed.name === d.name))]
           };
         }
         return emp;
       });
-      saveEmployees(updatedList);
+      await saveEmployees(updatedList);
     } else {
-      // 1. Create Supabase Auth User & Profile
-      let finalId = `EMP-${Math.floor(100 + Math.random() * 900)}`; // Fallback mock ID
-      const tempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
-      
-      // Determine access role
-      let accessRole = 'employee';
-      const normalizedDept = (formData.dept || '').toLowerCase();
-      const normalizedRole = (formData.role || '').toLowerCase();
-      
-      if (normalizedDept.includes('hr') || normalizedRole.includes('hr manager')) {
-        accessRole = 'hr';
-      } else if (normalizedDept.includes('finance') || normalizedDept.includes('account') || normalizedRole.includes('accountant')) {
-        accessRole = 'accountant';
-      } else if (normalizedRole.includes('head') || normalizedRole.includes('hod') || normalizedRole.includes('director')) {
-        accessRole = 'department_head';
-      }
-      
-      // Map department ID
-      let departmentId = 'audit';
-      if (normalizedDept.includes('tax') || normalizedDept.includes('vat')) {
-        departmentId = 'tax_vat';
-      } else if (normalizedDept.includes('book') || normalizedDept.includes('ledger')) {
-        departmentId = 'bookkeeping';
-      } else if (normalizedDept.includes('advis') || normalizedDept.includes('consult')) {
-        departmentId = 'business_advisory';
-      } else if (normalizedDept.includes('success') || normalizedDept.includes('client')) {
-        departmentId = 'client_success';
-      }
-
-      try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-        const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-        });
-        
-        const { data: authData, error: authError } = await tempClient.auth.signUp({
-          email: formData.email,
-          password: tempPassword,
-          options: {
-            data: {
-              full_name: formData.name,
-              role: accessRole,
-              department_id: departmentId
-            }
-          }
-        });
-        
-        if (authError) throw authError;
-        
-        if (authData.user) {
-          finalId = authData.user.id;
-          
-          setNotification({
-            show: true,
-            title: isAr ? 'تم تسجيل الموظف' : 'Employee Registered',
-            message: isAr 
-              ? `تم إنشاء الحساب بنجاح. البريد الإلكتروني: ${formData.email} | كلمة المرور المؤقتة: ${tempPassword}`
-              : `Employee auth account created successfully. Email: ${formData.email} | Temporary Password: ${tempPassword}`,
-            type: 'success'
-          });
-        }
-      } catch (err: any) {
-        console.error("Failed to create live auth user:", err.message);
-        finalId = crypto.randomUUID();
-      }
-
       const newEmp: Employee = {
-        id: finalId,
+        id: targetId,
         name: formData.name,
         role: formData.role,
         dept: formData.dept,
@@ -800,7 +841,7 @@ export default function HREmployees() {
           relation: formData.emergencyRelation,
           phone: formData.emergencyPhone
         },
-        documents: mockDocs.length > 0 ? mockDocs : [
+        documents: uploadedDocs.length > 0 ? uploadedDocs : [
           { name: 'Civil ID Card', type: 'civil_id', expiry: '2027-06-30', status: 'active' as const }
         ],
         promotions: [],
@@ -1315,13 +1356,19 @@ export default function HREmployees() {
                               </span>
                               <button
                                 type="button"
-                                onClick={() => setViewingDoc({
-                                  name: doc.name,
-                                  type: doc.type,
-                                  expiry: doc.expiry,
-                                  status: doc.status,
-                                  employeeName: selectedEmp.name
-                                })}
+                                onClick={() => {
+                                  if (doc.url) {
+                                    window.open(doc.url, '_blank');
+                                  } else {
+                                    setViewingDoc({
+                                      name: doc.name,
+                                      type: doc.type,
+                                      expiry: doc.expiry,
+                                      status: doc.status,
+                                      employeeName: selectedEmp.name
+                                    });
+                                  }
+                                }}
                                 className="text-[10px] font-black text-gray-500 hover:text-[#A11212] uppercase cursor-pointer"
                               >
                                 View
