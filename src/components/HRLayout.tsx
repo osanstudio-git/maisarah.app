@@ -13,18 +13,14 @@ import {
   LogOut,
   Settings
 } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../hooks/useAuth';
 
 const HRLayout = () => {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
   const location = useLocation();
+  const { signOut } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
 
   const navItems = [
     { path: '/hr/dashboard', icon: Briefcase, label: isAr ? 'لوحة القيادة' : 'HR Dashboard' },
@@ -90,7 +86,7 @@ const HRLayout = () => {
         {/* Footer actions */}
         <div className="p-4 border-t border-gray-100">
           <button 
-            onClick={handleLogout}
+            onClick={signOut}
             className="flex items-center gap-4 px-4 py-3 w-full rounded-xl text-gray-500 hover:bg-red-50 hover:text-red-600 font-bold transition-all text-start"
           >
             <LogOut size={20} />

@@ -142,12 +142,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Error signing out from Supabase:", error);
+    } finally {
       localStorage.removeItem('app_user_role');
       setSession(null);
       setUser(null);
       setRole(null);
-    } catch (error) {
-      console.error("Error signing out:", error);
+      window.location.href = '/login';
     }
   };
 
