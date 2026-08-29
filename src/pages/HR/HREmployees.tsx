@@ -380,6 +380,7 @@ export default function HREmployees() {
     message: '',
     type: 'success'
   });
+  const [viewingDoc, setViewingDoc] = useState<{ name: string; type: string; expiry: string; status: string; employeeName: string } | null>(null);
 
   // Form Fields State
   const [formData, setFormData] = useState({
@@ -416,7 +417,7 @@ export default function HREmployees() {
     emergencyName: '',
     emergencyRelation: 'Parent',
     emergencyPhone: '',
-    uploadedFiles: [] as Array<{ name: string; type: string }>
+    uploadedFiles: [] as Array<{ name: string; type: string; file?: File }>
   });
 
   const selectedEmp = employees.find(e => e.id === selectedEmpId) || employees[0];
@@ -616,10 +617,10 @@ export default function HREmployees() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fileType: string) => {
     if (e.target.files && e.target.files.length > 0) {
-      const fileName = e.target.files[0].name;
+      const fileObj = e.target.files[0];
       setFormData(prev => ({
         ...prev,
-        uploadedFiles: [...prev.uploadedFiles, { name: fileName, type: fileType }]
+        uploadedFiles: [...prev.uploadedFiles, { name: fileObj.name, type: fileType, file: fileObj }]
       }));
     }
   };
@@ -1244,6 +1245,19 @@ export default function HREmployees() {
                               }`}>
                                 {doc.status}
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => setViewingDoc({
+                                  name: doc.name,
+                                  type: doc.type,
+                                  expiry: doc.expiry,
+                                  status: doc.status,
+                                  employeeName: selectedEmp.name
+                                })}
+                                className="text-[10px] font-black text-gray-500 hover:text-[#A11212] uppercase cursor-pointer"
+                              >
+                                View
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -1839,8 +1853,36 @@ export default function HREmployees() {
                     <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Selected Attachments</p>
                     {formData.uploadedFiles.map((file, idx) => (
                       <div key={idx} className="flex justify-between items-center bg-gray-50 px-3 py-2 rounded-lg border border-gray-150">
-                        <span className="text-[10px] font-bold text-gray-700">{file.name}</span>
-                        <span className="text-[9px] bg-red-50 text-red-700 font-black uppercase px-2 py-0.5 rounded border border-red-100">{file.type}</span>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-gray-700">{file.name}</span>
+                          <span className="text-[8px] text-gray-400 font-bold uppercase">{file.type}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          {file.file && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const url = URL.createObjectURL(file.file!);
+                                window.open(url, '_blank');
+                              }}
+                              className="text-[9px] bg-blue-50 text-blue-700 font-black uppercase px-2.5 py-1 rounded border border-blue-100 hover:bg-blue-100 transition-colors cursor-pointer"
+                            >
+                              View
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                uploadedFiles: prev.uploadedFiles.filter((_, i) => i !== idx)
+                              }));
+                            }}
+                            className="text-[9px] bg-red-50 text-red-700 font-black uppercase px-2.5 py-1 rounded border border-red-100 hover:bg-red-100 transition-colors cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1975,6 +2017,105 @@ export default function HREmployees() {
                 }`}
               >
                 {isAr ? 'حسناً' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Document Viewer Modal ── */}
+      {viewingDoc && (
+        <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-gray-100 animate-scale-up">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <div>
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">Document Preview</h3>
+                <p className="text-[10px] text-gray-400 font-bold mt-1">File: {viewingDoc.name}</p>
+              </div>
+              <button 
+                onClick={() => setViewingDoc(null)} 
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Document Content Wrapper */}
+            <div className="p-8 bg-gray-100 flex-1 flex justify-center items-center">
+              <div className="bg-white w-full aspect-[1/1.414] rounded-2xl shadow-md border border-gray-200 p-6 flex flex-col justify-between relative overflow-hidden">
+                {/* Watermark Logo */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none">
+                  <div className="w-64 h-64 bg-[#A11212] rounded-full flex items-center justify-center text-white text-[120px] font-black">م</div>
+                </div>
+
+                {/* Doc Header */}
+                <div className="border-b-2 border-[#A11212] pb-4 flex justify-between items-center">
+                  <div>
+                    <h4 className="text-[10px] font-black text-[#A11212] tracking-widest uppercase">Maisarah HR Registry</h4>
+                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider">Secured Document Vault</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] bg-green-50 text-green-700 font-black px-2 py-0.5 rounded border border-green-150 uppercase tracking-widest">
+                      {viewingDoc.status}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Doc Body */}
+                <div className="my-8 space-y-6 flex-1 flex flex-col justify-center">
+                  <div className="text-center">
+                    <span className="text-[10px] text-[#A11212] font-black uppercase tracking-widest">Official Document</span>
+                    <h2 className="text-xl font-black text-gray-900 mt-1 uppercase tracking-wider">{viewingDoc.type}</h2>
+                  </div>
+
+                  <div className="space-y-3 bg-gray-50 p-4 rounded-xl border border-gray-150 text-xs">
+                    <div className="flex justify-between border-b border-gray-200/50 pb-2">
+                      <span className="text-gray-400 font-bold">Employee Name:</span>
+                      <span className="font-black text-gray-900">{viewingDoc.employeeName}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200/50 pb-2">
+                      <span className="text-gray-400 font-bold">Document Type:</span>
+                      <span className="font-black text-gray-900">{viewingDoc.type}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200/50 pb-2">
+                      <span className="text-gray-400 font-bold">File Reference:</span>
+                      <span className="font-mono text-gray-700">{viewingDoc.name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400 font-bold">Expiry Date:</span>
+                      <span className="font-black text-[#A11212]">{viewingDoc.expiry}</span>
+                    </div>
+                  </div>
+
+                  <div className="text-[8px] text-gray-400 text-center font-bold">
+                    This document copy is verified by the Maisarah Human Resources Department.
+                  </div>
+                </div>
+
+                {/* Doc Footer */}
+                <div className="border-t border-gray-150 pt-4 flex justify-between items-center text-[7px] text-gray-400 font-bold">
+                  <span>SYSTEM HASH: SHA-256/MSRH-{viewingDoc.name.split('.')[0]}</span>
+                  <span>CONFIDENTIAL</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => {
+                  alert('Document download initiated successfully.');
+                }}
+                className="flex-1 py-2.5 bg-[#A11212] text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-[#800e0e] transition-all cursor-pointer"
+              >
+                Download PDF
+              </button>
+              <button
+                onClick={() => setViewingDoc(null)}
+                className="flex-1 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+              >
+                Close
               </button>
             </div>
           </div>
