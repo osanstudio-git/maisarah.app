@@ -65,12 +65,27 @@
 </head>
 <body>
     <div class="container">
-        <div class="logo">م</div>
-        <h1>أنت غير متصل حالياً</h1>
-        <p>يرجى التحقق من اتصالك بالإنترنت للمتابعة. سيتم إعادة تحميل الصفحة تلقائياً عند استعادة الاتصال.</p>
-        <a href="/" class="btn">إعادة المحاولة</a>
+        <div class="logo" id="offline-logo">م</div>
+        <h1 id="offline-title">أنت غير متصل حالياً</h1>
+        <p id="offline-desc">يرجى التحقق من اتصالك بالإنترنت للمتابعة. سيتم إعادة تحميل الصفحة تلقائياً عند استعادة الاتصال.</p>
+        <a href="/" class="btn" id="offline-btn">إعادة المحاولة</a>
     </div>
     <script>
+        try {
+            const lang = localStorage.getItem('i18nextLng') || 'ar';
+            if (lang.startsWith('en')) {
+                document.documentElement.lang = 'en';
+                document.documentElement.dir = 'ltr';
+                document.title = 'Maisarah | Offline';
+                document.getElementById('offline-logo').textContent = 'M';
+                document.getElementById('offline-title').textContent = 'You are currently offline';
+                document.getElementById('offline-desc').textContent = 'Please check your internet connection to continue. The page will reload automatically once connection is restored.';
+                document.getElementById('offline-btn').textContent = 'Retry';
+            }
+        } catch (e) {
+            console.error('Failed to parse language preference:', e);
+        }
+
         window.addEventListener('online', () => {
             window.location.reload();
         });
