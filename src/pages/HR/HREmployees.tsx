@@ -936,7 +936,7 @@ export default function HREmployees() {
           {/* Left list */}
           <div className="w-full lg:w-1/3 bg-white rounded-2xl border border-gray-100 p-4 flex flex-col shadow-sm">
             <div className="flex-1 overflow-y-auto space-y-2 max-h-[700px] no-scrollbar">
-              {filteredEmployees.map(emp => (
+              {filteredEmployees.map((emp, index) => (
                 <button
                   key={emp.id}
                   onClick={() => setSelectedEmpId(emp.id)}
@@ -950,8 +950,8 @@ export default function HREmployees() {
                     <h4 className="font-black text-sm text-gray-900">{emp.name}</h4>
                     <p className="text-[10px] text-gray-500 font-bold">{emp.role} · {emp.dept}</p>
                   </div>
-                  <span className="text-[10px] bg-gray-100 text-gray-500 font-black px-2 py-0.5 rounded shadow-xs">
-                    {emp.id}
+                  <span className="text-[10px] bg-gray-100 text-gray-500 font-black px-2.5 py-0.5 rounded-full shadow-xs">
+                    #{index + 1}
                   </span>
                 </button>
               ))}
@@ -1042,6 +1042,10 @@ export default function HREmployees() {
                       <div className="space-y-4">
                         <h3 className="text-xs font-black uppercase tracking-widest text-[#A11212]">Personal Data</h3>
                         <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl">
+                          <div className="col-span-2">
+                            <p className="text-[10px] text-gray-400 font-bold">System Employee ID (UUID)</p>
+                            <p className="text-xs font-black text-gray-900 select-all font-mono break-all">{selectedEmp.id}</p>
+                          </div>
                           <div>
                             <p className="text-[10px] text-gray-400 font-bold">Civil ID</p>
                             <p className="text-xs font-black text-gray-900">{selectedEmp.civilId || 'N/A'}</p>
@@ -1304,7 +1308,7 @@ export default function HREmployees() {
             <table className="w-full text-start border-collapse">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-[10px] font-black uppercase text-gray-400 tracking-wider p-4 text-start">{isAr ? 'الرقم الوظيفي' : 'ID'}</th>
+                  <th className="text-[10px] font-black uppercase text-gray-400 tracking-wider p-4 text-start">{isAr ? 'الرقم' : '#'}</th>
                   <th className="text-[10px] font-black uppercase text-gray-400 tracking-wider p-4 text-start">{isAr ? 'الموظف' : 'Employee'}</th>
                   <th className="text-[10px] font-black uppercase text-gray-400 tracking-wider p-4 text-start">{isAr ? 'القسم' : 'Department'}</th>
                   <th className="text-[10px] font-black uppercase text-gray-400 tracking-wider p-4 text-start">{isAr ? 'التصنيف' : 'Type'}</th>
@@ -1316,16 +1320,22 @@ export default function HREmployees() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredEmployees.map(emp => (
+                {filteredEmployees.map((emp, index) => (
                   <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="p-4 text-xs font-black text-gray-900">{emp.id}</td>
+                    <td className="p-4 text-xs font-black text-gray-900">#{index + 1}</td>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-[#A11212]/5 text-[#A11212] font-black text-xs flex items-center justify-center">
                           {emp.name.charAt(0)}
                         </div>
-                        <div>
-                          <p className="text-xs font-black text-gray-900">{emp.name}</p>
+                        <div 
+                          className="cursor-pointer group"
+                          onClick={() => {
+                            setSelectedEmpId(emp.id);
+                            setViewMode('split');
+                          }}
+                        >
+                          <p className="text-xs font-black text-gray-900 group-hover:text-[#A11212] group-hover:underline transition-all">{emp.name}</p>
                           <p className="text-[9px] text-gray-400 font-bold">{emp.role}</p>
                         </div>
                       </div>
@@ -1347,16 +1357,25 @@ export default function HREmployees() {
                     </td>
                     <td className="p-4 text-xs font-black text-gray-900">{emp.basicSalary} OMR</td>
                     <td className="p-4">
-                      <div className="flex gap-2">
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => {
+                            setSelectedEmpId(emp.id);
+                            setViewMode('split');
+                          }}
+                          className="text-[10px] font-black text-gray-500 hover:text-[#A11212] uppercase cursor-pointer"
+                        >
+                          View
+                        </button>
                         <button
                           onClick={() => handleOpenEditModal(emp)}
-                          className="text-[10px] font-black text-gray-500 hover:text-[#A11212] uppercase"
+                          className="text-[10px] font-black text-gray-500 hover:text-[#A11212] uppercase cursor-pointer"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(emp.id)}
-                          className="text-[10px] font-black text-gray-400 hover:text-red-700 uppercase"
+                          className="text-[10px] font-black text-gray-400 hover:text-red-700 uppercase cursor-pointer"
                         >
                           Delete
                         </button>
