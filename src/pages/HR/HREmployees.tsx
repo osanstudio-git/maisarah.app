@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabaseClient';
 import {
   Search, User, Phone, MapPin, Briefcase, DollarSign,
@@ -625,7 +626,7 @@ export default function HREmployees() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const mockDocs = [
@@ -689,8 +690,75 @@ export default function HREmployees() {
       });
       saveEmployees(updatedList);
     } else {
+      // 1. Create Supabase Auth User & Profile
+      let finalId = `EMP-${Math.floor(100 + Math.random() * 900)}`; // Fallback mock ID
+      const tempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
+      
+      // Determine access role
+      let accessRole = 'employee';
+      const normalizedDept = (formData.dept || '').toLowerCase();
+      const normalizedRole = (formData.role || '').toLowerCase();
+      
+      if (normalizedDept.includes('hr') || normalizedRole.includes('hr manager')) {
+        accessRole = 'hr';
+      } else if (normalizedDept.includes('finance') || normalizedDept.includes('account') || normalizedRole.includes('accountant')) {
+        accessRole = 'accountant';
+      } else if (normalizedRole.includes('head') || normalizedRole.includes('hod') || normalizedRole.includes('director')) {
+        accessRole = 'department_head';
+      }
+      
+      // Map department ID
+      let departmentId = 'audit';
+      if (normalizedDept.includes('tax') || normalizedDept.includes('vat')) {
+        departmentId = 'tax_vat';
+      } else if (normalizedDept.includes('book') || normalizedDept.includes('ledger')) {
+        departmentId = 'bookkeeping';
+      } else if (normalizedDept.includes('advis') || normalizedDept.includes('consult')) {
+        departmentId = 'business_advisory';
+      } else if (normalizedDept.includes('success') || normalizedDept.includes('client')) {
+        departmentId = 'client_success';
+      }
+
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        });
+        
+        const { data: authData, error: authError } = await tempClient.auth.signUp({
+          email: formData.email,
+          password: tempPassword,
+          options: {
+            data: {
+              full_name: formData.name,
+              role: accessRole,
+              department_id: departmentId
+            }
+          }
+        });
+        
+        if (authError) throw authError;
+        
+        if (authData.user) {
+          finalId = authData.user.id;
+          
+          setNotification({
+            show: true,
+            title: isAr ? 'تم تسجيل الموظف' : 'Employee Registered',
+            message: isAr 
+              ? `تم إنشاء الحساب بنجاح. البريد الإلكتروني: ${formData.email} | كلمة المرور المؤقتة: ${tempPassword}`
+              : `Employee auth account created successfully. Email: ${formData.email} | Temporary Password: ${tempPassword}`,
+            type: 'success'
+          });
+        }
+      } catch (err: any) {
+        console.error("Failed to create live auth user:", err.message);
+        finalId = crypto.randomUUID();
+      }
+
       const newEmp: Employee = {
-        id: formData.id || `EMP-${Math.floor(100 + Math.random() * 900)}`,
+        id: finalId,
         name: formData.name,
         role: formData.role,
         dept: formData.dept,
@@ -741,7 +809,7 @@ export default function HREmployees() {
         transfers: []
       };
       const nextList = [...employees, newEmp];
-      saveEmployees(nextList);
+      await saveEmployees(nextList);
       setSelectedEmpId(newEmp.id);
     }
 
