@@ -49,7 +49,7 @@ export const InstallPrompt = () => {
   if (!showPrompt) return null;
 
   return (
-    <div className="fixed bottom-6 end-6 z-[100] animate-in slide-in-from-bottom-5 duration-500 max-w-sm w-[calc(100%-2rem)] sm:w-[350px]">
+    <div className={`fixed bottom-6 ${isAr ? 'left-6' : 'right-6'} z-[100] animate-in slide-in-from-bottom-5 duration-500 max-w-sm w-[calc(100%-2rem)] sm:w-[350px]`}>
       <div 
         className="bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-gray-100/90 relative overflow-hidden text-start"
         dir={isAr ? 'rtl' : 'ltr'}
@@ -68,7 +68,7 @@ export const InstallPrompt = () => {
         </button>
 
         {/* Content Row */}
-        <div className="flex items-center gap-3 pe-6 mb-3">
+        <div className={`flex items-center gap-3 ${isAr ? 'ps-2 pe-6' : 'pr-6'} mb-3`}>
           <div className="w-10 h-10 bg-[#A11212] rounded-xl flex items-center justify-center text-white font-black text-lg shadow-md shadow-[#A11212]/20 flex-shrink-0">
             {isAr ? 'م' : 'M'}
           </div>
