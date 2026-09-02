@@ -17,11 +17,14 @@ import {
 } from 'lucide-react';
 import { getAllDepartments } from '../../config/departments';
 
+import { supabase } from '../../lib/supabaseClient';
+
 type ApprovalType = 'quote' | 'contract' | 'expense' | 'hr';
 type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'changes_requested';
 
 interface ApprovalRequest {
   id: string;
+  dbId?: string;
   type: ApprovalType;
   title: string;
   department: string;
@@ -91,7 +94,7 @@ const getTypeConfig = (type: ApprovalType) => {
     case 'quote': return { icon: DollarSign, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Quote / Proposal' };
     case 'contract': return { icon: FileSignature, color: 'text-purple-600', bg: 'bg-purple-50', label: 'Contract' };
     case 'expense': return { icon: FileText, color: 'text-orange-600', bg: 'bg-orange-50', label: 'Expense' };
-    case 'hr': return { icon: User, color: 'text-green-600', bg: 'bg-green-50', label: 'HR Request' };
+    case 'hr': return { icon: User, color: 'text-green-600', bg: 'bg-green-50', label: 'HR / Leave' };
   }
 };
 
@@ -105,34 +108,138 @@ const ExecutiveApprovals = () => {
 
   const filteredRequests = requests.filter(r => filter === 'all' || r.type === filter);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('manager_approval_requests');
-    if (saved) {
-      const parsed = JSON.parse(saved) as ApprovalRequest[];
-      const merged = [...parsed];
-      mockRequests.forEach(mock => {
-        if (!merged.some(m => m.id === mock.id)) {
-          merged.push(mock);
+  // ── Fetch Approvals (Cross-Portal Aggregator) ──────────────────────────────
+  const fetchApprovals = async (isSilent = false) => {
+    try {
+      const liveLeaveRequests: ApprovalRequest[] = [];
+
+      // 1. Fetch live DB leave requests
+      try {
+        const { data: dbLeaves } = await supabase
+          .from('hr_leave_requests')
+          .select('*');
+
+        if (dbLeaves && dbLeaves.length > 0) {
+          dbLeaves.forEach((leave: any) => {
+            liveLeaveRequests.push({
+              id: `LEAVE-${leave.id.slice(0, 8)}`,
+              dbId: leave.id,
+              type: 'hr',
+              title: isAr 
+                ? `طلب إجازة: ${leave.leave_type || 'اعتيادية'}` 
+                : `${leave.leave_type || 'Annual'} Leave Request`,
+              department: leave.department || 'Audit',
+              submitter: leave.employee_name || 'Employee',
+              status: leave.status === 'approved' ? 'approved' : leave.status === 'rejected' ? 'rejected' : 'pending',
+              date: leave.created_at || new Date().toISOString(),
+              description: `${leave.days || 1} days (${leave.start_date || ''} to ${leave.end_date || ''}). Reason: ${leave.reason || 'Personal leave request'}`,
+              urgency: (leave.days && leave.days > 5) ? 'high' : 'medium'
+            });
+          });
+        }
+      } catch (e) {
+        console.error('Failed to fetch DB leave requests:', e);
+      }
+
+      // 2. Fetch local storage leave requests fallback
+      const savedLeaves = localStorage.getItem('hr_leave_requests');
+      if (savedLeaves) {
+        const localLeaves = JSON.parse(savedLeaves) as any[];
+        localLeaves.forEach(leave => {
+          if (!liveLeaveRequests.some(l => l.id === `LEAVE-${leave.id}`)) {
+            liveLeaveRequests.push({
+              id: `LEAVE-${leave.id}`,
+              type: 'hr',
+              title: isAr ? `طلب إجازة: ${leave.type || 'اعتيادية'}` : `${leave.type || 'Annual'} Leave Request`,
+              department: leave.department || 'Audit',
+              submitter: leave.employee || 'Employee',
+              status: leave.status === 'approved' ? 'approved' : leave.status === 'rejected' ? 'rejected' : 'pending',
+              date: leave.submittedDate || new Date().toISOString(),
+              description: `${leave.days || 1} days (${leave.startDate} to ${leave.endDate}). Reason: ${leave.reason || 'Personal leave'}`,
+              urgency: leave.days > 5 ? 'high' : 'medium'
+            });
+          }
+        });
+      }
+
+      // 3. Merge with base operational requests
+      const saved = localStorage.getItem('manager_approval_requests');
+      const baseRequests: ApprovalRequest[] = saved ? JSON.parse(saved) : mockRequests;
+
+      const combined: ApprovalRequest[] = [...liveLeaveRequests];
+      baseRequests.forEach(req => {
+        if (!combined.some(c => c.id === req.id)) {
+          combined.push(req);
         }
       });
-      setRequests(merged);
-      if (merged.length > 0) setSelectedReq(merged[0]);
-    } else {
-      localStorage.setItem('manager_approval_requests', JSON.stringify(mockRequests));
-      setRequests(mockRequests);
-      setSelectedReq(mockRequests[0]);
+
+      setRequests(combined);
+      if (!selectedReq && combined.length > 0) {
+        setSelectedReq(combined[0]);
+      } else if (selectedReq) {
+        const updatedSelected = combined.find(c => c.id === selectedReq.id);
+        if (updatedSelected) setSelectedReq(updatedSelected);
+      }
+    } catch (err) {
+      console.error(err);
     }
+  };
+
+  useEffect(() => {
+    fetchApprovals();
+
+    // Realtime channel for instant leave approval updates
+    const channel = supabase
+      .channel('manager-approvals-live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hr_leave_requests' },
+        () => {
+          fetchApprovals(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  const handleAction = (id: string, action: ApprovalStatus) => {
+  const handleAction = async (id: string, action: ApprovalStatus) => {
+    // 1. Optimistic local update
+    const target = requests.find(r => r.id === id);
     const updated = requests.map(r => r.id === id ? { ...r, status: action } : r);
     setRequests(updated);
-    localStorage.setItem('manager_approval_requests', JSON.stringify(updated));
+    localStorage.setItem('manager_approval_requests', JSON.stringify(updated.filter(r => r.type !== 'hr')));
 
     if (selectedReq?.id === id) {
       setSelectedReq(prev => prev ? { ...prev, status: action } : null);
     }
 
+    // 2. Sync to Supabase if it's a live DB record
+    if (target?.dbId) {
+      try {
+        await supabase
+          .from('hr_leave_requests')
+          .update({ status: action })
+          .eq('id', target.dbId);
+      } catch (err) {
+        console.error('Failed to update DB leave status:', err);
+      }
+    }
+
+    // 3. Sync to localStorage hr_leave_requests
+    if (target?.type === 'hr') {
+      const savedLeaves = localStorage.getItem('hr_leave_requests');
+      if (savedLeaves) {
+        const localLeaves = JSON.parse(savedLeaves) as any[];
+        const cleanId = id.replace('LEAVE-', '');
+        const updatedLeaves = localLeaves.map(l => l.id.toString() === cleanId.toString() ? { ...l, status: action } : l);
+        localStorage.setItem('hr_leave_requests', JSON.stringify(updatedLeaves));
+      }
+    }
+
+    // 4. Handle payroll approval
     if (action === 'approved' && id === 'PAY-REQ-2026') {
       const payrollDataStr = localStorage.getItem('manager_pending_payroll_data');
       if (payrollDataStr) {
@@ -156,9 +263,10 @@ const ExecutiveApprovals = () => {
           </p>
         </div>
 
-        <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-gray-100">
+        <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-gray-100 flex-wrap">
           {[
             { id: 'all', label: isAr ? 'الكل' : 'All' },
+            { id: 'hr', label: isAr ? 'الإجازات والموارد البشرية' : 'HR & Leave' },
             { id: 'quote', label: isAr ? 'عروض الأسعار' : 'Quotes' },
             { id: 'contract', label: isAr ? 'العقود' : 'Contracts' },
             { id: 'expense', label: isAr ? 'المصروفات' : 'Expenses' }
@@ -166,7 +274,7 @@ const ExecutiveApprovals = () => {
             <button
               key={f.id}
               onClick={() => setFilter(f.id as any)}
-              className={`px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase transition-all ${filter === f.id ? 'bg-brand-dark text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black tracking-wider uppercase transition-all ${filter === f.id ? 'bg-brand-dark text-white' : 'text-gray-500 hover:bg-gray-50'}`}
             >
               {f.label}
             </button>

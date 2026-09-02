@@ -52,8 +52,8 @@ const OperationsCenter = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [deptFilter, setDeptFilter] = useState<string>('all');
 
-  const fetchServices = useCallback(async () => {
-    setLoading(true);
+  const fetchServices = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const { data, error } = await supabase
         .from('services')
@@ -79,12 +79,28 @@ const OperationsCenter = () => {
     } catch (err) {
       console.error('Fetch services error:', err);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchServices();
+
+    // Realtime channel for Operations Center
+    const channel = supabase
+      .channel('manager-operations-live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'services' },
+        () => {
+          fetchServices(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchServices]);
 
   // Map service title to department (Basic heuristic for UI demonstration)

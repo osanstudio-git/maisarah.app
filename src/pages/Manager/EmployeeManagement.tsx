@@ -204,19 +204,15 @@ const EmployeeManagement = () => {
   const [createdCredentials, setCreatedCredentials] = useState({ email: '', password: '' });
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
-  const fetchEmployees = useCallback(async () => {
-    setLoading(true);
+  const fetchEmployees = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
-      const { data: profiles, error: profErr } = await supabase
-        .from('profiles')
-        .select('*');
+      const [{ data: profiles, error: profErr }, { data: hrEmployees, error: hrErr }] = await Promise.all([
+        supabase.from('profiles').select('*'),
+        supabase.from('hr_employees').select('*')
+      ]);
 
       if (profErr) throw profErr;
-
-      const { data: hrEmployees, error: hrErr } = await supabase
-        .from('hr_employees')
-        .select('*');
-
       if (hrErr) throw hrErr;
 
       // Map DB profiles to Employee interface, joining with hr_employees details
@@ -272,12 +268,35 @@ const EmployeeManagement = () => {
     } catch (err: any) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchEmployees();
+
+    // ── Supabase Realtime Subscription ─────────────────────────────────────────
+    const channel = supabase
+      .channel('manager-workforce-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
+        () => {
+          fetchEmployees(true);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hr_employees' },
+        () => {
+          fetchEmployees(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchEmployees]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
