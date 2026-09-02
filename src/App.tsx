@@ -67,8 +67,9 @@ import DocumentVault from './pages/Shared/DocumentVault';
 import ClientChat from './pages/Client/ClientChat';
 import ClientVault from './pages/Client/DocumentVault';
 
-// PWA Components
+// PWA & Network Components
 import { InstallPrompt } from './components/InstallPrompt';
+import { NetworkStatus } from './components/NetworkStatus';
 
 
 function App() {
@@ -76,6 +77,7 @@ function App() {
 
   return (
     <AuthProvider>
+      <NetworkStatus />
       <InstallPrompt />
       <Router>
         <Routes>
