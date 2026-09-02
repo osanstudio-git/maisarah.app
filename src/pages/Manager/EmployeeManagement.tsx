@@ -301,8 +301,19 @@ const EmployeeManagement = () => {
     if (confirmName !== (isAr ? employeeToDelete.name_ar : employeeToDelete.name_en)) return;
 
     try {
+      // 1. Unassign any services assigned to this employee to satisfy foreign key constraints
+      await supabase.from('services').update({ employee_id: null }).eq('employee_id', employeeToDelete.id);
+
+      // 2. Clean up related HR records if not automatically cascaded
+      await supabase.from('hr_leave_requests').delete().eq('employee_id', employeeToDelete.id);
+      await supabase.from('hr_leave_balances').delete().eq('employee_id', employeeToDelete.id);
+      await supabase.from('hr_attendance').delete().eq('employee_id', employeeToDelete.id);
+      await supabase.from('hr_employees').delete().eq('id', employeeToDelete.id);
+
+      // 3. Delete the profile record
       const { error } = await supabase.from('profiles').delete().eq('id', employeeToDelete.id);
       if (error) throw error;
+
       setEmployees(prev => prev.filter(e => e.id !== employeeToDelete.id));
       setDeleteModalOpen(false);
       setNotification({
