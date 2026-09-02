@@ -66,9 +66,11 @@ BEGIN
         CREATE INDEX IF NOT EXISTS idx_hr_leave_requests_created_at ON public.hr_leave_requests(created_at DESC);
     END IF;
 
-    -- 6. HR Attendance Tracking
-    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'hr_attendance' AND column_name = 'employee_id') THEN
-        CREATE INDEX IF NOT EXISTS idx_hr_attendance_employee_date ON public.hr_attendance(employee_id, date DESC);
+    -- 6. HR Attendance Tracking (uses work_date)
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'hr_attendance' AND column_name = 'work_date') THEN
+        CREATE INDEX IF NOT EXISTS idx_hr_attendance_emp_work_date ON public.hr_attendance(employee_id, work_date DESC);
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'hr_attendance' AND column_name = 'date') THEN
+        CREATE INDEX IF NOT EXISTS idx_hr_attendance_emp_date ON public.hr_attendance(employee_id, date DESC);
     END IF;
 
     -- 7. Clients & Compliance
@@ -79,9 +81,14 @@ BEGIN
         CREATE INDEX IF NOT EXISTS idx_clients_created_at ON public.clients(created_at DESC);
     END IF;
 
+    -- 8. HR Recruitment Candidates
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'hr_recruits' AND column_name = 'status') THEN
+        CREATE INDEX IF NOT EXISTS idx_hr_recruits_status ON public.hr_recruits(status);
+    END IF;
+
 END $$;
 
--- Analyze core tables to refresh query planner statistics
+-- Refresh PostgreSQL table planner statistics
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'profiles') THEN
