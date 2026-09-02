@@ -1,91 +1,194 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ميسرة | غير متصل بالإنترنت</title>
+    <title>Maisarah | Offline</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #f9fafb;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             color: #1f2937;
+            position: relative;
+        }
+        .lang-switch {
+            position: absolute;
+            top: 1.5rem;
+            inset-inline-end: 1.5rem;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #4b5563;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+        .lang-switch:hover {
+            border-color: #A11212;
+            color: #A11212;
         }
         .container {
             text-align: center;
             padding: 2rem;
-            max-width: 400px;
+            max-width: 420px;
+            width: 100%;
         }
         .logo {
             width: 80px;
             height: 80px;
             background-color: #A11212;
             color: white;
-            border-radius: 20px;
+            border-radius: 24px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 40px;
+            font-size: 38px;
             font-weight: 900;
-            margin: 0 auto 2rem;
-            box-shadow: 0 10px 25px -5px rgba(161, 18, 18, 0.2);
+            margin: 0 auto 1.75rem;
+            box-shadow: 0 12px 30px -5px rgba(161, 18, 18, 0.25);
+            transition: transform 0.3s;
+        }
+        .logo:hover {
+            transform: scale(1.05);
         }
         h1 {
-            font-size: 24px;
-            font-weight: 800;
-            margin-bottom: 1rem;
+            font-size: 22px;
+            font-weight: 900;
+            margin-bottom: 0.75rem;
             color: #111827;
+            letter-spacing: -0.02em;
         }
         p {
             font-size: 14px;
             color: #6b7280;
             line-height: 1.6;
             margin-bottom: 2rem;
+            font-weight: 500;
         }
         .btn {
             display: inline-block;
             background-color: #A11212;
             color: white;
-            padding: 12px 24px;
-            border-radius: 12px;
+            padding: 14px 28px;
+            border-radius: 14px;
             text-decoration: none;
-            font-weight: 700;
-            font-size: 14px;
-            transition: transform 0.2s;
+            font-weight: 800;
+            font-size: 13px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            box-shadow: 0 8px 20px -3px rgba(161, 18, 18, 0.3);
+            transition: all 0.2s;
+            width: 100%;
+            max-width: 260px;
+        }
+        .btn:hover {
+            background-color: #850e0e;
+            transform: translateY(-1px);
         }
         .btn:active {
-            transform: scale(0.95);
+            transform: scale(0.97);
         }
     </style>
 </head>
 <body>
+    <button class="lang-switch" id="lang-toggle-btn" onclick="toggleLanguage()">
+        🌐 <span id="lang-btn-text">العربية</span>
+    </button>
+
     <div class="container">
-        <div class="logo" id="offline-logo">م</div>
-        <h1 id="offline-title">أنت غير متصل حالياً</h1>
-        <p id="offline-desc">يرجى التحقق من اتصالك بالإنترنت للمتابعة. سيتم إعادة تحميل الصفحة تلقائياً عند استعادة الاتصال.</p>
-        <a href="/" class="btn" id="offline-btn">إعادة المحاولة</a>
+        <div class="logo" id="offline-logo">M</div>
+        <h1 id="offline-title">You are currently offline</h1>
+        <p id="offline-desc">Please check your internet connection to continue. The page will reload automatically once connection is restored.</p>
+        <a href="javascript:window.location.reload()" class="btn" id="offline-btn">Retry Connection</a>
     </div>
+
     <script>
-        try {
-            const lang = localStorage.getItem('i18nextLng') || 'ar';
-            if (lang.startsWith('en')) {
-                document.documentElement.lang = 'en';
-                document.documentElement.dir = 'ltr';
-                document.title = 'Maisarah | Offline';
-                document.getElementById('offline-logo').textContent = 'M';
-                document.getElementById('offline-title').textContent = 'You are currently offline';
-                document.getElementById('offline-desc').textContent = 'Please check your internet connection to continue. The page will reload automatically once connection is restored.';
-                document.getElementById('offline-btn').textContent = 'Retry';
+        const translations = {
+            en: {
+                title: 'Maisarah | Offline',
+                dir: 'ltr',
+                lang: 'en',
+                logo: 'M',
+                heading: 'You are currently offline',
+                desc: 'Please check your internet connection to continue. The page will reload automatically once connection is restored.',
+                btn: 'Retry Connection',
+                toggleLabel: 'العربية'
+            },
+            ar: {
+                title: 'ميسرة | غير متصل بالإنترنت',
+                dir: 'rtl',
+                lang: 'ar',
+                logo: 'م',
+                heading: 'أنت غير متصل حالياً',
+                desc: 'يرجى التحقق من اتصالك بالإنترنت للمتابعة. سيتم إعادة تحميل الصفحة تلقائياً عند استعادة الاتصال.',
+                btn: 'إعادة المحاولة',
+                toggleLabel: 'English'
             }
-        } catch (e) {
-            console.error('Failed to parse language preference:', e);
+        };
+
+        function getActiveLanguage() {
+            try {
+                // Priority: appLanguage (Maisarah app key) -> i18nextLng -> language -> browser
+                const saved = localStorage.getItem('appLanguage') || 
+                              localStorage.getItem('i18nextLng') || 
+                              localStorage.getItem('language');
+                if (saved) {
+                    return saved.toLowerCase().startsWith('en') ? 'en' : 'ar';
+                }
+                if (navigator.language && navigator.language.startsWith('ar')) {
+                    return 'ar';
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            return 'en';
         }
 
+        let currentLang = getActiveLanguage();
+
+        function applyLanguage(lang) {
+            currentLang = lang;
+            const t = translations[lang] || translations.en;
+            document.documentElement.lang = t.lang;
+            document.documentElement.dir = t.dir;
+            document.title = t.title;
+
+            document.getElementById('offline-logo').textContent = t.logo;
+            document.getElementById('offline-title').textContent = t.heading;
+            document.getElementById('offline-desc').textContent = t.desc;
+            document.getElementById('offline-btn').textContent = t.btn;
+            document.getElementById('lang-btn-text').textContent = t.toggleLabel;
+        }
+
+        function toggleLanguage() {
+            const nextLang = currentLang === 'ar' ? 'en' : 'ar';
+            try {
+                localStorage.setItem('appLanguage', nextLang);
+                localStorage.setItem('i18nextLng', nextLang);
+            } catch (e) {}
+            applyLanguage(nextLang);
+        }
+
+        // Apply detected language immediately
+        applyLanguage(currentLang);
+
+        // Auto-reload when back online
         window.addEventListener('online', () => {
             window.location.reload();
         });
