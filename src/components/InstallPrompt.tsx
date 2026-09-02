@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Download, Share } from 'lucide-react';
+import { X, Download, ShieldCheck, Zap, WifiOff } from 'lucide-react';
 
 export const InstallPrompt = () => {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
   
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -19,81 +19,105 @@ export const InstallPrompt = () => {
       // Check if already installed
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
       if (!isStandalone) {
-        // Delay showing the prompt for better UX
-        setTimeout(() => setShowPrompt(true), 3000);
+        // Delay showing the prompt for smoother UX
+        setTimeout(() => setShowPrompt(true), 2500);
       }
     };
 
+    const handleCustomTrigger = () => {
+      setShowPrompt(true);
+    };
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('show-install-prompt', handleCustomTrigger);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('show-install-prompt', handleCustomTrigger);
     };
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    
-    // Show the install prompt
-    deferredPrompt.prompt();
-    
-    // Wait for the user to respond to the prompt
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to the install prompt: ${outcome}`);
-    
-    // We've used the prompt, and can't use it again, throw it away
-    setDeferredPrompt(null);
-    setShowPrompt(false);
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`User response to install prompt: ${outcome}`);
+      setDeferredPrompt(null);
+      setShowPrompt(false);
+    } else {
+      setShowPrompt(false);
+    }
   };
 
   if (!showPrompt) return null;
 
   return (
-    <div className={`fixed bottom-6 ${isAr ? 'left-6' : 'right-6'} z-[100] animate-in slide-in-from-bottom-5 duration-500 max-w-sm w-[calc(100%-2rem)] sm:w-[360px]`}>
+    <div className={`fixed bottom-6 ${isAr ? 'left-6' : 'right-6'} z-[100] animate-in slide-in-from-bottom-5 fade-in duration-500 max-w-sm w-[calc(100%-2rem)] sm:w-[380px]`}>
       <div 
-        className="bg-white/95 backdrop-blur-md rounded-3xl p-4.5 shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100/90 relative overflow-hidden text-start"
+        className="bg-white/95 backdrop-blur-xl rounded-3xl p-5 shadow-[0_25px_60px_rgba(161,18,18,0.18)] border border-red-100/80 relative overflow-hidden text-start ring-1 ring-black/5"
         dir={isAr ? 'rtl' : 'ltr'}
         lang={isAr ? 'ar' : 'en'}
       >
-        {/* Subtle Brand Top Accent */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#A11212] via-[#CD3333] to-[#A11212]"></div>
+        {/* Brand Gradient Top Accent Bar */}
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#8C0F0F] via-[#A11212] to-[#CD3333]"></div>
         
         {/* Close Button */}
         <button 
           onClick={() => setShowPrompt(false)}
-          className={`absolute top-3.5 ${isAr ? 'left-3.5' : 'right-3.5'} p-1.5 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer rounded-xl hover:bg-gray-100`}
+          className={`absolute top-4 ${isAr ? 'left-4' : 'right-4'} p-1.5 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer rounded-xl hover:bg-gray-100 active:scale-95`}
           title={isAr ? 'إغلاق' : 'Close'}
+          aria-label="Close"
         >
-          <X size={15} />
+          <X size={16} />
         </button>
 
-        {/* Content Row */}
-        <div className={`flex items-center gap-3.5 ${isAr ? 'ps-1 pe-6' : 'pr-6'} mb-3.5`}>
-          <div className="w-12 h-12 bg-white border border-gray-150/80 rounded-2xl flex items-center justify-center p-1.5 shadow-sm flex-shrink-0">
-            <img src="/logo.png" alt="Maisarah Logo" className="w-full h-full object-contain" />
+        {/* Header & Logo Container */}
+        <div className={`flex items-start gap-4 ${isAr ? 'pe-6' : 'pr-6'} mb-3.5`}>
+          <div className="w-14 h-14 bg-white border border-gray-100 rounded-2xl flex items-center justify-center p-2 shadow-sm flex-shrink-0 ring-1 ring-gray-100">
+            <img src="/pwa-192x192.png" alt="Maisarah Logo" className="w-full h-full object-contain" />
           </div>
-          <div className="text-start flex-1 min-w-0">
+          <div className="text-start flex-1 min-w-0 pt-0.5">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-[#A11212] text-[10px] font-black uppercase tracking-wider mb-1">
+              <Zap size={10} className="fill-[#A11212]" />
+              {isAr ? 'تطبيق رسمي' : 'Official App'}
+            </span>
             <h4 className="text-sm font-black text-gray-900 tracking-tight leading-snug">
-              {isAr ? 'تثبيت تطبيق ميسرة' : 'Install Maisarah App'}
+              {isAr ? 'تثبيت منصة ميسرة' : 'Install Maisarah Portal'}
             </h4>
-            <p className="text-xs text-gray-500 font-medium leading-tight mt-0.5 truncate">
-              {isAr ? 'تطبيق سطح المكتب والجوال السريع' : 'Fast, desktop & mobile native experience'}
+            <p className="text-xs text-gray-500 font-medium leading-tight mt-0.5">
+              {isAr ? 'تجربة سريعة ومستقرة لسطح المكتب والجوال' : 'Native desktop & mobile fast access'}
             </p>
           </div>
         </div>
 
+        {/* Feature Highlights */}
+        <div className="grid grid-cols-3 gap-2 py-2 mb-3.5 border-y border-gray-100 text-[11px] text-gray-600 font-bold">
+          <div className="flex items-center gap-1.5 justify-center py-1 bg-gray-50/70 rounded-lg">
+            <Zap size={13} className="text-[#A11212]" />
+            <span>{isAr ? 'فائق السرعة' : 'Fast'}</span>
+          </div>
+          <div className="flex items-center gap-1.5 justify-center py-1 bg-gray-50/70 rounded-lg">
+            <WifiOff size={13} className="text-[#A11212]" />
+            <span>{isAr ? 'أوفلاين' : 'Offline'}</span>
+          </div>
+          <div className="flex items-center gap-1.5 justify-center py-1 bg-gray-50/70 rounded-lg">
+            <ShieldCheck size={13} className="text-[#A11212]" />
+            <span>{isAr ? 'آمن ومشفّر' : 'Secure'}</span>
+          </div>
+        </div>
+
         {/* Action Buttons */}
-        <div className="flex items-center gap-2 pt-0.5">
+        <div className="flex items-center gap-2">
           <button
             onClick={handleInstallClick}
-            className="flex-1 bg-gradient-to-r from-[#A11212] to-[#8c0f0f] text-white py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:opacity-95 transition-all shadow-md shadow-[#A11212]/25 active:scale-95 cursor-pointer"
+            className="flex-1 bg-gradient-to-r from-[#A11212] via-[#8C0F0F] to-[#700B0B] text-white py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:opacity-95 hover:shadow-lg hover:shadow-[#A11212]/30 active:scale-[0.98] transition-all cursor-pointer shadow-md"
           >
             <Download size={14} />
-            <span>{isAr ? 'تثبيت التطبيق' : 'Install App'}</span>
+            <span>{isAr ? 'تثبيت الآن' : 'Install App'}</span>
           </button>
           <button
             onClick={() => setShowPrompt(false)}
-            className="py-2.5 px-3.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            className="py-2.5 px-3.5 bg-gray-100 hover:bg-gray-200 text-gray-600 active:scale-95 rounded-xl text-xs font-bold transition-all cursor-pointer"
           >
             {isAr ? 'لاحقاً' : 'Later'}
           </button>
