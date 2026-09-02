@@ -174,20 +174,32 @@ const EmployeeDashboard = () => {
         .from('clients')
         .select('*', { count: 'exact', head: true });
 
-      // ── 2. Pending Invoices – count + total amount ───────────────────────
-      const { data: pendingInvoicesData } = await supabase
+      // ── 2. Pending Invoices (Scoped to Employee) ─────────────────────────
+      let invoicesQuery = supabase
         .from('invoices')
         .select('amount')
         .eq('status', 'unpaid');
+      
+      if (user?.id) {
+        invoicesQuery = invoicesQuery.eq('created_by', user.id);
+      }
+
+      const { data: pendingInvoicesData } = await invoicesQuery;
 
       const pendingCount = pendingInvoicesData?.length || 0;
       const pendingAmount = (pendingInvoicesData || []).reduce((s, inv) => s + (inv.amount || 0), 0);
 
-      // ── 3. Completed Services ─────────────────────────────────────────────
-      const { count: completedCount } = await supabase
+      // ── 3. Completed Services (Scoped to Employee) ────────────────────────
+      let completedQuery = supabase
         .from('services')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'completed');
+
+      if (user?.id) {
+        completedQuery = completedQuery.or(`employee_id.eq.${user.id},created_by.eq.${user.id}`);
+      }
+
+      const { count: completedCount } = await completedQuery;
 
       // ── 4. Last 3 Transactions ────────────────────────────────────────────
       const { data: txData } = await supabase
@@ -219,11 +231,21 @@ const EmployeeDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [isAr]); // Re-run when language changes to update mock data
+  }, [user?.id]);
 
   useEffect(() => {
     fetchDashboardData();
-  }, [fetchDashboardData]);
+
+    const channel = supabase
+      .channel(`employee-dashboard-${user?.id || 'live'}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => fetchDashboardData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, () => fetchDashboardData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchDashboardData, user?.id]);
 
   if (loading) {
     return (

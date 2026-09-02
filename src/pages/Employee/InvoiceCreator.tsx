@@ -120,11 +120,17 @@ const InvoiceCreator = () => {
 
   const fetchRecentInvoices = useCallback(async () => {
     setLoadingRecent(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from('invoices')
       .select('id, invoice_number, amount, status, due_date, created_at, clients(company_name)')
       .order('created_at', { ascending: false })
       .limit(5);
+
+    if (user?.id) {
+      query = query.eq('created_by', user.id);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching invoices:", error);
@@ -140,7 +146,7 @@ const InvoiceCreator = () => {
 
     setRecentInvoices(formattedData as RecentInvoice[]);
     setLoadingRecent(false);
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchClients();

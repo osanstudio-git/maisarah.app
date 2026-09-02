@@ -115,15 +115,22 @@ const ServicesManager = () => {
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // ── Fetch (Scoped to Logged-in Employee) ───────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      let query = supabase
+        .from('services')
+        .select('id, title, status, description, due_date, created_at, client_id, clients(company_name)')
+        .order('created_at', { ascending: false });
+
+      // Scope strictly to this employee's assigned tasks or creations
+      if (user?.id) {
+        query = query.or(`employee_id.eq.${user.id},created_by.eq.${user.id}`);
+      }
+
       const [svcRes, clientRes] = await Promise.all([
-        supabase
-          .from('services')
-          .select('id, title, status, description, due_date, created_at, client_id, clients(company_name)')
-          .order('created_at', { ascending: false }),
+        query,
         supabase.from('clients').select('id, company_name').order('company_name'),
       ]);
       setServices((svcRes.data as ServiceRecord[]) || []);
@@ -132,9 +139,27 @@ const ServicesManager = () => {
       console.error(err);
     }
     setLoading(false);
-  }, []);
+  }, [user?.id]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { 
+    fetchData(); 
+
+    // Live Realtime sync for employee tasks
+    const channel = supabase
+      .channel(`employee-services-live-${user?.id || 'all'}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'services' },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchData, user?.id]);
 
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();

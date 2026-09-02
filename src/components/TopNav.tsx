@@ -9,7 +9,9 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   const { signOut, user, role } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = React.useState(false);
   const isAr = i18n.language === 'ar';
-  const isClient = role === 'client';
+  const displayName = user?.user_metadata?.full_name || 
+                      user?.email?.split('@')[0] || 
+                      (isAr ? 'المستخدم' : 'User');
 
   return (
     <header 
@@ -26,7 +28,9 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
           </button>
         )}
         <div className={isAr ? 'text-right' : 'text-left'}>
-          <h2 className="text-2xl font-bold text-gray-800">{t('topNav.welcome')}</h2>
+          <h2 className="text-2xl font-bold text-gray-800">
+            {isAr ? `مرحباً، ${displayName}` : `Welcome, ${displayName}`}
+          </h2>
           <p className="text-sm text-gray-500 hidden sm:block">{t('topNav.subtitle')}</p>
         </div>
       </div>
