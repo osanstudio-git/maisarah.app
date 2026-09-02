@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../hooks/useAuth';
+import { supabase } from '../../lib/supabaseClient';
 import {
   Clock, Calendar, Download, AlertCircle, CheckCircle2, User, FileText, Send
 } from 'lucide-react';
@@ -68,7 +69,53 @@ export default function EmployeeHR() {
     { id: 'PAY-803', month: 'April 2026', basicSalary: 1500, allowances: 400, deductions: 50, netSalary: 1850 }
   ];
 
-  // --- Sync / Load Local Storage ---
+  // --- Sync / Load Live Leave Requests & Local Storage ---
+  const fetchLeaves = useCallback(async () => {
+    try {
+      const liveList: LeaveRequest[] = [];
+
+      // 1. Fetch from Supabase
+      const { data: dbLeaves } = await supabase
+        .from('hr_leave_requests')
+        .select('*');
+
+      if (dbLeaves && dbLeaves.length > 0) {
+        dbLeaves.forEach((leave: any) => {
+          const isMine = (leave.employee_name && leave.employee_name.toLowerCase() === employeeName.toLowerCase()) ||
+                         (user?.id && leave.employee_id === user.id);
+          if (isMine) {
+            liveList.push({
+              id: leave.id.toString().slice(0, 8),
+              employeeName: leave.employee_name || employeeName,
+              type: leave.leave_type || 'Annual Leave',
+              startDate: leave.start_date || '',
+              endDate: leave.end_date || '',
+              days: leave.days || 1,
+              managerApproval: leave.status === 'approved' ? 'Approved' : leave.status === 'rejected' ? 'Rejected' : 'Pending',
+              hrApproval: leave.status === 'approved' ? 'Approved' : leave.status === 'rejected' ? 'Rejected' : 'Pending',
+              notes: leave.reason || ''
+            });
+          }
+        });
+      }
+
+      // 2. Merge with local storage fallback
+      const savedLeaves = localStorage.getItem('hr_leave_requests');
+      if (savedLeaves) {
+        const localLeaves = JSON.parse(savedLeaves) as LeaveRequest[];
+        localLeaves.filter(l => l.employeeName === employeeName).forEach(local => {
+          if (!liveList.some(l => l.id === local.id)) {
+            liveList.push(local);
+          }
+        });
+      }
+
+      setLeaveRequests(liveList);
+    } catch (e) {
+      console.error('Error loading leave requests:', e);
+    }
+  }, [employeeName, user?.id]);
+
   useEffect(() => {
     // 1. Attendance Sync
     const savedLogs = localStorage.getItem('hr_attendance_logs');
@@ -84,13 +131,25 @@ export default function EmployeeHR() {
       }
     }
 
-    // 2. Leave Request Sync
-    const savedLeaves = localStorage.getItem('hr_leave_requests');
-    if (savedLeaves) {
-      const parsedLeaves = JSON.parse(savedLeaves) as LeaveRequest[];
-      setLeaveRequests(parsedLeaves.filter(l => l.employeeName === employeeName));
-    }
-  }, [employeeName]);
+    // 2. Fetch Leaves
+    fetchLeaves();
+
+    // 3. Supabase Realtime Subscription for instant approval reflections
+    const channel = supabase
+      .channel('employee-leaves-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hr_leave_requests' },
+        () => {
+          fetchLeaves();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [employeeName, fetchLeaves]);
 
   // --- Actions: Clock In / Clock Out ---
   const handleClockToggle = () => {
@@ -141,16 +200,14 @@ export default function EmployeeHR() {
   };
 
   // --- Actions: Leave Request Submission ---
-  const handleLeaveSubmit = (e: React.FormEvent) => {
+  const handleLeaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leaveForm.startDate || !leaveForm.endDate) return;
 
-    const allSavedLeaves = localStorage.getItem('hr_leave_requests')
-      ? JSON.parse(localStorage.getItem('hr_leave_requests')!) as LeaveRequest[]
-      : [];
+    const newRequestId = `LR-${Math.floor(100 + Math.random() * 900)}`;
 
     const newRequest: LeaveRequest = {
-      id: `LR-${Math.floor(100 + Math.random() * 900)}`,
+      id: newRequestId,
       employeeName: employeeName,
       type: leaveForm.type,
       startDate: leaveForm.startDate,
@@ -161,9 +218,31 @@ export default function EmployeeHR() {
       notes: leaveForm.notes
     };
 
+    // 1. Write to Supabase if session available
+    try {
+      if (user?.id) {
+        await supabase.from('hr_leave_requests').insert([{
+          employee_id: user.id,
+          employee_name: employeeName,
+          leave_type: leaveForm.type,
+          start_date: leaveForm.startDate,
+          end_date: leaveForm.endDate,
+          days: Number(leaveForm.days),
+          reason: leaveForm.notes,
+          status: 'pending'
+        }]);
+      }
+    } catch (err) {
+      console.error('Failed to submit leave to DB:', err);
+    }
+
+    // 2. Save locally as fallback
+    const allSavedLeaves = localStorage.getItem('hr_leave_requests')
+      ? JSON.parse(localStorage.getItem('hr_leave_requests')!) as LeaveRequest[]
+      : [];
     const nextLeaves = [newRequest, ...allSavedLeaves];
     localStorage.setItem('hr_leave_requests', JSON.stringify(nextLeaves));
-    setLeaveRequests(nextLeaves.filter(l => l.employeeName === employeeName));
+    setLeaveRequests(prev => [newRequest, ...prev]);
     
     // Reset Form
     setLeaveForm({

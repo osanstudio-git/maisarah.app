@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { supabase } from '../../lib/supabaseClient';
 import {
   Calendar, Check, X, FileText, Info, PlusCircle, AlertCircle, Clock, CheckCircle2
 } from 'lucide-react';
@@ -89,17 +90,68 @@ export default function HRLeave() {
     notes: ''
   });
 
-  useEffect(() => {
-    const saved = localStorage.getItem('hr_leave_requests');
-    if (saved) {
-      setRequests(JSON.parse(saved));
-    } else {
-      localStorage.setItem('hr_leave_requests', JSON.stringify(INITIAL_REQUESTS));
-      setRequests(INITIAL_REQUESTS);
+  // ── Fetch Requests (Live DB + Fallback) ──────────────────────────────────
+  const fetchRequests = useCallback(async () => {
+    try {
+      const liveList: LeaveRequest[] = [];
+
+      // 1. Fetch live from Supabase
+      const { data: dbLeaves } = await supabase
+        .from('hr_leave_requests')
+        .select('*');
+
+      if (dbLeaves && dbLeaves.length > 0) {
+        dbLeaves.forEach((leave: any) => {
+          liveList.push({
+            id: leave.id.toString().slice(0, 8),
+            employeeName: leave.employee_name || 'Employee',
+            type: leave.leave_type || 'Annual Leave',
+            startDate: leave.start_date || '',
+            endDate: leave.end_date || '',
+            days: leave.days || 1,
+            managerApproval: leave.status === 'approved' ? 'Approved' : leave.status === 'rejected' ? 'Rejected' : 'Pending',
+            hrApproval: leave.status === 'approved' ? 'Approved' : leave.status === 'rejected' ? 'Rejected' : 'Pending',
+            notes: leave.reason || ''
+          });
+        });
+      }
+
+      // 2. Merge local storage fallback
+      const saved = localStorage.getItem('hr_leave_requests');
+      const localLeaves: LeaveRequest[] = saved ? JSON.parse(saved) : INITIAL_REQUESTS;
+      localLeaves.forEach(local => {
+        if (!liveList.some(l => l.id === local.id)) {
+          liveList.push(local);
+        }
+      });
+
+      setRequests(liveList);
+    } catch (e) {
+      console.error('Error fetching HR leave requests:', e);
     }
   }, []);
 
-  const handleAction = (id: string, action: 'Approve' | 'Reject') => {
+  useEffect(() => {
+    fetchRequests();
+
+    // ── Supabase Realtime Subscription ─────────────────────────────────────
+    const channel = supabase
+      .channel('hr-leave-requests-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hr_leave_requests' },
+        () => {
+          fetchRequests();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchRequests]);
+
+  const handleAction = async (id: string, action: 'Approve' | 'Reject') => {
     const nextRequests = requests.map(req => {
       if (req.id === id) {
         return {
@@ -111,6 +163,16 @@ export default function HRLeave() {
     });
     setRequests(nextRequests);
     localStorage.setItem('hr_leave_requests', JSON.stringify(nextRequests));
+
+    // Update in Supabase if live DB record
+    try {
+      await supabase
+        .from('hr_leave_requests')
+        .update({ status: action === 'Approve' ? 'approved' : 'rejected' })
+        .eq('id', id);
+    } catch (err) {
+      console.error('Failed to sync leave decision to DB:', err);
+    }
 
     // Also deduct balances if approved
     if (action === 'Approve') {

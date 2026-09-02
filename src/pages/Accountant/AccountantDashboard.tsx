@@ -184,95 +184,98 @@ const AccountantDashboard = () => {
     alert('Salary successfully disbursed to employee bank account!');
   };
 
-  useEffect(() => {
-    const fetchMetrics = async () => {
-      setLoading(true);
-      try {
-        /**
-         * Single query — accountant role should have SELECT on invoices with no
-         * employee-scoped RLS. Adjust your Supabase RLS policy to:
-         *   CREATE POLICY "Accountants can read all invoices"
-         *     ON invoices FOR SELECT
-         *     USING (auth.jwt() ->> 'role' = 'accountant');
-         *
-         * We fetch amount, status, created_at — no joins needed for aggregation.
-         */
-        const { data: invoices, error } = await supabase
-          .from('invoices')
-          .select('amount, status, created_at');
+  const fetchMetrics = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    try {
+      const { data: invoices, error } = await supabase
+        .from('invoices')
+        .select('amount, status, created_at');
 
-        if (error) throw error;
+      if (error) throw error;
 
-        const now = new Date();
-        const currentYear  = now.getFullYear();
-        const currentMonth = now.getMonth(); // 0-indexed
+      const now = new Date();
+      const currentYear  = now.getFullYear();
+      const currentMonth = now.getMonth(); // 0-indexed
 
-        let totalRevenue  = 0;
-        let paidSum       = 0;
-        let unpaidSum     = 0;
-        let monthlyIncome = 0;
-        let paidCount     = 0;
-        let unpaidCount   = 0;
+      let totalRevenue  = 0;
+      let paidSum       = 0;
+      let unpaidSum     = 0;
+      let monthlyIncome = 0;
+      let paidCount     = 0;
+      let unpaidCount   = 0;
 
-        (invoices || []).forEach(inv => {
-          const amount = parseFloat(inv.amount) || 0;
-          totalRevenue += amount;
+      (invoices || []).forEach(inv => {
+        const amount = parseFloat(inv.amount) || 0;
+        totalRevenue += amount;
 
-          if (inv.status === 'paid') {
-            paidSum += amount;
-            paidCount++;
-            // Monthly income: paid invoices created this calendar month
-            const created = new Date(inv.created_at);
-            if (created.getFullYear() === currentYear && created.getMonth() === currentMonth) {
-              monthlyIncome += amount;
-            }
-          } else {
-            // unpaid + overdue
-            unpaidSum += amount;
-            unpaidCount++;
+        if (inv.status === 'paid') {
+          paidSum += amount;
+          paidCount++;
+          const created = new Date(inv.created_at);
+          if (created.getFullYear() === currentYear && created.getMonth() === currentMonth) {
+            monthlyIncome += amount;
           }
-        });
-
-        const totalCount = paidCount + unpaidCount;
-        const paidRatio  = totalCount > 0 ? Math.round((paidCount / totalCount) * 100) : 0;
-
-        const realMetrics: InvoiceMetrics = {
-          totalRevenue, paidSum, unpaidSum, monthlyIncome,
-          paidCount, unpaidCount, totalCount, paidRatio,
-        };
-
-        // Fallback to illustrative mock if DB is empty (development / demo)
-        if (totalCount === 0) {
-          setInvoiceMetrics({
-            totalRevenue: 164500, paidSum: 125750, unpaidSum: 38750,
-            monthlyIncome: 42300, paidCount: 18, unpaidCount: 5,
-            totalCount: 23, paidRatio: 78,
-          });
-          setMetrics(prev => ({ ...prev, dueInvoicesSum: 38750, dueInvoicesCount: 5, cashFlow: 125750 }));
         } else {
-          setInvoiceMetrics(realMetrics);
-          setMetrics(prev => ({
-            ...prev,
-            dueInvoicesSum: unpaidSum,
-            dueInvoicesCount: unpaidCount,
-            cashFlow: paidSum,
-          }));
+          unpaidSum += amount;
+          unpaidCount++;
         }
-      } catch (err) {
-        console.error('AccountantDashboard fetch error:', err);
-        // Graceful degradation: keep non-zero mock so UI is never blank
+      });
+
+      const totalCount = paidCount + unpaidCount;
+      const paidRatio  = totalCount > 0 ? Math.round((paidCount / totalCount) * 100) : 0;
+
+      const realMetrics: InvoiceMetrics = {
+        totalRevenue, paidSum, unpaidSum, monthlyIncome,
+        paidCount, unpaidCount, totalCount, paidRatio,
+      };
+
+      if (totalCount === 0) {
         setInvoiceMetrics({
           totalRevenue: 164500, paidSum: 125750, unpaidSum: 38750,
           monthlyIncome: 42300, paidCount: 18, unpaidCount: 5,
           totalCount: 23, paidRatio: 78,
         });
-      } finally {
-        setLoading(false);
+        setMetrics(prev => ({ ...prev, dueInvoicesSum: 38750, dueInvoicesCount: 5, cashFlow: 125750 }));
+      } else {
+        setInvoiceMetrics(realMetrics);
+        setMetrics(prev => ({
+          ...prev,
+          dueInvoicesSum: unpaidSum,
+          dueInvoicesCount: unpaidCount,
+          cashFlow: paidSum,
+        }));
       }
-    };
-
-    fetchMetrics();
+    } catch (err) {
+      console.error('AccountantDashboard fetch error:', err);
+      setInvoiceMetrics({
+        totalRevenue: 164500, paidSum: 125750, unpaidSum: 38750,
+        monthlyIncome: 42300, paidCount: 18, unpaidCount: 5,
+        totalCount: 23, paidRatio: 78,
+      });
+    } finally {
+      if (!isSilent) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchMetrics();
+
+    // ── Supabase Realtime Subscription ───────────────────────────────────────
+    const channel = supabase
+      .channel('accountant-dashboard-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'invoices' },
+        () => {
+          fetchMetrics(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchMetrics]);
 
   if (loading) {
     return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark"></div></div>;

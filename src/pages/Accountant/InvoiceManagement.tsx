@@ -84,8 +84,8 @@ const InvoiceManagement = () => {
   const [updatingId, setUpdatingId]   = useState<string | null>(null);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
-  const fetchInvoices = useCallback(async () => {
-    setLoading(true);
+  const fetchInvoices = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       /**
        * Join invoices → clients (company name) + profiles (employee name via created_by).
@@ -104,11 +104,30 @@ const InvoiceManagement = () => {
       setInvoices((data as Invoice[]) || []);
     } catch (err) {
       console.error('InvoiceManagement fetch error:', err);
+    } finally {
+      if (!isSilent) setLoading(false);
     }
-    setLoading(false);
   }, []);
 
-  useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
+  useEffect(() => { 
+    fetchInvoices(); 
+
+    // ── Supabase Realtime Subscription ───────────────────────────────────────
+    const channel = supabase
+      .channel('accountant-invoices-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'invoices' },
+        () => {
+          fetchInvoices(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchInvoices]);
 
   // ── Mark as Paid (optimistic + Supabase update) ───────────────────────────
   const markAsPaid = async (id: string) => {

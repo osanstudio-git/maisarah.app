@@ -229,50 +229,37 @@ const DepartmentHeadWorkspace = () => {
     const nextStats = [...filteredStats, ...data.personnel];
     localStorage.setItem('hod_personnel_stats', JSON.stringify(nextStats));
 
-    // Fetch leave requests
-    const savedLeaves = localStorage.getItem('hr_leave_requests');
-    if (savedLeaves) {
-      setHodLeaveRequests(JSON.parse(savedLeaves));
-    }
-
-    // Fetch and merge CRM clients
-    const savedClients = localStorage.getItem('crm_clients');
-    const crmClientList = savedClients ? JSON.parse(savedClients) : [];
-    const deptMap: Record<string, string> = {
-      audit: 'Audit',
-      tax_vat: 'Tax & VAT',
-      bookkeeping: 'Bookkeeping',
-      business_advisory: 'Business Advisory',
-      client_success: 'Client Success'
+    // Fetch live leave requests from Supabase
+    const fetchLiveLeaves = async () => {
+      try {
+        const { data: leaves } = await supabase.from('hr_leave_requests').select('*');
+        if (leaves && leaves.length > 0) {
+          setHodLeaveRequests(leaves);
+        } else {
+          const savedLeaves = localStorage.getItem('hr_leave_requests');
+          if (savedLeaves) setHodLeaveRequests(JSON.parse(savedLeaves));
+        }
+      } catch (err) {
+        const savedLeaves = localStorage.getItem('hr_leave_requests');
+        if (savedLeaves) setHodLeaveRequests(JSON.parse(savedLeaves));
+      }
     };
-    const targetService = deptMap[currentDeptId] || '';
-    const filteredCrmClients = crmClientList
-      .filter((c: any) => c.servicesPackage && c.servicesPackage.includes(targetService))
-      .map((c: any) => ({
-        id: c.id,
-        name: c.companyName || c.name,
-        package: c.servicesPackage.join(', '),
-        activeProject: 'CRM Onboarded Account',
-        status: 'good' as const
-      }));
+    fetchLiveLeaves();
 
-    const mergedClients = [...(data.clients || []), ...filteredCrmClients];
-    setClients(mergedClients);
+    // ── Supabase Realtime Subscription ─────────────────────────────────────
+    const channel = supabase
+      .channel(`hod-${currentDeptId}-realtime`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => {
+        console.log('Services updated in HOD workspace');
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_leave_requests' }, () => {
+        fetchLiveLeaves();
+      })
+      .subscribe();
 
-    // Fetch and sync dynamic tasks
-    const savedTasks = localStorage.getItem(`hod_tasks_${currentDeptId}`);
-    if (savedTasks) {
-      setTasks(JSON.parse(savedTasks));
-    } else {
-      setTasks(data.tasks);
-    }
-
-    if (data.personnel.length > 0) {
-      setTaskAssignee(data.personnel[0].name);
-    }
-    if (mergedClients.length > 0) {
-      setTaskClient(mergedClients[0].name);
-    }
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [currentDeptId]);
 
   // Parse path to set view
