@@ -216,13 +216,18 @@ const EmployeeDashboard = () => {
         .order('created_at', { ascending: false })
         .limit(5);
 
+      const formattedTx: Transaction[] = (txData || []).map((tx: any) => ({
+        ...tx,
+        clients: Array.isArray(tx.clients) ? tx.clients[0] : tx.clients,
+      }));
+
       setStats({
         totalClients: clientsCount || 0,
         pendingInvoices: pendingCount,
         pendingInvoicesAmount: pendingAmount,
         completedServices: completedCount || 0,
       });
-      setRecentTransactions(txData?.length ? (txData as Transaction[]) : MOCK_TRANSACTIONS);
+      setRecentTransactions(formattedTx.length ? formattedTx : MOCK_TRANSACTIONS);
       setAnnouncements(annData?.length ? (annData as Announcement[]) : MOCK_ANNOUNCEMENTS);
     } catch (err) {
       console.error('Dashboard fetch error:', err);

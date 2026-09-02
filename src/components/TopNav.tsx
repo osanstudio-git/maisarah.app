@@ -9,6 +9,7 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   const { signOut, user, role } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = React.useState(false);
   const isAr = i18n.language === 'ar';
+  const isClient = role === 'client';
   const displayName = user?.user_metadata?.full_name || 
                       user?.email?.split('@')[0] || 
                       (isAr ? 'المستخدم' : 'User');

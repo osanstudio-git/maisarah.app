@@ -1248,7 +1248,7 @@ const EmployeeManagement = () => {
                   value={placementData.accessRole}
                   onChange={(e) => {
                     const newRole = e.target.value;
-                    let suggestedTitle = placementData.position;
+                    let suggestedTitle = placementData.role;
                     if (newRole === 'department_head') {
                       if (placementData.dept === 'tax_vat') suggestedTitle = 'Head of Tax & VAT';
                       else if (placementData.dept === 'audit') suggestedTitle = 'Head of Audit';
@@ -1257,7 +1257,7 @@ const EmployeeManagement = () => {
                     setPlacementData({ 
                       ...placementData, 
                       accessRole: newRole,
-                      position: suggestedTitle,
+                      role: suggestedTitle,
                       supervisor: newRole === 'department_head' ? 'Executive Board & Management' : placementData.supervisor
                     });
                   }}
@@ -1279,7 +1279,7 @@ const EmployeeManagement = () => {
                     onChange={(e) => {
                       const newDept = e.target.value;
                       let defaultHOD = 'Nasser Al-Riyami';
-                      let autoTitle = placementData.position;
+                      let autoTitle = placementData.role;
                       if (newDept === 'tax_vat') {
                         defaultHOD = 'Khalfan Al-Abri';
                         if (placementData.accessRole === 'department_head') autoTitle = 'Head of Tax & VAT';
@@ -1292,7 +1292,7 @@ const EmployeeManagement = () => {
                       setPlacementData({
                         ...placementData,
                         dept: newDept,
-                        position: autoTitle,
+                        role: autoTitle,
                         supervisor: placementData.accessRole === 'department_head' ? 'Executive Board & Management' : defaultHOD
                       });
                     }}
