@@ -37,26 +37,12 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        maximumFileSizeToCacheInBytes: 4000000,
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.origin === (typeof globalThis !== 'undefined' && 'location' in globalThis ? (globalThis as any).location.origin : ''),
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'maisarah-cache',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 86400 * 30, // 30 Days
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-        ],
-        // Offline Fallback configuration
-        navigateFallback: '/offline.html',
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+        maximumFileSizeToCacheInBytes: 5000000,
+        navigateFallback: '/index.html',
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
       },
     }),
   ],
