@@ -53,17 +53,17 @@ export const InstallPrompt = () => {
   return (
     <div className={`fixed bottom-6 ${isAr ? 'left-6' : 'right-6'} z-[100] max-w-sm w-[calc(100%-2rem)] sm:w-[360px]`}>
       <div 
-        className="bg-white rounded-2xl p-4.5 shadow-2xl border border-gray-200 relative overflow-hidden text-start"
+        className="bg-white rounded-lg p-4 shadow-xl border border-gray-300 relative text-start"
         dir={isAr ? 'rtl' : 'ltr'}
         lang={isAr ? 'ar' : 'en'}
       >
         {/* Top Brand Accent Line */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-[#A11212]"></div>
+        <div className="absolute top-0 left-0 right-0 h-1 bg-[#A11212] rounded-t-lg"></div>
         
         {/* Close Button */}
         <button 
           onClick={() => setShowPrompt(false)}
-          className={`absolute top-3 ${isAr ? 'left-3' : 'right-3'} p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer`}
+          className={`absolute top-2.5 ${isAr ? 'left-2.5' : 'right-2.5'} p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors cursor-pointer`}
           title={isAr ? 'إغلاق' : 'Close'}
           aria-label="Close"
         >
@@ -71,8 +71,8 @@ export const InstallPrompt = () => {
         </button>
 
         {/* Content Row */}
-        <div className={`flex items-center gap-3.5 ${isAr ? 'ps-1 pe-6' : 'pr-6'} mb-3.5`}>
-          <div className="w-11 h-11 bg-white border border-gray-200 rounded-xl flex items-center justify-center p-1.5 shadow-sm flex-shrink-0">
+        <div className={`flex items-center gap-3 ${isAr ? 'ps-1 pe-6' : 'pr-6'} mb-3`}>
+          <div className="w-11 h-11 bg-white border border-gray-200 rounded-md flex items-center justify-center p-1 shadow-sm flex-shrink-0">
             <img src="/pwa-192x192.png" alt="Maisarah Logo" className="w-full h-full object-contain" />
           </div>
           <div className="text-start flex-1 min-w-0">
@@ -89,14 +89,14 @@ export const InstallPrompt = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={handleInstallClick}
-            className="flex-1 bg-[#A11212] hover:bg-[#850e0e] text-white py-2.5 px-4 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer"
+            className="flex-1 bg-[#A11212] hover:bg-[#850e0e] text-white py-2 px-3 rounded-md text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
           >
             <Download size={14} />
             <span>{isAr ? 'تثبيت التطبيق' : 'Install App'}</span>
           </button>
           <button
             onClick={() => setShowPrompt(false)}
-            className="py-2.5 px-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            className="py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-xs font-bold transition-colors cursor-pointer border border-gray-200"
           >
             {isAr ? 'لاحقاً' : 'Later'}
           </button>
