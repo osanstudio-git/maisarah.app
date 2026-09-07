@@ -15,9 +15,12 @@ import {
   Trash2,
   Briefcase,
   UserCheck,
-  Building2
+  Building2,
+  ShieldCheck,
+  Sparkles
 } from 'lucide-react';
-import { getAllDepartments } from '../../config/departments';
+import { getAllDepartments, getDepartmentById } from '../../config/departments';
+import { logActivity } from '../../lib/activityLogger';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -217,27 +220,39 @@ const EmployeeManagement = () => {
 
       // Map DB profiles to Employee interface, joining with hr_employees details
       const mapped: Employee[] = (profiles || []).map(p => {
-        const hrEmp = (hrEmployees || []).find(h => h.id === p.id);
+        const hrEmp = (hrEmployees || []).find(h => h.id === p.id || (h.email && p.email && h.email.toLowerCase() === p.email.toLowerCase()));
 
         // Mock stats for completion rate if not present
         const total = Math.floor(Math.random() * 40 + 10);
         const done = Math.floor(total * (0.5 + Math.random() * 0.5));
 
+        // Normalize department
+        let rawDept = p.department_id || p.department || hrEmp?.department_id || hrEmp?.dept || 'audit';
+        let normalizedDept = 'audit';
+        const lowerDept = String(rawDept).toLowerCase().trim();
+        if (lowerDept.includes('tax') || lowerDept.includes('vat')) normalizedDept = 'tax_vat';
+        else if (lowerDept.includes('book') || lowerDept.includes('ledger') || lowerDept.includes('account')) normalizedDept = 'bookkeeping';
+        else if (lowerDept.includes('advis') || lowerDept.includes('consult')) normalizedDept = 'business_advisory';
+        else if (lowerDept.includes('success') || lowerDept.includes('client') || lowerDept.includes('operat')) normalizedDept = 'client_success';
+        else if (lowerDept.includes('audit')) normalizedDept = 'audit';
+
+        const realPhone = hrEmp?.phone || p.phone || '';
+
         return {
           id: p.id,
-          name_en: hrEmp?.full_name || p.full_name || 'Unknown',
+          name_en: hrEmp?.full_name || p.full_name || p.name || 'Unknown',
           name_ar: p.full_name || hrEmp?.full_name || 'غير معروف',
           email: p.email || hrEmp?.email || '',
-          phone: hrEmp?.phone || '',
-          role: p.role, // access role
-          job_title: hrEmp?.role || 'Senior Auditor', // designated job position
-          status: hrEmp?.status || (Math.random() > 0.1 ? 'active' : 'on_leave'),
+          phone: realPhone,
+          role: p.role || 'employee', // access role
+          job_title: hrEmp?.role || (p.role === 'department_head' ? 'Department Head (HOD)' : 'Senior Auditor'), // designated job position
+          status: hrEmp?.status || 'active',
           tasksCompleted: done,
           activeJobs: total - done,
           delays: Math.floor(Math.random() * 3),
           completionRate: Math.round((done / total) * 100),
           joinedAt: hrEmp?.joined_date || (p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : '2024-01-01'),
-          department_id: p.department_id || 'audit',
+          department_id: normalizedDept,
 
           // Additional Dossier Details
           civilId: hrEmp?.civil_id || '',
@@ -247,7 +262,7 @@ const EmployeeManagement = () => {
           dob: hrEmp?.dob || '',
           gender: hrEmp?.gender || 'Male',
           maritalStatus: hrEmp?.marital_status || 'Single',
-          immediateSupervisor: hrEmp?.immediate_supervisor || 'Nasser Al-Riyami',
+          immediateSupervisor: hrEmp?.immediate_supervisor || (normalizedDept === 'tax_vat' ? 'Khalfan Al-Abri' : normalizedDept === 'bookkeeping' ? 'Mazis Al-Balushi' : 'Nasser Al-Riyami'),
           basicSalary: Number(hrEmp?.basic_salary || 0),
           type: hrEmp?.employee_type || 'Experienced',
           accommodationStatus: hrEmp?.accommodation_status || 'Lives with family',
@@ -303,16 +318,17 @@ const EmployeeManagement = () => {
   const openEditModal = (emp: Employee) => {
     setEditingEmployee(emp);
     setFormData({
-      fullName: emp.name_en,
-      email: emp.email,
-      phone: emp.phone,
+      fullName: emp.name_en || emp.name_ar || '',
+      email: emp.email || '',
+      phone: emp.phone || '',
       password: '',
-      role: emp.role,
+      role: emp.role || 'employee',
       department_id: emp.department_id || 'audit',
     });
     setIsModalOpen(true);
     setFormMessage(null);
     setShowCredentials(false);
+    setIsSubmitting(false);
   };
 
   const handleDeleteEmployee = async () => {
@@ -544,26 +560,79 @@ const EmployeeManagement = () => {
     try {
       if (editingEmployee) {
         // Edit Mode
-        // Update security access profiles table
-        const profileUpdate = {
+        // 1. Update security access profiles table
+        const profileUpdate: any = {
           full_name: formData.fullName,
+          phone: formData.phone,
           role: formData.role,
           department_id: formData.department_id
         };
-        const { error: profileError } = await supabase.from('profiles').update(profileUpdate).eq('id', editingEmployee.id);
-        if (profileError) throw profileError;
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update(profileUpdate)
+          .eq('id', editingEmployee.id);
 
-        // Update core employee records table (which actually stores phone number)
-        const employeeUpdate = {
-          full_name: formData.fullName,
-          phone: formData.phone,
-          dept: formData.department_id === 'tax_vat' ? 'Tax & VAT' : formData.department_id === 'audit' ? 'Audit' : 'Bookkeeping'
+        if (profileError) {
+          console.error("Profile update error:", profileError);
+          throw profileError;
+        }
+
+        // 2. Upsert/Update core employee records table (hr_employees)
+        const deptNames: Record<string, string> = {
+          audit: 'Audit',
+          tax_vat: 'Tax & VAT',
+          bookkeeping: 'Bookkeeping',
+          business_advisory: 'Business Advisory',
+          client_success: 'Client Success'
         };
-        const { error: employeeError } = await supabase.from('hr_employees').update(employeeUpdate).eq('id', editingEmployee.id);
-        if (employeeError) throw employeeError;
 
-        setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? { ...emp, name_en: formData.fullName, name_ar: formData.fullName, phone: formData.phone, role: formData.role, department_id: formData.department_id } : emp));
+        const hrEmployeeData = {
+          id: editingEmployee.id,
+          full_name: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          dept: deptNames[formData.department_id] || 'Audit',
+          department_id: formData.department_id,
+          role: formData.role === 'department_head' ? 'Department Head (HOD)' : (editingEmployee.job_title || 'Employee')
+        };
+
+        const { error: hrError } = await supabase
+          .from('hr_employees')
+          .upsert(hrEmployeeData, { onConflict: 'id' });
+
+        if (hrError) {
+          console.warn('Could not upsert hr_employees, but profile updated:', hrError);
+        }
+
+        // 3. Log activity
+        await logActivity(
+          editingEmployee.id,
+          formData.fullName,
+          'service_updated',
+          `Manager updated employee '${formData.fullName}': Role -> '${formData.role}', Dept -> '${deptNames[formData.department_id] || formData.department_id}'`,
+          `قام المدير بتحديث بيانات الموظف '${formData.fullName}': الصلاحية -> '${formData.role}'، القسم -> '${deptNames[formData.department_id] || formData.department_id}'`
+        );
+
+        // 4. Update local state
+        setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? { 
+          ...emp, 
+          name_en: formData.fullName, 
+          name_ar: formData.fullName, 
+          phone: formData.phone, 
+          role: formData.role, 
+          department_id: formData.department_id,
+          job_title: formData.role === 'department_head' ? 'Department Head (HOD)' : emp.job_title
+        } : emp));
+
+        setNotification({
+          show: true,
+          title: isAr ? 'تم تحديث الموظف بنجاح' : 'Employee Updated',
+          message: isAr ? 'تم حفظ التعديلات وتحديث الصلاحيات والقسم بنجاح.' : 'Employee profile, department, and role updated successfully.',
+          type: 'success'
+        });
+
         setIsModalOpen(false);
+        setEditingEmployee(null);
         return;
       }
 
@@ -599,6 +668,24 @@ const EmployeeManagement = () => {
           role: formData.role,
           department_id: formData.department_id
         }, { onConflict: 'id' });
+
+        const deptNames: Record<string, string> = {
+          audit: 'Audit',
+          tax_vat: 'Tax & VAT',
+          bookkeeping: 'Bookkeeping',
+          business_advisory: 'Business Advisory',
+          client_success: 'Client Success'
+        };
+
+        await supabase.from('hr_employees').upsert({
+          id: authData.user.id,
+          full_name: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          dept: deptNames[formData.department_id] || 'Audit',
+          department_id: formData.department_id,
+          role: formData.role === 'department_head' ? 'Department Head (HOD)' : 'Employee'
+        }, { onConflict: 'id' });
       }
 
       setCreatedCredentials({ email: formData.email, password: formData.password });
@@ -606,7 +693,7 @@ const EmployeeManagement = () => {
       setFormMessage({ type: 'success', text: isAr ? 'تم إضافة الموظف بنجاح' : 'Employee created successfully' });
       fetchEmployees();
     } catch (err: any) {
-      setFormMessage({ type: 'error', text: err.message });
+      setFormMessage({ type: 'error', text: err.message || 'Operation failed' });
     } finally {
       setIsSubmitting(false);
     }
@@ -625,8 +712,9 @@ const EmployeeManagement = () => {
 
     try {
       // 1. Update security access profiles table
-      const profileUpdate = {
+      const profileUpdate: any = {
         full_name: editFormData.fullName,
+        phone: editFormData.phone,
         role: editFormData.accessRole,
         department_id: editFormData.department_id
       };
@@ -637,12 +725,23 @@ const EmployeeManagement = () => {
 
       if (profileError) throw profileError;
 
-      // 2. Update core employee records table (which stores phone, civil id, salary, allowances, etc.)
+      const deptNames: Record<string, string> = {
+        audit: 'Audit',
+        tax_vat: 'Tax & VAT',
+        bookkeeping: 'Bookkeeping',
+        business_advisory: 'Business Advisory',
+        client_success: 'Client Success'
+      };
+
+      // 2. Upsert core employee records table (which stores phone, civil id, salary, allowances, etc.)
       const employeeUpdate = {
+        id: viewingEmployee.id,
         full_name: editFormData.fullName,
+        email: viewingEmployee.email,
         phone: editFormData.phone,
-        role: editFormData.jobTitle,
-        dept: editFormData.department_id === 'tax_vat' ? 'Tax & VAT' : editFormData.department_id === 'audit' ? 'Audit' : 'Bookkeeping',
+        role: editFormData.accessRole === 'department_head' ? 'Department Head (HOD)' : editFormData.jobTitle,
+        dept: deptNames[editFormData.department_id] || 'Audit',
+        department_id: editFormData.department_id,
         employee_type: editFormData.employeeType,
         joined_date: editFormData.joinedDate,
         immediate_supervisor: editFormData.immediateSupervisor,
@@ -664,10 +763,11 @@ const EmployeeManagement = () => {
       };
       const { error: employeeError } = await supabase
         .from('hr_employees')
-        .update(employeeUpdate)
-        .eq('id', viewingEmployee.id);
+        .upsert(employeeUpdate, { onConflict: 'id' });
 
-      if (employeeError) throw employeeError;
+      if (employeeError) {
+        console.warn('Could not upsert hr_employees, but profile updated:', employeeError);
+      }
 
       // Update local state in employees list
       const updatedEmployee: Employee = {
@@ -862,8 +962,8 @@ const EmployeeManagement = () => {
                     <table className="w-full text-start whitespace-nowrap">
                       <thead className="bg-white">
                         <tr>
-                          <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الموظف' : 'Employee'}</th>
-                          <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'القسم' : 'Department'}</th>
+                          <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الموظف والصلاحية' : 'Employee & Role'}</th>
+                          <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'القسم المسؤول عنه' : 'Assigned Department'}</th>
                           <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الحالة' : 'Status'}</th>
                           <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الإنجاز' : 'Completion'}</th>
                           <th className="px-6 py-4 text-end"></th>
@@ -873,30 +973,55 @@ const EmployeeManagement = () => {
                         {filtered.map(emp => {
                           const dept = getAllDepartments().find(d => d.id === emp.department_id) || getAllDepartments()[0];
                           const isOnline = emp.status === 'active';
+                          const isHOD = emp.role === 'department_head';
                           return (
                             <tr key={emp.id} className="group hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-xl bg-brand-dark/5 text-brand-dark flex items-center justify-center font-black text-sm relative">
-                                    {emp.name_en.charAt(0)}
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm relative shadow-inner ${
+                                    isHOD ? 'bg-red-50 text-[#A11212] border border-red-200' : 'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {emp.name_en.charAt(0).toUpperCase()}
                                     {isOnline && <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />}
                                   </div>
                                   <div>
-                                    <button
-                                      type="button"
-                                      onClick={() => setViewingEmployee(emp)}
-                                      className="font-black text-gray-900 text-sm hover:text-brand-dark hover:underline focus:outline-none text-left cursor-pointer"
-                                    >
-                                      {isAr ? emp.name_ar : emp.name_en}
-                                    </button>
-                                    <p className="text-[10px] font-bold text-gray-400">{emp.email}</p>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => setViewingEmployee(emp)}
+                                        className="font-black text-gray-900 text-sm hover:text-brand-dark hover:underline focus:outline-none text-left cursor-pointer"
+                                      >
+                                        {isAr ? emp.name_ar : emp.name_en}
+                                      </button>
+                                      {isHOD && (
+                                        <span className="inline-flex items-center gap-1 bg-red-50 text-[#A11212] border border-red-200 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                          <ShieldCheck size={10} />
+                                          {isAr ? 'رئيس قسم' : 'HOD Head'}
+                                        </span>
+                                      )}
+                                      {emp.role === 'accountant' && (
+                                        <span className="bg-blue-50 text-blue-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                          {isAr ? 'محاسب' : 'Accountant'}
+                                        </span>
+                                      )}
+                                      {emp.role === 'hr' && (
+                                        <span className="bg-purple-50 text-purple-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                          {isAr ? 'موارد بشرية' : 'HR'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] font-bold text-gray-400">
+                                      {emp.email} {emp.phone ? `· ${emp.phone}` : ''}
+                                    </p>
                                   </div>
                                 </div>
                               </td>
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-2">
-                                  <Building2 size={14} className="text-gray-400" />
-                                  <span className="text-xs font-bold text-gray-700">{dept.name}</span>
+                                  <Building2 size={14} className={isHOD ? 'text-[#A11212]' : 'text-gray-400'} />
+                                  <span className={`text-xs font-bold ${isHOD ? 'text-[#A11212] font-black' : 'text-gray-700'}`}>
+                                    {dept?.name || emp.department_id}
+                                  </span>
                                 </div>
                               </td>
                               <td className="px-6 py-4">
@@ -919,10 +1044,18 @@ const EmployeeManagement = () => {
                                 </div>
                               </td>
                               <td className="px-6 py-4 text-end space-x-2 space-x-reverse">
-                                <button onClick={() => openEditModal(emp)} className="p-2 text-gray-400 hover:text-brand-dark hover:bg-gray-100 rounded-lg transition-colors">
+                                <button 
+                                  onClick={() => openEditModal(emp)} 
+                                  title={isAr ? 'تعديل الصلاحية والقسم' : 'Edit Role & Department'}
+                                  className="p-2 text-gray-400 hover:text-[#A11212] hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                >
                                   <Pencil size={16} />
                                 </button>
-                                <button onClick={() => { setEmployeeToDelete(emp); setConfirmName(''); setDeleteModalOpen(true); }} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                <button 
+                                  onClick={() => { setEmployeeToDelete(emp); setConfirmName(''); setDeleteModalOpen(true); }} 
+                                  title={isAr ? 'حذف الحساب' : 'Delete Account'}
+                                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                >
                                   <Trash2 size={16} />
                                 </button>
                               </td>
@@ -1084,51 +1217,77 @@ const EmployeeManagement = () => {
               ) : (
                 <form onSubmit={handleAddOrEditSubmit} className="space-y-5">
                   <div>
-                    <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">{isAr ? 'الاسم الكامل' : 'Full Name'}</label>
-                    <input required type="text" value={formData.fullName} onChange={e => setFormData({ ...formData, fullName: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-brand-dark outline-none" />
+                    <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'الاسم الكامل' : 'Full Name'}</label>
+                    <input required type="text" value={formData.fullName} onChange={e => setFormData({ ...formData, fullName: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all" />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">{isAr ? 'البريد الإلكتروني' : 'Email'}</label>
-                      <input required type="email" disabled={!!editingEmployee} value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-brand-dark outline-none disabled:opacity-50" />
+                      <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'البريد الإلكتروني' : 'Email'}</label>
+                      <input required type="email" disabled={!!editingEmployee} value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] outline-none disabled:opacity-60 disabled:cursor-not-allowed" />
+                      {editingEmployee && (
+                        <p className="text-[10px] text-gray-400 mt-1 font-medium">{isAr ? 'البريد الإلكتروني مرتبط بتسجيل الدخول' : 'Email is tied to authentication'}</p>
+                      )}
                     </div>
                     <div>
-                      <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">{isAr ? 'رقم الهاتف' : 'Phone'}</label>
-                      <input required type="tel" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-brand-dark outline-none" />
+                      <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'رقم الهاتف' : 'Phone'}</label>
+                      <input required type="tel" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} placeholder="+968 9XXXXXXX" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all" />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">{isAr ? 'القسم' : 'Department'}</label>
-                      <select value={formData.department_id} onChange={e => setFormData({ ...formData, department_id: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-brand-dark outline-none">
+                      <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'القسم المسؤول عنه' : 'Department'}</label>
+                      <select value={formData.department_id} onChange={e => setFormData({ ...formData, department_id: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all cursor-pointer">
                         {getAllDepartments().map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">{isAr ? 'الصلاحية' : 'Role'}</label>
-                      <select value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-brand-dark outline-none">
-                        <option value="employee">{isAr ? 'موظف قياسي' : 'Standard Employee'}</option>
-                        <option value="department_head">{isAr ? 'رئيس قسم (HOD)' : 'Department Head (HOD)'}</option>
-                        <option value="accountant">{isAr ? 'محاسب' : 'Accountant'}</option>
-                        <option value="hr">{isAr ? 'إدارة الموارد البشرية (HR)' : 'HR Manager'}</option>
-                        <option value="manager">{isAr ? 'مدير تنفيذي' : 'Executive Manager'}</option>
-                        <option value="crm">{isAr ? 'علاقات العملاء (CRM)' : 'CRM Coordinator'}</option>
+                      <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'صلاحية النظام' : 'System Role'}</label>
+                      <select value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all cursor-pointer">
+                        <option value="employee">{isAr ? 'موظف قياسي (Standard Employee)' : 'Standard Employee'}</option>
+                        <option value="department_head">{isAr ? '⭐ رئيس قسم (Head of Department / HOD)' : '⭐ Department Head (HOD)'}</option>
+                        <option value="accountant">{isAr ? 'محاسب (Accountant)' : 'Accountant'}</option>
+                        <option value="hr">{isAr ? 'إدارة الموارد البشرية (HR Manager)' : 'HR Manager'}</option>
+                        <option value="manager">{isAr ? 'مدير تنفيذي (Executive Manager)' : 'Executive Manager'}</option>
+                        <option value="crm">{isAr ? 'علاقات العملاء (CRM Coordinator)' : 'CRM Coordinator'}</option>
                       </select>
                     </div>
                   </div>
+
+                  {formData.role === 'department_head' && (
+                    <div className="bg-red-50/70 border border-red-200/80 rounded-2xl p-4 flex items-start gap-3">
+                      <ShieldCheck size={20} className="text-[#A11212] flex-shrink-0 mt-0.5" />
+                      <div className="text-xs text-gray-800">
+                        <p className="font-black text-[#A11212] mb-0.5">
+                          {isAr ? 'صلاحيات رئيس القسم (HOD Leadership)' : 'Head of Department Access Granted'}
+                        </p>
+                        <p className="text-[11px] text-gray-600 leading-relaxed font-medium">
+                          {isAr 
+                            ? 'سيتمكن الموظف من قيادة القسم، توجيه المهام، رقابة الجودة، ومعالجة التأخيرات عبر بوابة HOD.' 
+                            : 'This employee will have full management control over work routing, QA approvals, and delay action logging in the HOD Portal.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {!editingEmployee && (
                     <div>
-                      <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">{isAr ? 'كلمة المرور' : 'Password'}</label>
-                      <input required type="text" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-brand-dark outline-none" minLength={6} />
+                      <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'كلمة المرور المؤقتة' : 'Temporary Password'}</label>
+                      <input required type="text" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all" minLength={6} placeholder="Password@123" />
                     </div>
                   )}
 
                   <div className="pt-4 flex gap-3">
-                    <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors">
+                    <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors cursor-pointer text-sm">
                       {isAr ? 'إلغاء' : 'Cancel'}
                     </button>
-                    <button type="submit" disabled={isSubmitting} className="flex-1 py-3 bg-brand-dark text-white rounded-xl font-bold hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                      {isSubmitting ? <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" /> : (editingEmployee ? (isAr ? 'حفظ' : 'Save') : (isAr ? 'إضافة' : 'Create'))}
+                    <button type="submit" disabled={isSubmitting} className="flex-1 py-3.5 bg-[#A11212] hover:bg-red-800 text-white rounded-xl font-black transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-md text-sm">
+                      {isSubmitting ? (
+                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+                      ) : (
+                        (editingEmployee ? (isAr ? 'حفظ التعديلات' : 'Save Changes') : (isAr ? 'إضافة الحساب' : 'Create Account'))
+                      )}
                     </button>
                   </div>
                 </form>
