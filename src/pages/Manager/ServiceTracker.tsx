@@ -12,6 +12,8 @@ import {
   Calendar,
   Building2,
   User,
+  Mail,
+  Phone,
   MoreVertical,
   Zap,
   ShieldAlert,
@@ -22,7 +24,9 @@ import {
   Trash2,
   UserPlus,
   X,
-  RefreshCw
+  RefreshCw,
+  FileText,
+  Sparkles
 } from 'lucide-react';
 import { getAllDepartments } from '../../config/departments';
 
@@ -37,9 +41,21 @@ const DEPARTMENT_CODES: Record<string, string> = {
   management: 'MGT'
 };
 
+const POPULAR_SERVICES = [
+  'VAT Return Filing',
+  'Internal Audit Engagement',
+  'Financial Statements Preparation',
+  'Monthly Bookkeeping & Reconciliation',
+  'Tax Certificate Renewal',
+  'Feasibility Study',
+  'Corporate Advisory',
+  'KSA Audit & Compliance'
+];
+
 interface ServiceRecord {
   id: string;
   title: string;
+  description?: string | null;
   status: 'ongoing' | 'completed' | 'delayed' | 'under_review';
   created_at: string;
   due_date: string | null;
@@ -48,7 +64,6 @@ interface ServiceRecord {
   clients: {
     id?: string;
     company_name: string;
-    full_name?: string | null;
     email?: string | null;
     phone?: string | null;
   } | null;
@@ -83,7 +98,6 @@ const OperationsCenter = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null);
   const [reassignService, setReassignService] = useState<ServiceRecord | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
@@ -92,6 +106,7 @@ const OperationsCenter = () => {
     client_id: '',
     employee_id: '',
     due_date: '',
+    description: '',
     status: 'ongoing' as 'ongoing' | 'completed' | 'delayed' | 'under_review'
   });
 
@@ -110,6 +125,7 @@ const OperationsCenter = () => {
             id, 
             title, 
             status, 
+            description,
             created_at, 
             due_date, 
             client_id,
@@ -117,7 +133,6 @@ const OperationsCenter = () => {
             clients (
               id,
               company_name,
-              full_name,
               email,
               phone
             ),
@@ -128,12 +143,15 @@ const OperationsCenter = () => {
             )
           `)
           .order('created_at', { ascending: false }),
-        supabase.from('profiles').select('id, full_name, role, department_id'),
-        supabase.from('clients').select('id, company_name, full_name').order('company_name')
+        supabase.from('profiles').select('id, full_name, role, department_id').order('full_name'),
+        supabase.from('clients').select('id, company_name, email, phone').order('company_name')
       ]);
 
-      if (sErr) throw sErr;
-      setServices((sData as any[]) || []);
+      if (sErr) console.error('Error fetching services:', sErr);
+      if (pErr) console.error('Error fetching profiles:', pErr);
+      if (cErr) console.error('Error fetching clients:', cErr);
+
+      if (sData) setServices(sData as any[]);
       if (pData) setEmployees(pData);
       if (cData) setClients(cData);
     } catch (err) {
@@ -151,6 +169,7 @@ const OperationsCenter = () => {
       .channel('manager-operations-live-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => fetchServices(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchServices(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchServices(true))
       .subscribe();
 
     return () => {
@@ -162,7 +181,7 @@ const OperationsCenter = () => {
   const getDepartmentForService = (title: string) => {
     const depts = getAllDepartments();
     for (const d of depts) {
-      if (d.services.some(s => title.toLowerCase().includes(s.toLowerCase()))) return d;
+      if (d.services.some(s => (title || '').toLowerCase().includes(s.toLowerCase()))) return d;
     }
     return depts[0];
   };
@@ -225,17 +244,26 @@ const OperationsCenter = () => {
   // ── Create or Edit Submit ──────────────────────────────────────────────────
   const handleCreateOrEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.title.trim()) {
+      alert(isAr ? 'يرجى كتابة أو اختيار اسم الخدمة' : 'Please enter or select a service title');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      const selectedClientId = formData.client_id || clients[0]?.id || null;
+      const selectedEmployeeId = formData.employee_id || employees[0]?.id || null;
+
       if (editingService) {
         // Edit existing
         const { error } = await supabase
           .from('services')
           .update({
             title: formData.title,
-            client_id: formData.client_id || null,
-            employee_id: formData.employee_id || null,
+            client_id: selectedClientId,
+            employee_id: selectedEmployeeId,
             due_date: formData.due_date || null,
+            description: formData.description || null,
             status: formData.status
           })
           .eq('id', editingService.id);
@@ -247,9 +275,10 @@ const OperationsCenter = () => {
           .from('services')
           .insert([{
             title: formData.title,
-            client_id: formData.client_id || (clients[0]?.id ?? null),
-            employee_id: formData.employee_id || (employees[0]?.id ?? null),
+            client_id: selectedClientId,
+            employee_id: selectedEmployeeId,
             due_date: formData.due_date || null,
+            description: formData.description || null,
             status: formData.status
           }]);
 
@@ -260,6 +289,7 @@ const OperationsCenter = () => {
       setEditingService(null);
       fetchServices(true);
     } catch (err: any) {
+      console.error('Save service error:', err);
       alert(err.message || 'Operation failed');
     } finally {
       setIsSubmitting(false);
@@ -286,9 +316,10 @@ const OperationsCenter = () => {
 
   const filtered = services.filter(s => {
     const matchesSearch =
-      s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.clients?.company_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (s.clients?.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.clients?.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.profiles?.full_name || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
     const mappedDept = getDepartmentForService(s.title);
@@ -335,6 +366,7 @@ const OperationsCenter = () => {
                 client_id: clients[0]?.id || '',
                 employee_id: employees[0]?.id || '',
                 due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+                description: '',
                 status: 'ongoing'
               });
               setShowCreateModal(true);
@@ -385,7 +417,7 @@ const OperationsCenter = () => {
             <Search className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={16} />
             <input
               type="text"
-              placeholder={isAr ? 'بحث سريع بالخدمة، اسم الشركة، الممثل أو الموظف...' : 'Search by service, company, representative, or employee...'}
+              placeholder={isAr ? 'بحث سريع باسم الخدمة، الشركة أو الموظف...' : 'Search by service, company, or employee...'}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className={`w-full ${isAr ? 'pr-10' : 'pl-10'} py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:border-brand-dark text-sm font-bold transition-all`}
@@ -431,7 +463,7 @@ const OperationsCenter = () => {
                       {isAr ? 'الرقم / الكود' : '# / ID'}
                     </th>
                     <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
-                      {isAr ? 'الشركة والممثل' : 'Company & Representative'}
+                      {isAr ? 'الشركة والعميل' : 'Company (Client)'}
                     </th>
                     <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
                       {isAr ? 'القسم والخدمة' : 'Dept & Service'}
@@ -468,7 +500,7 @@ const OperationsCenter = () => {
                           </div>
                         </td>
 
-                        {/* 2. Company & Representing Person */}
+                        {/* 2. Company & Client Contact */}
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
@@ -477,16 +509,20 @@ const OperationsCenter = () => {
                                 {svc.clients?.company_name || (isAr ? 'عميل عام' : 'Generic Client')}
                               </span>
                             </div>
-                            {svc.clients?.full_name ? (
-                              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-600 font-semibold ps-5">
-                                <User size={12} className="text-gray-400 shrink-0" />
-                                <span>{svc.clients.full_name}</span>
+                            {svc.clients?.email ? (
+                              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-500 ps-5 font-medium">
+                                <Mail size={11} className="text-gray-400 shrink-0" />
+                                <span className="truncate max-w-[180px]">{svc.clients.email}</span>
+                              </div>
+                            ) : svc.clients?.phone ? (
+                              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-500 ps-5 font-medium">
+                                <Phone size={11} className="text-gray-400 shrink-0" />
+                                <span>{svc.clients.phone}</span>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-400 ps-5">
-                                <User size={11} className="text-gray-300 shrink-0" />
-                                <span>{isAr ? 'الممثل غير محدد' : 'Representative not set'}</span>
-                              </div>
+                              <span className="text-[10px] text-gray-400 ps-5 mt-0.5">
+                                {isAr ? 'عميل مسجل' : 'Registered Client'}
+                              </span>
                             )}
                           </div>
                         </td>
@@ -495,6 +531,9 @@ const OperationsCenter = () => {
                         <td className="px-6 py-4">
                           <p className="text-[10px] font-black text-brand-dark uppercase tracking-widest mb-0.5">{dept.name}</p>
                           <p className="text-xs font-bold text-gray-900 truncate max-w-[240px]" title={svc.title}>{svc.title}</p>
+                          {svc.description && (
+                            <p className="text-[10px] text-gray-400 truncate max-w-[240px] mt-0.5">{svc.description}</p>
+                          )}
                         </td>
 
                         {/* 4. Handled By (Assignee) */}
@@ -595,9 +634,10 @@ const OperationsCenter = () => {
                                   setEditingService(svc);
                                   setFormData({
                                     title: svc.title,
-                                    client_id: svc.client_id,
+                                    client_id: svc.client_id || '',
                                     employee_id: svc.employee_id || '',
                                     due_date: svc.due_date || '',
+                                    description: svc.description || '',
                                     status: svc.status
                                   });
                                   setShowCreateModal(true);
@@ -628,7 +668,7 @@ const OperationsCenter = () => {
       {/* ── Create / Edit Operation Modal ─────────────────────────────────── */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden p-6 animate-scale-up border border-gray-100">
+          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden p-6 animate-scale-up border border-gray-100">
             <div className="flex justify-between items-center mb-5 pb-3 border-b border-gray-100">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 <Zap className="text-brand-dark" size={20} />
@@ -645,8 +685,14 @@ const OperationsCenter = () => {
             </div>
 
             <form onSubmit={handleCreateOrEditSubmit} className="space-y-4">
+              {/* Service Title */}
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'عنوان المهمة / الخدمة' : 'Service Deliverable Title'}</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                  <span>{isAr ? 'عنوان المهمة / الخدمة' : 'Service Deliverable Title'}</span>
+                  <span className="text-brand-dark flex items-center gap-1 font-bold text-[10px]">
+                    <Sparkles size={11} /> {isAr ? 'أو اختر من المقترحات' : 'Quick select below'}
+                  </span>
+                </label>
                 <input
                   type="text"
                   required
@@ -655,21 +701,40 @@ const OperationsCenter = () => {
                   placeholder={isAr ? 'مثال: إعداد إقرار ضريبة القيمة المضافة لشركة...' : 'e.g., VAT Return Filing for Khimji Group'}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark"
                 />
+
+                {/* Quick Service Suggestions */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {POPULAR_SERVICES.slice(0, 4).map(srv => (
+                    <button
+                      type="button"
+                      key={srv}
+                      onClick={() => setFormData({ ...formData, title: srv })}
+                      className="px-2.5 py-1 bg-gray-100 hover:bg-brand-dark hover:text-white rounded-lg text-[10px] font-bold text-gray-600 transition-all cursor-pointer"
+                    >
+                      + {srv}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Client & Assignee */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'العميل' : 'Client'}</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'العميل (الشركة)' : 'Client (Company)'}</label>
                   <select
                     value={formData.client_id}
                     onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
                   >
-                    {clients.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.company_name} {c.full_name ? `(${c.full_name})` : ''}
-                      </option>
-                    ))}
+                    {clients.length === 0 ? (
+                      <option value="">{isAr ? 'لا يوجد عملاء متاحين' : 'No clients found'}</option>
+                    ) : (
+                      clients.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.company_name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -680,14 +745,21 @@ const OperationsCenter = () => {
                     onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
                   >
-                    {employees.map(e => (
-                      <option key={e.id} value={e.id}>{e.full_name} ({e.role})</option>
-                    ))}
+                    {employees.length === 0 ? (
+                      <option value="">{isAr ? 'لا يوجد موظفين متاحين' : 'No employees found'}</option>
+                    ) : (
+                      employees.map(e => (
+                        <option key={e.id} value={e.id}>
+                          {e.full_name} ({e.role || 'Staff'})
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Due Date & Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'الموعد النهائي (SLA)' : 'Due Date (SLA)'}</label>
                   <input
@@ -713,18 +785,30 @@ const OperationsCenter = () => {
                 </div>
               </div>
 
-              <div className="pt-4 flex gap-3">
+              {/* Description / Notes */}
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'ملاحظات ونطاق العمل (اختياري)' : 'Scope / Description (Optional)'}</label>
+                <textarea
+                  rows={2}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder={isAr ? 'أضف أي تفاصيل أو متطلبات للمهمة...' : 'Add any deliverable details or specific requirements...'}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-medium outline-none focus:border-brand-dark resize-none"
+                />
+              </div>
+
+              <div className="pt-3 flex gap-3">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors cursor-pointer"
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors cursor-pointer text-xs"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 py-3 bg-brand-dark hover:bg-brand text-white rounded-xl font-black text-xs uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer"
+                  className="flex-1 py-3 bg-brand-dark hover:bg-brand text-white rounded-xl font-black text-xs uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer shadow-md"
                 >
                   {isSubmitting ? '...' : (isAr ? 'حفظ العملية' : 'Save Operation')}
                 </button>
@@ -762,7 +846,7 @@ const OperationsCenter = () => {
                 >
                   <div>
                     <p className="text-xs font-black text-gray-900">{emp.full_name}</p>
-                    <p className="text-[10px] font-bold text-gray-400 capitalize">{emp.role}</p>
+                    <p className="text-[10px] font-bold text-gray-400 capitalize">{emp.role || 'Staff'}</p>
                   </div>
                   {reassignService.employee_id === emp.id && (
                     <span className="w-2 h-2 rounded-full bg-green-500" />
