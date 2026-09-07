@@ -11,6 +11,7 @@ import {
   PlayCircle,
   Calendar,
   Building2,
+  User,
   MoreVertical,
   Zap,
   ShieldAlert,
@@ -25,6 +26,17 @@ import {
 } from 'lucide-react';
 import { getAllDepartments } from '../../config/departments';
 
+const DEPARTMENT_CODES: Record<string, string> = {
+  audit: 'AUD',
+  tax_vat: 'TAX',
+  bookkeeping: 'BKP',
+  business_advisory: 'ADV',
+  client_success: 'CS',
+  innovation_dev: 'INN',
+  internal_support: 'ADM',
+  management: 'MGT'
+};
+
 interface ServiceRecord {
   id: string;
   title: string;
@@ -34,10 +46,16 @@ interface ServiceRecord {
   client_id: string;
   employee_id: string | null;
   clients: {
+    id?: string;
     company_name: string;
+    full_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
   } | null;
   profiles: {
+    id?: string;
     full_name: string;
+    role?: string | null;
   } | null;
 }
 
@@ -97,15 +115,21 @@ const OperationsCenter = () => {
             client_id,
             employee_id,
             clients (
-              company_name
+              id,
+              company_name,
+              full_name,
+              email,
+              phone
             ),
             profiles:profiles!employee_id (
-              full_name
+              id,
+              full_name,
+              role
             )
           `)
           .order('created_at', { ascending: false }),
         supabase.from('profiles').select('id, full_name, role, department_id'),
-        supabase.from('clients').select('id, company_name')
+        supabase.from('clients').select('id, company_name, full_name').order('company_name')
       ]);
 
       if (sErr) throw sErr;
@@ -182,7 +206,7 @@ const OperationsCenter = () => {
     setServices(prev => prev.map(s => s.id === serviceId ? {
       ...s,
       employee_id: newEmployeeId,
-      profiles: assignedEmp ? { full_name: assignedEmp.full_name } : null
+      profiles: assignedEmp ? { full_name: assignedEmp.full_name, role: assignedEmp.role } : null
     } : s));
 
     const { error } = await supabase
@@ -264,6 +288,7 @@ const OperationsCenter = () => {
     const matchesSearch =
       s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.clients?.company_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.clients?.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.profiles?.full_name || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
     const mappedDept = getDepartmentForService(s.title);
@@ -277,8 +302,6 @@ const OperationsCenter = () => {
     bottlenecks: services.filter(s => s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed')).length,
     completedToday: services.filter(s => s.status === 'completed' && new Date(s.created_at).toDateString() === new Date().toDateString()).length,
   };
-
-  const escalations = services.filter(s => s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed')).slice(0, 4);
 
   return (
     <div className="space-y-6 pb-10" dir={isAr ? 'rtl' : 'ltr'}>
@@ -353,235 +376,252 @@ const OperationsCenter = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+      {/* ── Section 2: Global Pipeline Operations (Full Width) ───────────── */}
+      <div className="space-y-4">
         
-        {/* ── Section 2: Global Pipeline Board ────────────────────────────── */}
-        <div className="xl:col-span-3 space-y-4">
-          
-          {/* Filters Bar */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 flex flex-wrap gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={16} />
-              <input
-                type="text"
-                placeholder={isAr ? 'بحث سريع باسم الخدمة أو العميل أو الموظف...' : 'Search by service, client, or employee...'}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className={`w-full ${isAr ? 'pr-10' : 'pl-10'} py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:border-brand-dark text-sm font-bold transition-all`}
-              />
-            </div>
-            <select
-              value={deptFilter}
-              onChange={(e) => setDeptFilter(e.target.value)}
-              className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-brand-dark min-w-[140px]"
-            >
-              <option value="all">{isAr ? 'كل الأقسام' : 'All Departments'}</option>
-              {getAllDepartments().map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-brand-dark min-w-[120px]"
-            >
-              <option value="all">{isAr ? 'كل الحالات' : 'All Statuses'}</option>
-              <option value="ongoing">Ongoing</option>
-              <option value="under_review">Review</option>
-              <option value="delayed">Delayed</option>
-              <option value="completed">Completed</option>
-            </select>
+        {/* Filters Bar */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 flex flex-wrap gap-3">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={16} />
+            <input
+              type="text"
+              placeholder={isAr ? 'بحث سريع بالخدمة، اسم الشركة، الممثل أو الموظف...' : 'Search by service, company, representative, or employee...'}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className={`w-full ${isAr ? 'pr-10' : 'pl-10'} py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:border-brand-dark text-sm font-bold transition-all`}
+            />
           </div>
-
-          {/* High-Density Table */}
-          <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-visible">
-            {loading ? (
-              <div className="p-20 flex justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark" />
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="p-16 text-center text-gray-400 font-bold text-sm">
-                {isAr ? 'لا توجد عمليات تطابق البحث' : 'No operations found matching your filters.'}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-start whitespace-nowrap">
-                  <thead className="bg-gray-50/50 border-b border-gray-100">
-                    <tr>
-                      <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'معرف العملية' : 'Op ID'}</th>
-                      <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'القسم والخدمة' : 'Dept & Service'}</th>
-                      <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'العميل' : 'Client'}</th>
-                      <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'المسؤول' : 'Assignee'}</th>
-                      <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'SLA مؤشر' : 'SLA Status'}</th>
-                      <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الحالة' : 'State'}</th>
-                      <th className="px-6 py-4 text-end text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'إجراءات' : 'Actions'}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {filtered.map(svc => {
-                      const status = SERVICE_STATUS_STYLES[svc.status] || SERVICE_STATUS_STYLES.ongoing;
-                      const dept = getDepartmentForService(svc.title);
-                      const sla = getSLAStatus(svc.due_date);
-                      const isMenuOpen = activeMenuId === svc.id;
-
-                      return (
-                        <tr key={svc.id} className="group hover:bg-gray-50/50 transition-colors relative">
-                          <td className="px-6 py-4 text-xs font-black text-gray-400">
-                            #{svc.id.substring(0,6).toUpperCase()}
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className="text-[10px] font-black text-brand-dark uppercase tracking-widest mb-0.5">{dept.name}</p>
-                            <p className="text-xs font-bold text-gray-900 truncate max-w-[200px]">{svc.title}</p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <Building2 size={14} className="text-gray-400" />
-                              <span className="text-xs font-black text-gray-700">{svc.clients?.company_name || 'Generic Client'}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <button
-                              onClick={() => setReassignService(svc)}
-                              className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer text-start"
-                              title={isAr ? 'تغيير المسؤول' : 'Reassign Employee'}
-                            >
-                              <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-black text-gray-600">
-                                {svc.profiles?.full_name ? svc.profiles.full_name.charAt(0) : '?'}
-                              </div>
-                              <span className="text-xs font-bold text-gray-600 hover:underline">{svc.profiles?.full_name || 'Unassigned'}</span>
-                            </button>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2 py-1 rounded text-[10px] font-black tracking-widest uppercase ${sla.bg} ${sla.color}`}>
-                              {sla.text}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`w-2 h-2 rounded-full ${status.bg.replace('bg-', 'bg-').replace('-50', '-500')}`} />
-                              <span className="text-xs font-black text-gray-700 uppercase tracking-tight">
-                                {isAr ? status.label_ar : status.label_en}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-end relative">
-                            <button 
-                              onClick={() => setActiveMenuId(isMenuOpen ? null : svc.id)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-brand-dark hover:bg-gray-100 transition-colors cursor-pointer"
-                            >
-                              <MoreVertical size={16} />
-                            </button>
-
-                            {/* Dropdown Action Menu */}
-                            {isMenuOpen && (
-                              <div className={`absolute ${isAr ? 'left-6' : 'right-6'} mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-scale-up text-start`}>
-                                <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-50">
-                                  {isAr ? 'تغيير الحالة' : 'Change State'}
-                                </div>
-                                <button
-                                  onClick={() => handleStatusChange(svc.id, 'ongoing')}
-                                  className="w-full px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2 cursor-pointer"
-                                >
-                                  <PlayCircle size={14} /> Ongoing
-                                </button>
-                                <button
-                                  onClick={() => handleStatusChange(svc.id, 'under_review')}
-                                  className="w-full px-3 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 flex items-center gap-2 cursor-pointer"
-                                >
-                                  <Clock size={14} /> Review
-                                </button>
-                                <button
-                                  onClick={() => handleStatusChange(svc.id, 'completed')}
-                                  className="w-full px-3 py-2 text-xs font-bold text-green-600 hover:bg-green-50 flex items-center gap-2 cursor-pointer"
-                                >
-                                  <CheckCircle2 size={14} /> Completed
-                                </button>
-                                <button
-                                  onClick={() => handleStatusChange(svc.id, 'delayed')}
-                                  className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
-                                >
-                                  <AlertTriangle size={14} /> Delayed
-                                </button>
-
-                                <div className="my-1 border-t border-gray-100" />
-                                
-                                <button
-                                  onClick={() => {
-                                    setActiveMenuId(null);
-                                    setReassignService(svc);
-                                  }}
-                                  className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
-                                >
-                                  <UserPlus size={14} className="text-gray-400" /> {isAr ? 'إعادة تعيين المسؤول' : 'Reassign Assignee'}
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setActiveMenuId(null);
-                                    setEditingService(svc);
-                                    setFormData({
-                                      title: svc.title,
-                                      client_id: svc.client_id,
-                                      employee_id: svc.employee_id || '',
-                                      due_date: svc.due_date || '',
-                                      status: svc.status
-                                    });
-                                    setShowCreateModal(true);
-                                  }}
-                                  className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
-                                >
-                                  <Edit size={14} className="text-gray-400" /> {isAr ? 'تعديل العملية' : 'Edit Operation'}
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteService(svc.id)}
-                                  className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
-                                >
-                                  <Trash2 size={14} /> {isAr ? 'حذف العملية' : 'Delete Operation'}
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <select
+            value={deptFilter}
+            onChange={(e) => setDeptFilter(e.target.value)}
+            className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-brand-dark min-w-[140px]"
+          >
+            <option value="all">{isAr ? 'كل الأقسام' : 'All Departments'}</option>
+            {getAllDepartments().map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-brand-dark min-w-[120px]"
+          >
+            <option value="all">{isAr ? 'كل الحالات' : 'All Statuses'}</option>
+            <option value="ongoing">Ongoing</option>
+            <option value="under_review">Review</option>
+            <option value="delayed">Delayed</option>
+            <option value="completed">Completed</option>
+          </select>
         </div>
 
-        {/* ── Section 3: Escalation Hub ───────────────────────────────────── */}
-        <div className="xl:col-span-1 space-y-4">
-          <div className="bg-red-50 rounded-2xl border border-red-100 p-5 shadow-sm">
-            <h3 className="text-sm font-black text-red-900 uppercase tracking-widest flex items-center gap-2 mb-4">
-              <AlertTriangle size={16} className="text-red-600" />
-              {isAr ? 'مركز التصعيد والتعثر' : 'Escalation Hub'}
-            </h3>
-            
-            <div className="space-y-3">
-              {escalations.length === 0 ? (
-                <div className="text-center py-6">
-                  <CheckCircle2 className="mx-auto text-red-200 mb-2" size={24} />
-                  <p className="text-xs font-bold text-red-400">{isAr ? 'لا توجد تصعيدات' : 'No active escalations'}</p>
-                </div>
-              ) : (
-                escalations.map(esc => (
-                  <div key={esc.id} className="bg-white rounded-xl p-4 shadow-sm border border-red-100 relative overflow-hidden">
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500" />
-                    <p className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-1">Breach SLA</p>
-                    <p className="text-xs font-bold text-gray-900 leading-tight mb-2">{esc.title}</p>
-                    <div className="flex justify-between items-end">
-                      <span className="text-[10px] text-gray-500 font-medium">{esc.profiles?.full_name || 'Unassigned'}</span>
-                      <button 
-                        onClick={() => setReassignService(esc)}
-                        className="text-[10px] bg-red-50 text-red-700 hover:bg-red-100 px-3 py-1.5 rounded-lg font-black transition-colors flex items-center gap-1 cursor-pointer"
-                      >
-                        Action <ArrowRight size={10} />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
+        {/* High-Density Pipeline Table */}
+        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-visible">
+          {loading ? (
+            <div className="p-20 flex justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark" />
             </div>
-          </div>
+          ) : filtered.length === 0 ? (
+            <div className="p-16 text-center text-gray-400 font-bold text-sm">
+              {isAr ? 'لا توجد عمليات تطابق البحث' : 'No operations found matching your filters.'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-start whitespace-nowrap">
+                <thead className="bg-gray-50/75 border-b border-gray-100">
+                  <tr>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider w-24">
+                      {isAr ? 'الرقم / الكود' : '# / ID'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                      {isAr ? 'الشركة والممثل' : 'Company & Representative'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                      {isAr ? 'القسم والخدمة' : 'Dept & Service'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                      {isAr ? 'المسؤول المباشر' : 'Handled By (Assignee)'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                      {isAr ? 'مؤشر SLA' : 'SLA Status'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                      {isAr ? 'الحالة' : 'State'}
+                    </th>
+                    <th className="px-6 py-4 text-end text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                      {isAr ? 'إجراءات' : 'Actions'}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filtered.map((svc, index) => {
+                    const status = SERVICE_STATUS_STYLES[svc.status] || SERVICE_STATUS_STYLES.ongoing;
+                    const dept = getDepartmentForService(svc.title);
+                    const deptCode = DEPARTMENT_CODES[dept.id] || 'OPS';
+                    const sla = getSLAStatus(svc.due_date);
+                    const isMenuOpen = activeMenuId === svc.id;
+
+                    return (
+                      <tr key={svc.id} className="group hover:bg-gray-50/60 transition-colors relative">
+                        {/* 1. Sequence & Department Code */}
+                        <td className="px-6 py-4">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gray-100/80 border border-gray-200/60 text-gray-800 font-black text-xs shadow-2xs">
+                            <span className="text-[10px] text-brand-dark uppercase tracking-wider font-extrabold">{deptCode}</span>
+                            <span className="text-gray-400 font-bold">#{index + 1}</span>
+                          </div>
+                        </td>
+
+                        {/* 2. Company & Representing Person */}
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <Building2 size={15} className="text-brand-dark shrink-0" />
+                              <span className="text-xs font-black text-gray-900 tracking-tight">
+                                {svc.clients?.company_name || (isAr ? 'عميل عام' : 'Generic Client')}
+                              </span>
+                            </div>
+                            {svc.clients?.full_name ? (
+                              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-600 font-semibold ps-5">
+                                <User size={12} className="text-gray-400 shrink-0" />
+                                <span>{svc.clients.full_name}</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-400 ps-5">
+                                <User size={11} className="text-gray-300 shrink-0" />
+                                <span>{isAr ? 'الممثل غير محدد' : 'Representative not set'}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 3. Department & Service Deliverable */}
+                        <td className="px-6 py-4">
+                          <p className="text-[10px] font-black text-brand-dark uppercase tracking-widest mb-0.5">{dept.name}</p>
+                          <p className="text-xs font-bold text-gray-900 truncate max-w-[240px]" title={svc.title}>{svc.title}</p>
+                        </td>
+
+                        {/* 4. Handled By (Assignee) */}
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => setReassignService(svc)}
+                            className="flex items-center gap-2.5 hover:opacity-80 transition-all cursor-pointer text-start group/btn"
+                            title={isAr ? 'تغيير المسؤول' : 'Reassign Employee'}
+                          >
+                            <div className="w-7 h-7 rounded-full bg-brand-dark/10 border border-brand-dark/20 flex items-center justify-center text-xs font-black text-brand-dark group-hover/btn:bg-brand-dark group-hover/btn:text-white transition-colors shrink-0">
+                              {svc.profiles?.full_name ? svc.profiles.full_name.charAt(0).toUpperCase() : '?'}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-xs font-black text-gray-800 group-hover/btn:text-brand-dark group-hover/btn:underline block truncate">
+                                {svc.profiles?.full_name || (isAr ? 'غير مسند' : 'Unassigned')}
+                              </span>
+                              {svc.profiles?.role && (
+                                <span className="text-[10px] font-bold text-gray-400 capitalize block -mt-0.5 truncate">
+                                  {svc.profiles.role}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        </td>
+
+                        {/* 5. SLA Status */}
+                        <td className="px-6 py-4">
+                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase inline-flex items-center gap-1 ${sla.bg} ${sla.color}`}>
+                            <Clock size={11} />
+                            {sla.text}
+                          </span>
+                        </td>
+
+                        {/* 6. State / Status */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2.5 h-2.5 rounded-full ${status.bg.replace('-50', '-500')}`} />
+                            <span className="text-xs font-black text-gray-800 uppercase tracking-tight">
+                              {isAr ? status.label_ar : status.label_en}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* 7. Actions Menu */}
+                        <td className="px-6 py-4 text-end relative">
+                          <button 
+                            onClick={() => setActiveMenuId(isMenuOpen ? null : svc.id)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-brand-dark hover:bg-gray-100 transition-colors cursor-pointer"
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+
+                          {/* Dropdown Action Menu */}
+                          {isMenuOpen && (
+                            <div className={`absolute ${isAr ? 'left-6' : 'right-6'} mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-scale-up text-start`}>
+                              <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-50">
+                                {isAr ? 'تغيير الحالة' : 'Change State'}
+                              </div>
+                              <button
+                                onClick={() => handleStatusChange(svc.id, 'ongoing')}
+                                className="w-full px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2 cursor-pointer"
+                              >
+                                <PlayCircle size={14} /> Ongoing
+                              </button>
+                              <button
+                                onClick={() => handleStatusChange(svc.id, 'under_review')}
+                                className="w-full px-3 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 flex items-center gap-2 cursor-pointer"
+                              >
+                                <Clock size={14} /> Review
+                              </button>
+                              <button
+                                onClick={() => handleStatusChange(svc.id, 'completed')}
+                                className="w-full px-3 py-2 text-xs font-bold text-green-600 hover:bg-green-50 flex items-center gap-2 cursor-pointer"
+                              >
+                                <CheckCircle2 size={14} /> Completed
+                              </button>
+                              <button
+                                onClick={() => handleStatusChange(svc.id, 'delayed')}
+                                className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
+                              >
+                                <AlertTriangle size={14} /> Delayed
+                              </button>
+
+                              <div className="my-1 border-t border-gray-100" />
+                              
+                              <button
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  setReassignService(svc);
+                                }}
+                                className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
+                              >
+                                <UserPlus size={14} className="text-gray-400" /> {isAr ? 'إعادة تعيين المسؤول' : 'Reassign Assignee'}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  setEditingService(svc);
+                                  setFormData({
+                                    title: svc.title,
+                                    client_id: svc.client_id,
+                                    employee_id: svc.employee_id || '',
+                                    due_date: svc.due_date || '',
+                                    status: svc.status
+                                  });
+                                  setShowCreateModal(true);
+                                }}
+                                className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
+                              >
+                                <Edit size={14} className="text-gray-400" /> {isAr ? 'تعديل العملية' : 'Edit Operation'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteService(svc.id)}
+                                className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
+                              >
+                                <Trash2 size={14} /> {isAr ? 'حذف العملية' : 'Delete Operation'}
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
@@ -626,7 +666,9 @@ const OperationsCenter = () => {
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
                   >
                     {clients.map(c => (
-                      <option key={c.id} value={c.id}>{c.company_name}</option>
+                      <option key={c.id} value={c.id}>
+                        {c.company_name} {c.full_name ? `(${c.full_name})` : ''}
+                      </option>
                     ))}
                   </select>
                 </div>

@@ -70,7 +70,7 @@ const EmployeeManagement = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
-  
+
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -218,11 +218,11 @@ const EmployeeManagement = () => {
       // Map DB profiles to Employee interface, joining with hr_employees details
       const mapped: Employee[] = (profiles || []).map(p => {
         const hrEmp = (hrEmployees || []).find(h => h.id === p.id);
-        
+
         // Mock stats for completion rate if not present
         const total = Math.floor(Math.random() * 40 + 10);
         const done = Math.floor(total * (0.5 + Math.random() * 0.5));
-        
+
         return {
           id: p.id,
           name_en: hrEmp?.full_name || p.full_name || 'Unknown',
@@ -238,7 +238,7 @@ const EmployeeManagement = () => {
           completionRate: Math.round((done / total) * 100),
           joinedAt: hrEmp?.joined_date || (p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : '2024-01-01'),
           department_id: p.department_id || 'audit',
-          
+
           // Additional Dossier Details
           civilId: hrEmp?.civil_id || '',
           passportNo: hrEmp?.passport_no || '',
@@ -404,7 +404,7 @@ const EmployeeManagement = () => {
 
       if (authError) {
         if (
-          authError.message?.toLowerCase().includes('already registered') || 
+          authError.message?.toLowerCase().includes('already registered') ||
           authError.message?.toLowerCase().includes('already exists') ||
           authError.status === 400
         ) {
@@ -471,7 +471,7 @@ const EmployeeManagement = () => {
       // 4. Update hr_recruits to mark status as 'placed'
       const { error: recruitError } = await supabase
         .from('hr_recruits')
-        .update({ 
+        .update({
           placement_status: 'placed',
           role: finalRole,
           dept: targetDept === 'tax_vat' ? 'Tax & VAT' : targetDept === 'audit' ? 'Audit' : 'Bookkeeping'
@@ -485,17 +485,17 @@ const EmployeeManagement = () => {
         await supabase.functions.invoke('send-email', {
           body: {
             to: selectedPlacement.email,
-            subject: isAr 
-              ? 'مرحباً بك في مجموعة ميسرة - حساب الموظف الخاص بك جاهز!' 
+            subject: isAr
+              ? 'مرحباً بك في مجموعة ميسرة - حساب الموظف الخاص بك جاهز!'
               : 'Welcome to Maisarah - Your Employee Portal is Active!',
             html: `
               <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; color: #333;">
                 <h2 style="color: #A11212; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; text-align: center;">Welcome to Maisarah Group!</h2>
                 <p>Dear ${selectedPlacement.name},</p>
                 <p>
-                  ${isAr 
-                    ? 'يسعدنا إبلاغك بأنه قد تم اعتماد تفاصيل تعيينك وتفعيل حساب الموظف الخاص بك بنجاح. يمكنك الآن تسجيل الدخول لتحديث ملفك والبدء بقائمة مهام التهيئة.' 
-                    : 'We are pleased to inform you that your department placement setup has been finalized and your corporate portal access is now active.'}
+                  ${isAr
+                ? 'يسعدنا إبلاغك بأنه قد تم اعتماد تفاصيل تعيينك وتفعيل حساب الموظف الخاص بك بنجاح. يمكنك الآن تسجيل الدخول لتحديث ملفك والبدء بقائمة مهام التهيئة.'
+                : 'We are pleased to inform you that your department placement setup has been finalized and your corporate portal access is now active.'}
                 </p>
                 <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb;">
                   <h3 style="margin-top: 0; color: #555;">Your Access Credentials:</h3>
@@ -520,7 +520,7 @@ const EmployeeManagement = () => {
       setNotification({
         show: true,
         title: isAr ? 'تم تأكيد التعيين' : 'Placement Finalized',
-        message: isAr 
+        message: isAr
           ? `تم تفعيل حساب الموظف لـ ${selectedPlacement.name} بنجاح وإرسال البريد الإلكتروني (Email B).`
           : `Placement details confirmed! Registered employee account for ${selectedPlacement.name} and dispatched login credentials to ${selectedPlacement.email}.`,
         type: 'success'
@@ -700,7 +700,7 @@ const EmployeeManagement = () => {
       setEmployees(prev => prev.map(emp => emp.id === viewingEmployee.id ? updatedEmployee : emp));
       setViewingEmployee(updatedEmployee);
       setDossierTab('general');
-      
+
       // Show dynamic notification modal
       setNotification({
         show: true,
@@ -805,22 +805,20 @@ const EmployeeManagement = () => {
               <button
                 type="button"
                 onClick={() => setActiveTab('roster')}
-                className={`pb-4 px-4 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-                  activeTab === 'roster' 
-                    ? 'border-brand-dark text-brand-dark' 
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
-                }`}
+                className={`pb-4 px-4 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'roster'
+                  ? 'border-brand-dark text-brand-dark'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}
               >
                 {isAr ? 'قائمة الموظفين النشطين' : 'Active Workforce'}
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('placements')}
-                className={`pb-4 px-4 text-xs font-black uppercase tracking-wider border-b-2 transition-all relative cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'placements' 
-                    ? 'border-brand-dark text-brand-dark' 
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
-                }`}
+                className={`pb-4 px-4 text-xs font-black uppercase tracking-wider border-b-2 transition-all relative cursor-pointer flex items-center gap-1.5 ${activeTab === 'placements'
+                  ? 'border-brand-dark text-brand-dark'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}
               >
                 {isAr ? 'تعيينات الموظفين الجدد' : 'New Hire Placements'}
                 {pendingPlacements.length > 0 && (
@@ -1011,7 +1009,7 @@ const EmployeeManagement = () => {
               <Mail size={16} className="text-brand-dark" />
               {isAr ? 'صندوق طلبات الإجازة' : 'Leave Requests Inbox'}
             </h3>
-            
+
             <div className="space-y-3">
               {[1, 2, 3].map(i => (
                 <div key={i} className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-gray-300 transition-colors cursor-pointer">
@@ -1028,7 +1026,7 @@ const EmployeeManagement = () => {
                 </div>
               ))}
             </div>
-            
+
             <button className="w-full mt-4 text-center text-xs font-bold text-gray-500 hover:text-brand-dark">
               {isAr ? 'عرض كل الطلبات' : 'View all requests'} &rarr;
             </button>
@@ -1163,8 +1161,8 @@ const EmployeeManagement = () => {
               <button onClick={() => setDeleteModalOpen(false)} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors">
                 {isAr ? 'إلغاء' : 'Cancel'}
               </button>
-              <button 
-                onClick={handleDeleteEmployee} 
+              <button
+                onClick={handleDeleteEmployee}
                 disabled={confirmName !== (isAr ? employeeToDelete.name_ar : employeeToDelete.name_en)}
                 className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors disabled:opacity-50"
               >
@@ -1254,8 +1252,8 @@ const EmployeeManagement = () => {
                       else if (placementData.dept === 'audit') suggestedTitle = 'Head of Audit';
                       else suggestedTitle = 'Head of Bookkeeping';
                     }
-                    setPlacementData({ 
-                      ...placementData, 
+                    setPlacementData({
+                      ...placementData,
                       accessRole: newRole,
                       role: suggestedTitle,
                       supervisor: newRole === 'department_head' ? 'Executive Board & Management' : placementData.supervisor
@@ -1317,8 +1315,8 @@ const EmployeeManagement = () => {
 
               <div>
                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                  {placementData.accessRole === 'department_head' 
-                    ? (isAr ? 'جهة التبعية والتقارير' : 'Reporting Authority') 
+                  {placementData.accessRole === 'department_head'
+                    ? (isAr ? 'جهة التبعية والتقارير' : 'Reporting Authority')
                     : (isAr ? 'المشرف المباشر / رئيس القسم' : 'Immediate Supervisor (HOD)')}
                 </label>
                 {placementData.accessRole === 'department_head' ? (
@@ -1370,9 +1368,8 @@ const EmployeeManagement = () => {
       {notification.show && (
         <div className="fixed inset-0 z-55 flex items-center justify-center bg-gray-900/60 backdrop-blur-xs p-4" dir={isAr ? 'rtl' : 'ltr'}>
           <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden p-6 text-center space-y-4 animate-scale-up border border-gray-100">
-            <div className={`mx-auto w-12 h-12 rounded-2xl flex items-center justify-center ${
-              notification.type === 'success' ? 'bg-green-50 text-green-600 animate-bounce' : 'bg-red-50 text-[#A11212]'
-            }`}>
+            <div className={`mx-auto w-12 h-12 rounded-2xl flex items-center justify-center ${notification.type === 'success' ? 'bg-green-50 text-green-600 animate-bounce' : 'bg-red-50 text-[#A11212]'
+              }`}>
               {notification.type === 'success' ? <CheckCircle2 size={24} /> : <AlertTriangle size={24} />}
             </div>
             <div>
@@ -1387,9 +1384,8 @@ const EmployeeManagement = () => {
               <button
                 type="button"
                 onClick={() => setNotification(prev => ({ ...prev, show: false }))}
-                className={`w-full text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:shadow-lg transition-all cursor-pointer ${
-                  notification.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-brand-dark hover:bg-gray-800'
-                }`}
+                className={`w-full text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:shadow-lg transition-all cursor-pointer ${notification.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-brand-dark hover:bg-gray-800'
+                  }`}
               >
                 {isAr ? 'حسناً' : 'OK'}
               </button>
@@ -1408,8 +1404,8 @@ const EmployeeManagement = () => {
                 <Users className="text-brand-dark" size={20} />
                 {isAr ? 'ملف الموظف التفصيلي الشامل' : 'Comprehensive Employee Dossier'}
               </h3>
-              <button 
-                onClick={() => setViewingEmployee(null)} 
+              <button
+                onClick={() => setViewingEmployee(null)}
                 className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200 transition-colors cursor-pointer"
               >
                 <X size={20} />
@@ -1428,9 +1424,8 @@ const EmployeeManagement = () => {
                 <p className="text-xs text-gray-550 font-bold truncate mt-1">
                   {viewingEmployee.job_title || 'Senior Auditor'} · {viewingEmployee.department_id === 'tax_vat' ? (isAr ? 'الضرائب وضريبة القيمة المضافة' : 'Tax & VAT') : viewingEmployee.department_id === 'audit' ? (isAr ? 'التدقيق' : 'Audit') : (isAr ? 'مسك الدفاتر' : 'Bookkeeping')}
                 </p>
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mt-2.5 ${
-                  viewingEmployee.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
-                }`}>
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mt-2.5 ${viewingEmployee.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                  }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${viewingEmployee.status === 'active' ? 'bg-green-500' : 'bg-orange-500'}`} />
                   {viewingEmployee.status === 'active' ? (isAr ? 'نشط' : 'Active') : (isAr ? 'في إجازة' : 'On Leave')}
                 </span>
@@ -1442,36 +1437,32 @@ const EmployeeManagement = () => {
               <button
                 onClick={() => { if (!isEditing) setDossierTab('general'); }}
                 disabled={isEditing}
-                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${
-                  dossierTab === 'general' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
-                }`}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${dossierTab === 'general' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
+                  }`}
               >
                 {isAr ? 'البيانات الشخصية' : 'Personal Info'}
               </button>
               <button
                 onClick={() => { if (!isEditing) setDossierTab('job'); }}
                 disabled={isEditing}
-                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${
-                  dossierTab === 'job' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
-                }`}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${dossierTab === 'job' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
+                  }`}
               >
                 {isAr ? 'الوظيفة والقسم' : 'Job & Dept'}
               </button>
               <button
                 onClick={() => { if (!isEditing) setDossierTab('financials'); }}
                 disabled={isEditing}
-                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${
-                  dossierTab === 'financials' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
-                }`}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${dossierTab === 'financials' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
+                  }`}
               >
                 {isAr ? 'المالية والرواتب' : 'Financials'}
               </button>
               <button
                 onClick={() => { if (!isEditing) setDossierTab('performance'); }}
                 disabled={isEditing}
-                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${
-                  dossierTab === 'performance' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
-                }`}
+                className={`py-3.5 px-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer disabled:opacity-50 ${dossierTab === 'performance' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-650'
+                  }`}
               >
                 {isAr ? 'الأداء والتقارير' : 'Performance'}
               </button>
@@ -1479,7 +1470,7 @@ const EmployeeManagement = () => {
 
             {/* Content */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1 min-h-[400px] mb-2">
-              
+
               {/* Error state */}
               {dossierError && (
                 <div className="p-4 rounded-xl bg-red-50 text-red-700 text-xs font-bold flex items-center gap-2">
@@ -1793,9 +1784,9 @@ const EmployeeManagement = () => {
                       <span className="text-xs font-black text-brand-dark">{viewingEmployee.completionRate}%</span>
                     </div>
                     <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                      <div 
-                        className="bg-brand-dark h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${viewingEmployee.completionRate}%` }} 
+                      <div
+                        className="bg-brand-dark h-full rounded-full transition-all duration-500"
+                        style={{ width: `${viewingEmployee.completionRate}%` }}
                       />
                     </div>
                   </div>
@@ -1832,7 +1823,7 @@ const EmployeeManagement = () => {
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
               {isEditing ? (
                 <>
-                  <button 
+                  <button
                     onClick={() => {
                       setIsEditing(false);
                       if (viewingEmployee) {
@@ -1860,12 +1851,12 @@ const EmployeeManagement = () => {
                           otherAllowance: viewingEmployee.allowances?.other || 0
                         });
                       }
-                    }} 
+                    }}
                     className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-750 rounded-xl text-xs font-bold uppercase transition-colors cursor-pointer"
                   >
                     {isAr ? 'إلغاء' : 'Cancel'}
                   </button>
-                  <button 
+                  <button
                     onClick={handleSaveDossierChanges}
                     disabled={isSavingDossier}
                     className="px-6 py-2.5 bg-[#A11212] hover:bg-[#800e0e] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
@@ -1880,7 +1871,7 @@ const EmployeeManagement = () => {
               ) : (
                 <>
                   {dossierTab !== 'performance' ? (
-                    <button 
+                    <button
                       onClick={() => setIsEditing(true)}
                       className="px-5 py-2.5 bg-brand-dark hover:bg-gray-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
@@ -1888,8 +1879,8 @@ const EmployeeManagement = () => {
                       {isAr ? 'تعديل البيانات' : 'Edit Profile'}
                     </button>
                   ) : <div />}
-                  <button 
-                    onClick={() => setViewingEmployee(null)} 
+                  <button
+                    onClick={() => setViewingEmployee(null)}
                     className="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-750 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
                   >
                     {isAr ? 'إغلاق' : 'Close'}
