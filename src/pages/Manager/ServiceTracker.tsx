@@ -95,6 +95,7 @@ const OperationsCenter = () => {
 
   // Modals & Menu State
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null);
   const [reassignService, setReassignService] = useState<ServiceRecord | null>(null);
@@ -177,16 +178,43 @@ const OperationsCenter = () => {
     };
   }, [fetchServices]);
 
-  // Click outside listener for action dropdown
+  // Click outside / scroll listener to close action menu
   useEffect(() => {
-    const handleDocClick = () => setActiveMenuId(null);
+    const handleClose = () => {
+      setActiveMenuId(null);
+      setMenuPos(null);
+    };
     if (activeMenuId) {
-      window.addEventListener('click', handleDocClick);
+      window.addEventListener('click', handleClose);
+      window.addEventListener('scroll', handleClose, true);
+      window.addEventListener('resize', handleClose);
     }
     return () => {
-      window.removeEventListener('click', handleDocClick);
+      window.removeEventListener('click', handleClose);
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
     };
   }, [activeMenuId]);
+
+  // Open / Toggle Action Menu with exact screen positioning
+  const handleOpenMenu = (e: React.MouseEvent, svcId: string) => {
+    e.stopPropagation();
+    if (activeMenuId === svcId) {
+      setActiveMenuId(null);
+      setMenuPos(null);
+    } else {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const menuWidth = 208;
+      const menuHeight = 145;
+      
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const top = spaceBelow < menuHeight ? rect.top - menuHeight + 2 : rect.bottom + 4;
+      const left = isAr ? Math.max(12, rect.left) : Math.min(window.innerWidth - menuWidth - 12, rect.right - menuWidth);
+
+      setMenuPos({ top, left });
+      setActiveMenuId(svcId);
+    }
+  };
 
   // ── Map service title to department ────────────────────────────────────────
   const getDepartmentForService = (title: string) => {
@@ -209,22 +237,6 @@ const OperationsCenter = () => {
     if (diffDays === 0) return { text: 'Due Today', color: 'text-white', bg: 'bg-orange-500' };
     if (diffDays <= 3) return { text: `${diffDays}d Left`, color: 'text-orange-700', bg: 'bg-orange-100' };
     return { text: `${diffDays}d Left`, color: 'text-green-700', bg: 'bg-green-100' };
-  };
-
-  // ── Status Quick-Update ────────────────────────────────────────────────────
-  const handleStatusChange = async (serviceId: string, newStatus: ServiceRecord['status']) => {
-    setActiveMenuId(null);
-    setServices(prev => prev.map(s => s.id === serviceId ? { ...s, status: newStatus } : s));
-
-    const { error } = await supabase
-      .from('services')
-      .update({ status: newStatus })
-      .eq('id', serviceId);
-
-    if (error) {
-      console.error('Failed to update status:', error);
-      fetchServices(true);
-    }
   };
 
   // ── Reassign Employee ──────────────────────────────────────────────────────
@@ -313,6 +325,7 @@ const OperationsCenter = () => {
     
     setServices(prev => prev.filter(s => s.id !== serviceId));
     setActiveMenuId(null);
+    setMenuPos(null);
 
     const { error } = await supabase
       .from('services')
@@ -456,7 +469,7 @@ const OperationsCenter = () => {
         </div>
 
         {/* High-Density Pipeline Table */}
-        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-visible min-h-[380px] pb-10">
+        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 min-h-[360px]">
           {loading ? (
             <div className="p-20 flex justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark" />
@@ -466,7 +479,7 @@ const OperationsCenter = () => {
               {isAr ? 'لا توجد عمليات تطابق البحث' : 'No operations found matching your filters.'}
             </div>
           ) : (
-            <div className="overflow-x-auto overflow-y-visible">
+            <div className="overflow-x-auto">
               <table className="w-full text-start whitespace-nowrap">
                 <thead className="bg-gray-50/75 border-b border-gray-100">
                   <tr>
@@ -502,11 +515,10 @@ const OperationsCenter = () => {
                     const dept = getDepartmentForService(svc.title);
                     const deptCode = DEPARTMENT_CODES[dept.id] || 'OPS';
                     const sla = getSLAStatus(svc.due_date);
-                    const isMenuOpen = activeMenuId === svc.id;
-                    const isNearBottom = index >= Math.max(0, filtered.length - 2);
+                    const isSelected = activeMenuId === svc.id;
 
                     return (
-                      <tr key={svc.id} className="group hover:bg-gray-50/60 transition-colors relative">
+                      <tr key={svc.id} className="group hover:bg-gray-50/60 transition-colors">
                         {/* 1. Sequence & Department Code */}
                         <td className="px-6 py-4">
                           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gray-100/80 border border-gray-200/60 text-gray-800 font-black text-xs shadow-2xs">
@@ -594,89 +606,19 @@ const OperationsCenter = () => {
                           </div>
                         </td>
 
-                        {/* 8. Actions Menu */}
-                        <td className="px-6 py-4 text-end relative">
+                        {/* 8. Actions Menu Button */}
+                        <td className="px-6 py-4 text-end">
                           <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenuId(isMenuOpen ? null : svc.id);
-                            }}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-brand-dark hover:bg-gray-100 transition-colors cursor-pointer"
+                            onClick={(e) => handleOpenMenu(e, svc.id)}
+                            className={`p-2 rounded-xl transition-all cursor-pointer ${
+                              isSelected 
+                                ? 'bg-brand-dark text-white shadow-sm' 
+                                : 'text-gray-400 hover:text-brand-dark hover:bg-gray-100'
+                            }`}
+                            title={isAr ? 'إجراءات' : 'Actions'}
                           >
                             <MoreVertical size={16} />
                           </button>
-
-                          {/* Dropdown Action Menu */}
-                          {isMenuOpen && (
-                            <div 
-                              onClick={(e) => e.stopPropagation()}
-                              className={`absolute ${isAr ? 'left-2' : 'right-2'} ${isNearBottom ? 'bottom-10' : 'top-10'} w-52 bg-white rounded-2xl shadow-2xl border border-gray-200/90 py-2 z-50 text-start`}
-                            >
-                              <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">
-                                {isAr ? 'تغيير الحالة' : 'Change State'}
-                              </div>
-                              <button
-                                onClick={() => handleStatusChange(svc.id, 'ongoing')}
-                                className="w-full px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2 cursor-pointer transition-colors"
-                              >
-                                <PlayCircle size={14} /> Ongoing
-                              </button>
-                              <button
-                                onClick={() => handleStatusChange(svc.id, 'under_review')}
-                                className="w-full px-3 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 flex items-center gap-2 cursor-pointer transition-colors"
-                              >
-                                <Clock size={14} /> Review
-                              </button>
-                              <button
-                                onClick={() => handleStatusChange(svc.id, 'completed')}
-                                className="w-full px-3 py-2 text-xs font-bold text-green-600 hover:bg-green-50 flex items-center gap-2 cursor-pointer transition-colors"
-                              >
-                                <CheckCircle2 size={14} /> Completed
-                              </button>
-                              <button
-                                onClick={() => handleStatusChange(svc.id, 'delayed')}
-                                className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer transition-colors"
-                              >
-                                <AlertTriangle size={14} /> Delayed
-                              </button>
-
-                              <div className="my-1 border-t border-gray-100" />
-                              
-                              <button
-                                onClick={() => {
-                                  setActiveMenuId(null);
-                                  setReassignService(svc);
-                                }}
-                                className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors"
-                              >
-                                <UserPlus size={14} className="text-gray-400" /> {isAr ? 'إعادة تعيين المسؤول' : 'Reassign Assignee'}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveMenuId(null);
-                                  setEditingService(svc);
-                                  setFormData({
-                                    title: svc.title,
-                                    client_id: svc.client_id || '',
-                                    employee_id: svc.employee_id || '',
-                                    due_date: svc.due_date || '',
-                                    description: svc.description || '',
-                                    status: svc.status
-                                  });
-                                  setShowCreateModal(true);
-                                }}
-                                className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors"
-                              >
-                                <Edit size={14} className="text-gray-400" /> {isAr ? 'تعديل العملية' : 'Edit Operation'}
-                              </button>
-                              <button
-                                onClick={() => handleDeleteService(svc.id)}
-                                className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer transition-colors"
-                              >
-                                <Trash2 size={14} /> {isAr ? 'حذف العملية' : 'Delete Operation'}
-                              </button>
-                            </div>
-                          )}
                         </td>
                       </tr>
                     );
@@ -687,6 +629,78 @@ const OperationsCenter = () => {
           )}
         </div>
       </div>
+
+      {/* ── Global Fixed Actions Popover Menu ─────────────────────────────── */}
+      {activeMenuId && menuPos && (
+        <div
+          style={{
+            position: 'fixed',
+            top: `${menuPos.top}px`,
+            left: `${menuPos.left}px`,
+            zIndex: 9999
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-52 bg-white rounded-2xl shadow-2xl border border-gray-200/90 py-1.5 text-start animate-scale-up"
+        >
+          <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">
+            {isAr ? 'الإجراءات' : 'Actions'}
+          </div>
+
+          <div className="p-1 space-y-0.5">
+            <button
+              onClick={() => {
+                const svc = services.find(s => s.id === activeMenuId);
+                setActiveMenuId(null);
+                setMenuPos(null);
+                if (svc) setReassignService(svc);
+              }}
+              className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-brand-dark/5 hover:text-brand-dark rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+            >
+              <UserPlus size={15} className="text-brand-dark" />
+              <span>{isAr ? 'إعادة تعيين المسؤول' : 'Reassign Assignee'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const svc = services.find(s => s.id === activeMenuId);
+                setActiveMenuId(null);
+                setMenuPos(null);
+                if (svc) {
+                  setEditingService(svc);
+                  setFormData({
+                    title: svc.title,
+                    client_id: svc.client_id || '',
+                    employee_id: svc.employee_id || '',
+                    due_date: svc.due_date || '',
+                    description: svc.description || '',
+                    status: svc.status
+                  });
+                  setShowCreateModal(true);
+                }
+              }}
+              className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+            >
+              <Edit size={15} className="text-blue-600" />
+              <span>{isAr ? 'تعديل العملية' : 'Edit Operation'}</span>
+            </button>
+          </div>
+
+          <div className="p-1 border-t border-gray-100">
+            <button
+              onClick={() => {
+                const id = activeMenuId;
+                setActiveMenuId(null);
+                setMenuPos(null);
+                handleDeleteService(id);
+              }}
+              className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+            >
+              <Trash2 size={15} className="text-red-500" />
+              <span>{isAr ? 'حذف العملية' : 'Delete Operation'}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Create / Edit Operation Modal ─────────────────────────────────── */}
       {showCreateModal && (
