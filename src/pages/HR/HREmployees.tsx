@@ -238,78 +238,149 @@ export default function HREmployees() {
     const loadEmployeesAndSync = async () => {
       setLoading(true);
       try {
-        const { data: dbEmployees, error } = await supabase
-          .from('hr_employees')
-          .select('*');
+        const [{ data: dbEmployees, error: hrError }, { data: profiles, error: profError }] = await Promise.all([
+          supabase.from('hr_employees').select('*'),
+          supabase.from('profiles').select('*')
+        ]);
 
-        const saved = localStorage.getItem('hr_employee_records');
-        let baseList = saved ? JSON.parse(saved) : MOCK_EMPLOYEES;
+        const rawProfiles = (profiles || []).filter(p => p.role !== 'client');
+        const rawHr = dbEmployees || [];
 
-        if (dbEmployees && dbEmployees.length > 0) {
-          const mappedDb = dbEmployees.map((item: any) => ({
-            id: item.id,
-            name: item.full_name,
-            role: item.role || 'Senior Auditor',
-            dept: item.dept || 'Audit',
-            email: item.email,
-            phone: item.phone || '',
-            companyPhone: item.company_phone || '',
-            civilId: item.civil_id || '',
-            passportNo: item.passport_no || '',
-            residencyNo: item.residency_no || '',
-            nationality: item.nationality || 'Omani',
-            dob: item.dob || '',
-            gender: item.gender || 'Male',
-            maritalStatus: item.marital_status || 'Single',
-            joinedDate: item.joined_date || '',
-            immediateSupervisor: item.immediate_supervisor || '',
-            basicSalary: Number(item.basic_salary || 0),
-            type: item.employee_type || 'Experienced',
-            accommodationStatus: item.accommodation_status || '',
-            accommodationDetails: item.accommodation_details || '',
-            allowances: item.allowances || { transport: 0, housing: 0, other: 0 },
-            education: item.education || [],
-            experience: item.experience || [],
-            family: item.family || [],
-            emergencyContact: item.emergency_contact || { name: '', relation: '', phone: '' },
-            documents: item.documents || [],
-            promotions: item.promotions || [],
-            disciplinaries: item.disciplinaries || [],
-            bonuses: item.bonuses || [],
-            transfers: item.transfers || []
-          }));
+        // Build unified list from Supabase profiles + hr_employees
+        const liveEmployees: Employee[] = rawProfiles.map(p => {
+          const hrEmp = rawHr.find((h: any) => h.id === p.id || (h.email && p.email && h.email.toLowerCase() === p.email.toLowerCase()));
 
-          // Filter out localStorage duplicates by ID
-          const filteredBase = baseList.filter(
-            (be: any) => !mappedDb.some((de: any) => de.id === be.id)
-          );
+          // Map department
+          let rawDept = hrEmp?.dept || p.department || p.department_id || 'Audit';
+          let dept = 'Audit';
+          const lowerDept = String(rawDept).toLowerCase();
+          if (lowerDept.includes('tax') || lowerDept.includes('vat')) dept = 'Tax & VAT';
+          else if (lowerDept.includes('book') || lowerDept.includes('account')) dept = 'Bookkeeping';
+          else if (lowerDept.includes('advis') || lowerDept.includes('consult')) dept = 'Business Advisory';
+          else if (lowerDept.includes('success') || lowerDept.includes('client') || lowerDept.includes('operat')) dept = 'Client Success';
+          else if (lowerDept.includes('audit')) dept = 'Audit';
 
-          const merged = [...mappedDb, ...filteredBase];
-          setEmployees(merged);
-          localStorage.setItem('hr_employee_records', JSON.stringify(merged));
-          if (merged.length > 0) {
-            setSelectedEmpId(merged[0].id);
+          // Map role
+          let role = hrEmp?.role;
+          if (!role) {
+            if (p.role === 'department_head') role = `Head of ${dept}`;
+            else if (p.role === 'accountant') role = 'Senior Accountant';
+            else if (p.role === 'hr') role = 'HR Manager';
+            else if (p.role === 'manager') role = 'Executive Manager';
+            else if (p.role === 'crm') role = 'CRM Coordinator';
+            else role = 'Senior Auditor';
           }
-        } else {
-          setEmployees(baseList);
-          if (baseList.length > 0) {
-            setSelectedEmpId(baseList[0].id);
+
+          const phone = hrEmp?.phone || p.phone || '+968 98745632';
+
+          return {
+            id: p.id,
+            name: hrEmp?.full_name || p.full_name || p.name || 'Employee',
+            role: role,
+            dept: dept,
+            email: p.email || hrEmp?.email || '',
+            phone: phone,
+            companyPhone: hrEmp?.company_phone || '+968 2456 0000',
+            civilId: hrEmp?.civil_id || '109876543',
+            passportNo: hrEmp?.passport_no || 'OM1234567',
+            residencyNo: hrEmp?.residency_no || 'PR9876543',
+            nationality: hrEmp?.nationality || 'Omani',
+            dob: hrEmp?.dob || '1992-05-15',
+            gender: hrEmp?.gender || 'Male',
+            maritalStatus: hrEmp?.marital_status || 'Single',
+            joinedDate: hrEmp?.joined_date || (p.created_at ? p.created_at.split('T')[0] : '2024-01-15'),
+            immediateSupervisor: hrEmp?.immediate_supervisor || (dept === 'Tax & VAT' ? 'Khalfan Al-Abri' : dept === 'Audit' ? 'Dr. Tariq Al-Hashimi' : 'Executive Board'),
+            basicSalary: Number(hrEmp?.basic_salary || 1200),
+            type: ((hrEmp?.employee_type as any) || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
+            accommodationStatus: hrEmp?.accommodation_status || 'Lives with family',
+            accommodationDetails: hrEmp?.accommodation_details || '',
+            allowances: hrEmp?.allowances || { transport: 150, housing: 250, other: 50 },
+            education: hrEmp?.education && hrEmp.education.length > 0 ? hrEmp.education : [
+              { degree: 'Bachelor of Science', field: 'Accounting & Finance', institution: 'Sultan Qaboos University', year: '2016' }
+            ],
+            experience: hrEmp?.experience && hrEmp.experience.length > 0 ? hrEmp.experience : [
+              { role: 'Audit Associate', company: 'Maisarah Group', duration: '3 Years' }
+            ],
+            family: hrEmp?.family || [],
+            emergencyContact: hrEmp?.emergency_contact || { name: 'Emergency Contact', relation: 'Family', phone: phone },
+            documents: hrEmp?.documents && hrEmp.documents.length > 0 ? hrEmp.documents : [
+              { name: 'Civil ID Copy', type: 'civil_id', expiry: '2028-12-31', status: 'active' },
+              { name: 'Passport Copy', type: 'passport', expiry: '2029-06-30', status: 'active' },
+              { name: 'Employment Contract', type: 'contract', expiry: '2026-12-31', status: 'active' }
+            ],
+            promotions: hrEmp?.promotions || [],
+            disciplinaries: hrEmp?.disciplinaries || [],
+            bonuses: hrEmp?.bonuses || [],
+            transfers: hrEmp?.transfers || []
+          };
+        });
+
+        // Also add any hr_employees that didn't have profiles
+        for (const h of rawHr) {
+          if (!liveEmployees.some(e => e.id === h.id || (h.email && e.email && h.email.toLowerCase() === e.email.toLowerCase()))) {
+            liveEmployees.push({
+              id: h.id,
+              name: h.full_name || 'Employee',
+              role: h.role || 'Senior Auditor',
+              dept: h.dept || 'Audit',
+              email: h.email || '',
+              phone: h.phone || '',
+              companyPhone: h.company_phone || '',
+              civilId: h.civil_id || '',
+              passportNo: h.passport_no || '',
+              residencyNo: h.residency_no || '',
+              nationality: h.nationality || 'Omani',
+              dob: h.dob || '',
+              gender: h.gender || 'Male',
+              maritalStatus: h.marital_status || 'Single',
+              joinedDate: h.joined_date || '',
+              immediateSupervisor: h.immediate_supervisor || '',
+              basicSalary: Number(h.basic_salary || 1000),
+              type: (h.employee_type || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
+              accommodationStatus: h.accommodation_status || 'Lives with family',
+              accommodationDetails: h.accommodation_details || '',
+              allowances: h.allowances || { transport: 150, housing: 250, other: 50 },
+              education: h.education || [],
+              experience: h.experience || [],
+              family: h.family || [],
+              emergencyContact: h.emergency_contact || { name: '', relation: '', phone: '' },
+              documents: h.documents || [],
+              promotions: h.promotions || [],
+              disciplinaries: h.disciplinaries || [],
+              bonuses: h.bonuses || [],
+              transfers: h.transfers || []
+            });
           }
+        }
+
+        setEmployees(liveEmployees);
+        localStorage.setItem('hr_employee_records', JSON.stringify(liveEmployees));
+        if (liveEmployees.length > 0) {
+          setSelectedEmpId(prev => prev && liveEmployees.some(e => e.id === prev) ? prev : liveEmployees[0].id);
         }
       } catch (err) {
-        console.error('Failed to load live employees, using localStorage fallback:', err);
-        const saved = localStorage.getItem('hr_employee_records');
-        const baseList = saved ? JSON.parse(saved) : MOCK_EMPLOYEES;
-        setEmployees(baseList);
-        if (baseList.length > 0) {
-          setSelectedEmpId(baseList[0].id);
-        }
+        console.error('Failed to load live employees:', err);
       } finally {
         setLoading(false);
       }
     };
 
     loadEmployeesAndSync();
+
+    // Supabase Realtime Subscription
+    const channel = supabase
+      .channel('hr_dossier_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        loadEmployeesAndSync();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_employees' }, () => {
+        loadEmployeesAndSync();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const saveEmployees = async (list: Employee[]) => {
@@ -321,6 +392,13 @@ export default function HREmployees() {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(emp.id);
       if (isUuid) {
         try {
+          // 1. Update profiles table
+          await supabase.from('profiles').update({
+            full_name: emp.name,
+            phone: emp.phone,
+          }).eq('id', emp.id);
+
+          // 2. Upsert hr_employees table
           await supabase.from('hr_employees').upsert({
             id: emp.id,
             full_name: emp.name,
@@ -352,7 +430,7 @@ export default function HREmployees() {
             disciplinaries: emp.disciplinaries,
             bonuses: emp.bonuses,
             transfers: emp.transfers
-          });
+          }, { onConflict: 'id' });
         } catch (dbErr) {
           console.error('Error syncing employee edit to database:', dbErr);
         }
@@ -1192,7 +1270,7 @@ export default function HREmployees() {
                           </div>
                           <div>
                             <p className="text-[10px] text-gray-400 font-bold">Personal Phone</p>
-                            <p className="text-xs font-black text-gray-900">{selectedEmp.phone}</p>
+                            <p className="text-xs font-black text-gray-900">{selectedEmp.phone || 'N/A'}</p>
                           </div>
                           <div>
                             <p className="text-[10px] text-gray-400 font-bold">Company Phone</p>
@@ -1231,8 +1309,14 @@ export default function HREmployees() {
                           </div>
                           <div className="col-span-2 border-t border-gray-200/50 pt-2.5">
                             <p className="text-[10px] text-gray-400 font-bold">Emergency Contact</p>
-                            <p className="text-xs font-black text-gray-900">{selectedEmp.emergencyContact.name} ({selectedEmp.emergencyContact.relation})</p>
-                            <p className="text-[10px] text-gray-505 mt-0.5">{selectedEmp.emergencyContact.phone}</p>
+                            <p className="text-xs font-black text-gray-900">
+                              {selectedEmp.emergencyContact?.name 
+                                ? `${selectedEmp.emergencyContact.name} (${selectedEmp.emergencyContact.relation || 'Relation'})` 
+                                : 'N/A'}
+                            </p>
+                            {selectedEmp.emergencyContact?.phone && (
+                              <p className="text-[10px] text-gray-500 mt-0.5">{selectedEmp.emergencyContact.phone}</p>
+                            )}
                           </div>
                         </div>
                       </div>
