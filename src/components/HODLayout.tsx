@@ -27,6 +27,8 @@ const HODLayout = () => {
   const [deptContext, setDeptContext] = useState<string>('audit');
   const [deptName, setDeptName] = useState<string>('Audit');
 
+  const [delayCount, setDelayCount] = useState<number>(0);
+
   useEffect(() => {
     // Dynamic Department Context fetch from Supabase Profiles Table
     const fetchDepartmentContext = async () => {
@@ -58,6 +60,22 @@ const HODLayout = () => {
           };
           setDeptName(names[dept] || deptValue);
         }
+
+        // Fetch delayed tasks count
+        const { data: servs } = await supabase
+          .from('services')
+          .select('id, status, due_date')
+          .neq('status', 'completed');
+
+        if (servs) {
+          const now = new Date();
+          const delays = servs.filter(s => {
+            if (s.status === 'delayed') return true;
+            if (s.due_date && new Date(s.due_date) < now) return true;
+            return false;
+          }).length;
+          setDelayCount(delays);
+        }
       } catch (err) {
         console.error("Error fetching department context:", err);
       }
@@ -67,7 +85,7 @@ const HODLayout = () => {
   }, [user, isAr]);
 
   const navItems = [
-    { path: '/hod/dashboard', icon: LayoutGrid, label: isAr ? 'لوحة قيادة القسم' : 'Dashboard' },
+    { path: '/hod/dashboard', icon: LayoutGrid, label: isAr ? 'لوحة قيادة القسم' : 'Dashboard', badge: delayCount > 0 ? delayCount : undefined },
     { path: '/hod/team-leadership', icon: Users, label: isAr ? 'قيادة الفريق' : 'Team Leadership' },
     { path: '/hod/work-routing', icon: Send, label: isAr ? 'توجيه المهام' : 'Work Routing' },
     { path: '/hod/quality-control', icon: CheckSquare, label: isAr ? 'رقابة الجودة والاعتمادات' : 'Quality Control' },
@@ -121,7 +139,14 @@ const HODLayout = () => {
                 }`}
               >
                 <item.icon size={18} className={isActive ? 'text-white' : 'text-gray-400'} />
-                <span className="text-xs uppercase tracking-wider">{item.label}</span>
+                <span className="text-xs uppercase tracking-wider flex-1 text-start">{item.label}</span>
+                {item.badge !== undefined && (
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                    isActive ? 'bg-white text-[#A11212]' : 'bg-red-100 text-[#A11212]'
+                  }`}>
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}

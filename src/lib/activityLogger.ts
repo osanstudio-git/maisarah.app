@@ -8,7 +8,10 @@ export type ActivityType =
   | 'invoice_created' 
   | 'invoice_paid' 
   | 'broadcast_sent'
-  | 'service_approved';
+  | 'service_approved'
+  | 'delay_escalated'
+  | 'delay_action_logged'
+  | 'task_dispatched';
 
 export const logActivity = async (
   userId: string,

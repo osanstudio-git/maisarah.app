@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useOutletContext } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
+import { useAuth } from '../../hooks/useAuth';
+import { logActivity } from '../../lib/activityLogger';
 import {
   Activity,
   Users,
@@ -32,152 +34,155 @@ import {
   Trash2,
   ArrowUpRight,
   ThumbsUp,
-  Truck
+  Truck,
+  Building2,
+  UserPlus,
+  RefreshCw,
+  X,
+  Sparkles,
+  AlertCircle,
+  HelpCircle,
+  CheckCircle
 } from 'lucide-react';
-import { getDepartmentById } from '../../config/departments';
+import { getDepartmentById, getAllDepartments } from '../../config/departments';
 
-// --- MOCK DATABASE ENTRIES (CONTEXTUALLY FILTERED) ---
-const DEPT_DATA: Record<string, {
-  personnel: Array<{ id: string; name: string; role: string; load: number; tasksCompleted: number; delayed: number; accuracy: number }>;
-  services: string[];
-  clients: Array<{ id: string; name: string; package: string; activeProject: string; status: 'good' | 'warning' | 'critical'; rating?: number }>;
-  tasks: Array<{ id: string; title: string; client: string; assignee: string; status: 'todo' | 'in_progress' | 'under_review' | 'completed'; priority: 'high' | 'medium' | 'low'; due: string }>;
-  directives: Array<{ id: string; text: string; issuedBy: string; date: string }>;
-}> = {
-  audit: {
-    personnel: [
-      { id: 'p1', name: 'Ali Al-Harthy', role: 'Senior Auditor', load: 60, tasksCompleted: 48, delayed: 0, accuracy: 98 },
-      { id: 'p2', name: 'Muna Al-Farsi', role: 'Audit Assistant', load: 80, tasksCompleted: 35, delayed: 1, accuracy: 94 },
-      { id: 'p3', name: 'Hasan Al-Balushi', role: 'Audit Trainee', load: 45, tasksCompleted: 12, delayed: 3, accuracy: 88 }
-    ],
-    services: ['Internal Audit', 'KSA Audit', 'Financial Statements', 'Tax Audit', 'Bank Audit'],
-    clients: [
-      { id: 'cl1', name: 'Oman Telco LLC', package: 'Annual Statutory Audit', activeProject: 'Q4 Audit Review', status: 'good' },
-      { id: 'cl2', name: 'Muscat Port Services', package: 'Internal Controls Review', activeProject: 'Compliance Audit', status: 'good' },
-      { id: 'cl3', name: 'Al Maha Petroleum', package: 'KSA Branch Audit', activeProject: 'Tax Compliance Audit', status: 'warning' }
-    ],
-    tasks: [
-      { id: 't101', title: 'Q4 Audit Planning', client: 'Oman Telco LLC', assignee: 'Ali Al-Harthy', status: 'in_progress', priority: 'high', due: '2026-07-15' },
-      { id: 't102', title: 'Fieldwork Inspection', client: 'Muscat Port Services', assignee: 'Muna Al-Farsi', status: 'under_review', priority: 'medium', due: '2026-07-20' },
-      { id: 't103', title: 'Draft Report Compilation', client: 'Al Maha Petroleum', assignee: 'Hasan Al-Balushi', status: 'todo', priority: 'high', due: '2026-07-10' }
-    ],
-    directives: [
-      { id: 'd1', text: 'Accelerate the statutory review cycle for Oman Telco Group.', issuedBy: 'Executive Management', date: '2026-06-30' }
-    ]
-  },
-  tax_vat: {
-    personnel: [
-      { id: 'p4', name: 'Khalfan Al-Abri', role: 'Tax Accountant', load: 75, tasksCompleted: 52, delayed: 0, accuracy: 99 },
-      { id: 'p5', name: 'Fatma Al-Busaidi', role: 'Tax Consultant', load: 85, tasksCompleted: 41, delayed: 2, accuracy: 96 },
-      { id: 'p6', name: 'Zaid Al-Siyabi', role: 'Tax Trainee', load: 30, tasksCompleted: 8, delayed: 0, accuracy: 90 }
-    ],
-    services: ['Income Tax Filing', 'VAT Filing', 'Tax Certificate', 'Renew Tax Certificate', 'Objection', 'Exemption', 'VAT Cancelation'],
-    clients: [
-      { id: 'cl4', name: 'Mazoon Electricity', package: 'VAT Corporate Filing', activeProject: 'Q2 Return Submission', status: 'good' },
-      { id: 'cl5', name: 'Sohar Steel Co', package: 'Tax Advisory Retainer', activeProject: 'Exemption Case Appeal', status: 'warning' },
-      { id: 'cl6', name: 'Oman Food Logistics', package: 'Tax Certificate Renewal', activeProject: 'Certificate Verification', status: 'critical' }
-    ],
-    tasks: [
-      { id: 't201', title: 'VAT Return Filing', client: 'Mazoon Electricity', assignee: 'Khalfan Al-Abri', status: 'in_progress', priority: 'high', due: '2026-07-18' },
-      { id: 't202', title: 'Prepare Exemption Appeal', client: 'Sohar Steel Co', assignee: 'Fatma Al-Busaidi', status: 'under_review', priority: 'medium', due: '2026-07-25' },
-      { id: 't203', title: 'Verify Audit Documents', client: 'Oman Food Logistics', assignee: 'Zaid Al-Siyabi', status: 'todo', priority: 'high', due: '2026-07-05' }
-    ],
-    directives: [
-      { id: 'd2', text: 'All VAT filings for this quarter must undergo dual-verification.', issuedBy: 'Corporate Compliance Head', date: '2026-07-01' }
-    ]
-  },
-  bookkeeping: {
-    personnel: [
-      { id: 'p7', name: 'Zahra Al-Lawati', role: 'Accounting Consultant', load: 50, tasksCompleted: 60, delayed: 0, accuracy: 97 },
-      { id: 'p8', name: 'Issa Al-Riyami', role: 'Bookkeeper', load: 90, tasksCompleted: 74, delayed: 4, accuracy: 91 },
-      { id: 'p9', name: 'Azza Al-Kharusi', role: 'Accounting Trainee', load: 65, tasksCompleted: 18, delayed: 1, accuracy: 95 }
-    ],
-    services: ['Complete Client Bookkeeping', 'Bank Reconciliations', 'Payroll Reconciliation', 'Year-End Account Preparation'],
-    clients: [
-      { id: 'cl7', name: 'Salalah Port Services', package: 'Monthly Bookkeeping', activeProject: 'June Ledger Reconciliation', status: 'good' },
-      { id: 'cl8', name: 'Gulf General Trading', package: 'Ledger Audit Prep', activeProject: 'Bank Sync Validation', status: 'warning' },
-      { id: 'cl9', name: 'Muscat Bakery Group', package: 'Payroll Bookkeeping', activeProject: 'Monthly Payroll Run', status: 'good' }
-    ],
-    tasks: [
-      { id: 't301', title: 'June Bank Reconciliation', client: 'Salalah Port Services', assignee: 'Zahra Al-Lawati', status: 'in_progress', priority: 'medium', due: '2026-07-14' },
-      { id: 't302', title: 'Sync Bank Statement Logs', client: 'Gulf General Trading', assignee: 'Issa Al-Riyami', status: 'todo', priority: 'high', due: '2026-07-07' },
-      { id: 't303', title: 'Compile Payroll Accruals', client: 'Muscat Bakery Group', assignee: 'Azza Al-Kharusi', status: 'completed', priority: 'low', due: '2026-07-01' }
-    ],
-    directives: [
-      { id: 'd3', text: 'Clean up backlog transactions for Gulf General Trading.', issuedBy: 'Financial Controller', date: '2026-06-28' }
-    ]
-  },
-  business_advisory: {
-    personnel: [
-      { id: 'p10', name: 'Dr. Salim Al-Maskari', role: 'Business Consultant', load: 55, tasksCompleted: 28, delayed: 0, accuracy: 99 },
-      { id: 'p11', name: 'Mazin Al-Hinai', role: 'Financial Analyst', load: 70, tasksCompleted: 30, delayed: 1, accuracy: 96 },
-      { id: 'p12', name: 'Laila Al-Ajmi', role: 'Liquidation Officer', load: 80, tasksCompleted: 22, delayed: 2, accuracy: 94 },
-      { id: 'p13', name: 'Asma Al-Kindi', role: 'BD Assistant', load: 40, tasksCompleted: 15, delayed: 0, accuracy: 92 }
-    ],
-    services: ['Strategic Consultancy', 'Feasibility Studies', 'Corporate Formations', 'Business Plans', 'Project Budgeting', 'Bank Feasibility Studies', 'CR Cancellations'],
-    clients: [
-      { id: 'cl10', name: 'Khimji Group', package: 'Feasibility Assessment', activeProject: 'New Retail Mall Study', status: 'good' },
-      { id: 'cl11', name: 'Al Zawawi Holdings', package: 'Corporate Re-structuring', activeProject: 'Restructure Advisory', status: 'warning' },
-      { id: 'cl12', name: 'Bahwan Engineering', package: 'Ministry Approval Consult', activeProject: 'CR Cancellation Handling', status: 'good' }
-    ],
-    tasks: [
-      { id: 't401', title: 'Financial Model Study', client: 'Khimji Group', assignee: 'Mazin Al-Hinai', status: 'in_progress', priority: 'high', due: '2026-07-22' },
-      { id: 't402', title: 'CR Expiry Verification', client: 'Bahwan Engineering', assignee: 'Laila Al-Ajmi', status: 'todo', priority: 'high', due: '2026-07-10' },
-      { id: 't403', title: 'Draft Advisory Proposal', client: 'Al Zawawi Holdings', assignee: 'Dr. Salim Al-Maskari', status: 'under_review', priority: 'medium', due: '2026-07-15' }
-    ],
-    directives: [
-      { id: 'd4', text: 'All feasibility studies must pass internal secondary peer review.', issuedBy: 'Managing Director', date: '2026-06-25' }
-    ]
-  },
-  client_success: {
-    personnel: [
-      { id: 'p14', name: 'Amna Al-Shabibi', role: 'Client Relations Officer', load: 65, tasksCompleted: 95, delayed: 1, accuracy: 97 },
-      { id: 'p15', name: 'Qais Al-Zadjali', role: 'Sales Executive', load: 50, tasksCompleted: 40, delayed: 0, accuracy: 95 },
-      { id: 'p16', name: 'Hamad Al-Ghafri', role: 'Public Relations Officer', load: 80, tasksCompleted: 110, delayed: 3, accuracy: 92 },
-      { id: 'p17', name: 'Said Al-Rawahi', role: 'Driver & Dispatch', load: 90, tasksCompleted: 180, delayed: 5, accuracy: 89 }
-    ],
-    services: ['Delivery Coordination', 'Client Lifecycle Management', 'Transportation Scheduling', 'Governmental Document Dispatch'],
-    clients: [
-      { id: 'cl13', name: 'Bank Muscat', package: 'VIP Document Handling', activeProject: 'Ministry Passport Clear', status: 'good', rating: 4.8 },
-      { id: 'cl14', name: 'Oman LNG', package: 'Executive PRO Support', activeProject: 'Visa Dispatch Route', status: 'warning', rating: 4.2 },
-      { id: 'cl15', name: 'National Bank of Oman', package: 'Onsite PRO Retainer', activeProject: 'CR Registry Dispatch', status: 'good', rating: 4.9 }
-    ],
-    tasks: [
-      { id: 't501', title: 'Deliver VIP Visa Documents', client: 'Bank Muscat', assignee: 'Said Al-Rawahi', status: 'in_progress', priority: 'high', due: '2026-07-02' },
-      { id: 't502', title: 'Ministry Passport Delivery', client: 'Oman LNG', assignee: 'Hamad Al-Ghafri', status: 'todo', priority: 'high', due: '2026-07-04' },
-      { id: 't503', title: 'Customer Health Call', client: 'National Bank of Oman', assignee: 'Amna Al-Shabibi', status: 'completed', priority: 'medium', due: '2026-07-01' }
-    ],
-    directives: [
-      { id: 'd5', text: 'Address transport delays to Ministry of Commerce immediately.', issuedBy: 'Operations Director', date: '2026-07-02' }
-    ]
-  }
-};
+interface EmployeeProfile {
+  id: string;
+  full_name: string;
+  role: string;
+  department_id?: string;
+  email?: string;
+  phone?: string;
+  load?: number;
+  tasksCompleted?: number;
+  activeTasks?: number;
+  delayed?: number;
+  accuracy?: number;
+}
+
+interface ServiceDeliverable {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: 'ongoing' | 'completed' | 'delayed' | 'under_review';
+  created_at: string;
+  due_date: string | null;
+  client_id?: string | null;
+  employee_id?: string | null;
+  clients?: {
+    id?: string;
+    company_name: string;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
+  profiles?: {
+    id?: string;
+    full_name: string;
+    role?: string | null;
+  } | null;
+  delayReason?: string;
+  delayAction?: string;
+  delayActionDate?: string;
+  revisedDue?: string;
+}
+
+interface ClientItem {
+  id: string;
+  company_name: string;
+  email?: string | null;
+  phone?: string | null;
+}
+
+interface DelayLogRecord {
+  serviceId: string;
+  reasonCategory: string;
+  reasonDetail: string;
+  actionCategory: string;
+  actionDetail: string;
+  revisedDueDate?: string;
+  loggedAt: string;
+  loggedBy: string;
+}
+
+const DELAY_REASONS_EN = [
+  'Client Missing Financial Documents',
+  'Regulatory Authority Filing Queue',
+  'Client Approval / Payment Pending',
+  'Staff Workload / Capacity Bottleneck',
+  'Accounting / Valuation Complexity',
+  'Client Unresponsive / Postponed Meeting',
+  'Other / Custom Reason'
+];
+
+const DELAY_REASONS_AR = [
+  'نقص في مستندات وسجلات العميل المالية',
+  'انتظار مراجعة الدوائر الحكومية أو الضريبية',
+  'في انتظار موافقة أو سداد العميل',
+  'ضغط عمل وتراكم مهام لدى الفريق',
+  'تعقيدات فنية تتطلب معايير محاسبية إضافية',
+  'العميل غير متجاوب أو أجل الموعد',
+  'سبب آخر مخصص'
+];
+
+const DELAY_ACTIONS_EN = [
+  'Sent Formal Demand Notice to Client',
+  'Assigned Senior Auditor / Co-Pilot',
+  'Scheduled Urgent Alignment Meeting',
+  'Re-routed to Alternate Specialist',
+  'Granted 48-Hour Extension Window',
+  'Escalated to Executive Management'
+];
+
+const DELAY_ACTIONS_AR = [
+  'تم إرسال إشعار رسمي عاجل للعميل',
+  'تم إسناد مساعد أو مدقق أول لمساندة المهمة',
+  'تمت جدولة اجتماع تنسيقي عاجل مع العميل',
+  'تمت إعادة التوجيه إلى متخصص بديل',
+  'تم منح مهلة تمديد إضافية لمدة 48 ساعة',
+  'تم تصعيد المسألة للإدارة التنفيذية العليا'
+];
 
 const DepartmentHeadWorkspace = () => {
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
   const isAr = i18n.language === 'ar';
   const location = useLocation();
 
-  // Retrieve department context from Layout outlet context if available (defaults to audit)
+  // Retrieve department context from Layout outlet context
   const context = useOutletContext<{ deptContext: string }>() || { deptContext: 'audit' };
   const currentDeptId = context.deptContext || 'audit';
+  const deptConfig = getDepartmentById(currentDeptId) || getDepartmentById('audit');
 
-  // --- Dynamic Local State ---
-  const [personnel, setPersonnel] = useState(DEPT_DATA[currentDeptId]?.personnel || DEPT_DATA.audit.personnel);
-  const [services, setServices] = useState(DEPT_DATA[currentDeptId]?.services || DEPT_DATA.audit.services);
-  const [clients, setClients] = useState(DEPT_DATA[currentDeptId]?.clients || DEPT_DATA.audit.clients);
-  const [tasks, setTasks] = useState(DEPT_DATA[currentDeptId]?.tasks || DEPT_DATA.audit.tasks);
-  const [directives, setDirectives] = useState(DEPT_DATA[currentDeptId]?.directives || DEPT_DATA.audit.directives);
-  
-  // Advanced Task Assigner Form State
+  // Core Data States
+  const [personnel, setPersonnel] = useState<EmployeeProfile[]>([]);
+  const [services, setServices] = useState<ServiceDeliverable[]>([]);
+  const [clients, setClients] = useState<ClientItem[]>([]);
+  const [hodLeaveRequests, setHodLeaveRequests] = useState<any[]>([]);
+  const [delayLogs, setDelayLogs] = useState<Record<string, DelayLogRecord>>({});
+  const [loading, setLoading] = useState(true);
+
+  // Task Router Form State
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDesc, setTaskDesc] = useState('');
-  const [taskClient, setTaskClient] = useState('');
-  const [taskAssignee, setTaskAssignee] = useState('');
+  const [taskClientId, setTaskClientId] = useState('');
+  const [taskEmployeeId, setTaskEmployeeId] = useState('');
   const [taskPriority, setTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
-  const [taskDue, setTaskDue] = useState('');
+  const [taskDue, setTaskDue] = useState(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
 
-  // specialized workspace local states
+  // Delay Logging Modal State
+  const [selectedDelayService, setSelectedDelayService] = useState<ServiceDeliverable | null>(null);
+  const [delayReasonCat, setDelayReasonCat] = useState(DELAY_REASONS_EN[0]);
+  const [delayReasonDetail, setDelayReasonDetail] = useState('');
+  const [delayActionCat, setDelayActionCat] = useState(DELAY_ACTIONS_EN[0]);
+  const [delayActionDetail, setDelayActionDetail] = useState('');
+  const [delayRevisedDue, setDelayRevisedDue] = useState('');
+  const [isSavingDelayAction, setIsSavingDelayAction] = useState(false);
+
+  // Reassign Modal State
+  const [reassignService, setReassignService] = useState<ServiceDeliverable | null>(null);
+
+  // Specialized workspace states
   const [vatQuarter, setVatQuarter] = useState('Q3 2026');
   const [auditSignedLedger, setAuditSignedLedger] = useState<string[]>([]);
   const [checklist, setChecklist] = useState<Array<{ id: string; label: string; done: boolean }>>([
@@ -190,79 +195,311 @@ const DepartmentHeadWorkspace = () => {
     { id: 'p_01', client: 'Khimji Group', type: 'Strategic Feasibility', budget: 'OMR 4,500', status: 'pending' },
     { id: 'p_02', client: 'Sohar Steel Co', type: 'Liquidation Advisory', budget: 'OMR 2,800', status: 'approved' }
   ]);
-  const [hodLeaveRequests, setHodLeaveRequests] = useState<any[]>([]);
 
-  const handleHodLeaveAction = (id: string, action: 'Approved' | 'Rejected') => {
-    const updated = hodLeaveRequests.map(r => {
-      if (r.id === id) {
-        return { ...r, managerApproval: action };
-      }
-      return r;
-    });
-    setHodLeaveRequests(updated);
-    
-    const allSavedLeaves = localStorage.getItem('hr_leave_requests')
-      ? JSON.parse(localStorage.getItem('hr_leave_requests')!) as any[]
-      : [];
-    const nextLeaves = allSavedLeaves.map(r => {
-      if (r.id === id) {
-        return { ...r, managerApproval: action };
-      }
-      return r;
-    });
-    localStorage.setItem('hr_leave_requests', JSON.stringify(nextLeaves));
-    alert(action === 'Approved' ? 'Leave authorized and forwarded to HR!' : 'Leave request rejected.');
-  };
+  // Directives
+  const directives = [
+    { id: 'd1', text: isAr ? 'تسريع دورة المراجعة القانونية للشركات ذات الأولوية.' : 'Accelerate statutory review cycle for high-priority accounts.', issuedBy: 'Executive Management', date: '2026-07-01' },
+    { id: 'd2', text: isAr ? 'يجب إخضاع جميع التسليمات لتدقيق الجودة الثنائي قبل الإغلاق النهائي.' : 'All deliverable files must undergo dual-verification before final sign-off.', issuedBy: 'Quality Assurance Head', date: '2026-07-03' }
+  ];
 
-  // Sync state whenever department context changes
+  // ── Load Saved Delay Logs ──────────────────────────────────────────────────
   useEffect(() => {
-    const data = DEPT_DATA[currentDeptId] || DEPT_DATA.audit;
-    setPersonnel(data.personnel);
-    setServices(data.services);
-    setDirectives(data.directives);
-
-    // Sync HOD personnel metrics for HR Performance appraisals access
-    const savedStats = localStorage.getItem('hod_personnel_stats') 
-      ? JSON.parse(localStorage.getItem('hod_personnel_stats')!) as any[]
-      : [];
-    const filteredStats = savedStats.filter((p: any) => !data.personnel.some(dp => dp.name === p.name));
-    const nextStats = [...filteredStats, ...data.personnel];
-    localStorage.setItem('hod_personnel_stats', JSON.stringify(nextStats));
-
-    // Fetch live leave requests from Supabase
-    const fetchLiveLeaves = async () => {
-      try {
-        const { data: leaves } = await supabase.from('hr_leave_requests').select('*');
-        if (leaves && leaves.length > 0) {
-          setHodLeaveRequests(leaves);
-        } else {
-          const savedLeaves = localStorage.getItem('hr_leave_requests');
-          if (savedLeaves) setHodLeaveRequests(JSON.parse(savedLeaves));
-        }
-      } catch (err) {
-        const savedLeaves = localStorage.getItem('hr_leave_requests');
-        if (savedLeaves) setHodLeaveRequests(JSON.parse(savedLeaves));
+    try {
+      const saved = localStorage.getItem('hod_delay_logs');
+      if (saved) {
+        setDelayLogs(JSON.parse(saved));
       }
-    };
-    fetchLiveLeaves();
+    } catch (e) {
+      console.error('Error reading delay logs:', e);
+    }
+  }, []);
 
-    // ── Supabase Realtime Subscription ─────────────────────────────────────
+  // ── Fetch Core Department Data from Supabase ───────────────────────────────
+  const fetchDepartmentData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    try {
+      const [
+        { data: sData, error: sErr },
+        { data: pData, error: pErr },
+        { data: cData, error: cErr },
+        { data: lData, error: lErr }
+      ] = await Promise.all([
+        supabase
+          .from('services')
+          .select(`
+            id,
+            title,
+            description,
+            status,
+            created_at,
+            due_date,
+            client_id,
+            employee_id,
+            clients (
+              id,
+              company_name,
+              email,
+              phone
+            ),
+            profiles:profiles!employee_id (
+              id,
+              full_name,
+              role,
+              department_id
+            )
+          `)
+          .order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, full_name, role, department_id, email, phone').order('full_name'),
+        supabase.from('clients').select('id, company_name, email, phone').order('company_name'),
+        supabase.from('hr_leave_requests').select('*').order('created_at', { ascending: false })
+      ]);
+
+      if (sErr) console.error('HOD fetch services error:', sErr);
+      if (pErr) console.error('HOD fetch profiles error:', pErr);
+      if (cErr) console.error('HOD fetch clients error:', cErr);
+
+      // Filter employees by department
+      const allProfiles: EmployeeProfile[] = (pData as any[]) || [];
+      const deptEmployees = allProfiles.filter(p => {
+        if (!p.department_id) return true; // Include unassigned as eligible
+        const d = p.department_id.toLowerCase();
+        return d === currentDeptId || d.includes(currentDeptId) || currentDeptId.includes(d);
+      });
+
+      // Map services for this department
+      const allServices: ServiceDeliverable[] = (sData as any[]) || [];
+      const deptServices = allServices.filter(s => {
+        // Check if assigned employee is in this department or if service title matches department config
+        const emp = allProfiles.find(p => p.id === s.employee_id);
+        const matchesEmp = emp && (emp.department_id === currentDeptId || (emp.department_id || '').includes(currentDeptId));
+        const matchesTitle = deptConfig?.services.some(srv => s.title.toLowerCase().includes(srv.toLowerCase()));
+        return matchesEmp || matchesTitle || allServices.length < 5;
+      });
+
+      // Calculate real workload & stats per employee
+      const calculatedPersonnel: EmployeeProfile[] = (deptEmployees.length > 0 ? deptEmployees : allProfiles.slice(0, 5)).map(emp => {
+        const empTasks = deptServices.filter(s => s.employee_id === emp.id);
+        const activeTasks = empTasks.filter(s => s.status === 'ongoing' || s.status === 'under_review').length;
+        const tasksCompleted = empTasks.filter(s => s.status === 'completed').length;
+        const delayed = empTasks.filter(s => s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed')).length;
+        const load = Math.min(100, Math.max(20, (activeTasks * 25) + (delayed * 15)));
+        const accuracy = empTasks.length > 0 ? Math.max(85, 100 - (delayed * 4)) : 98;
+
+        return {
+          ...emp,
+          activeTasks,
+          tasksCompleted,
+          delayed,
+          load,
+          accuracy
+        };
+      });
+
+      setPersonnel(calculatedPersonnel);
+      setServices(deptServices.length > 0 ? deptServices : allServices);
+      if (cData) setClients(cData);
+      if (lData) setHodLeaveRequests(lData);
+
+      // Default task form dropdowns
+      if (cData && cData.length > 0 && !taskClientId) setTaskClientId(cData[0].id);
+      if (calculatedPersonnel.length > 0 && !taskEmployeeId) setTaskEmployeeId(calculatedPersonnel[0].id);
+
+    } catch (err) {
+      console.error('HOD Workspace Fetch Error:', err);
+    } finally {
+      if (!isSilent) setLoading(false);
+    }
+  }, [currentDeptId, deptConfig, taskClientId, taskEmployeeId]);
+
+  useEffect(() => {
+    fetchDepartmentData();
+
+    // Live Supabase Realtime Subscription
     const channel = supabase
-      .channel(`hod-${currentDeptId}-realtime`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => {
-        console.log('Services updated in HOD workspace');
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_leave_requests' }, () => {
-        fetchLiveLeaves();
-      })
+      .channel(`hod-${currentDeptId}-live-sync`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => fetchDepartmentData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchDepartmentData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchDepartmentData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_leave_requests' }, () => fetchDepartmentData(true))
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentDeptId]);
+  }, [fetchDepartmentData, currentDeptId]);
 
-  // Parse path to set view
+  // ── Action: Dispatch New Task Directly to Supabase ─────────────────────────
+  const handleAssignTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskTitle.trim()) {
+      alert(isAr ? 'يرجى كتابة عنوان المهمة' : 'Please enter a task title');
+      return;
+    }
+
+    setIsSubmittingTask(true);
+    try {
+      const targetClient = clients.find(c => c.id === taskClientId) || clients[0];
+      const targetEmp = personnel.find(p => p.id === taskEmployeeId) || personnel[0];
+
+      const { data, error } = await supabase
+        .from('services')
+        .insert([{
+          title: taskTitle.trim(),
+          description: taskDesc.trim() || null,
+          client_id: targetClient?.id || null,
+          employee_id: targetEmp?.id || null,
+          due_date: taskDue || null,
+          status: 'ongoing'
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Broadcast Activity Log
+      await logActivity(
+        user?.id || '',
+        user?.user_metadata?.full_name || user?.email || 'Department Head',
+        'task_dispatched',
+        `[${deptConfig?.name}] Dispatched task '${taskTitle}' assigned to ${targetEmp?.full_name || 'Staff'} for ${targetClient?.company_name || 'Client'}`,
+        `[${deptConfig?.name}] تم إسناد المهمة '${taskTitle}' إلى ${targetEmp?.full_name || 'موظف'} لصالح شركة ${targetClient?.company_name || 'العميل'}`
+      );
+
+      // Reset form
+      setTaskTitle('');
+      setTaskDesc('');
+      setTaskDue(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
+      alert(isAr ? 'تم إسناد وتوجيه المهمة بنجاح إلى النظام!' : 'Task successfully dispatched and assigned in live database!');
+      fetchDepartmentData(true);
+    } catch (err: any) {
+      alert(err.message || 'Error creating task');
+    } finally {
+      setIsSubmittingTask(false);
+    }
+  };
+
+  // ── Action: Reassign Employee Directly in Supabase ─────────────────────────
+  const handleReassignSubmit = async (serviceId: string, newEmployeeId: string) => {
+    const assignedEmp = personnel.find(p => p.id === newEmployeeId);
+    
+    // Optimistic Update
+    setServices(prev => prev.map(s => s.id === serviceId ? {
+      ...s,
+      employee_id: newEmployeeId,
+      profiles: assignedEmp ? { full_name: assignedEmp.full_name, role: assignedEmp.role } : null
+    } : s));
+
+    const { error } = await supabase
+      .from('services')
+      .update({ employee_id: newEmployeeId })
+      .eq('id', serviceId);
+
+    setReassignService(null);
+    if (error) {
+      console.error('Failed to reassign:', error);
+      fetchDepartmentData(true);
+    } else {
+      await logActivity(
+        user?.id || '',
+        user?.user_metadata?.full_name || user?.email || 'Department Head',
+        'service_updated',
+        `[${deptConfig?.name}] Reassigned task to ${assignedEmp?.full_name || 'Employee'}`,
+        `[${deptConfig?.name}] تم تغيير المسؤول عن المهمة إلى ${assignedEmp?.full_name || 'الموظف'}`
+      );
+    }
+  };
+
+  // ── Action: Quick Status / Kanban Move ─────────────────────────────────────
+  const handleUpdateStatus = async (serviceId: string, newStatus: ServiceDeliverable['status']) => {
+    setServices(prev => prev.map(s => s.id === serviceId ? { ...s, status: newStatus } : s));
+
+    const { error } = await supabase
+      .from('services')
+      .update({ status: newStatus })
+      .eq('id', serviceId);
+
+    if (error) {
+      console.error('Failed to update status:', error);
+      fetchDepartmentData(true);
+    }
+  };
+
+  // ── Action: Log Delay Root-Cause & Corrective Action ───────────────────────
+  const handleSaveDelayAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDelayService) return;
+
+    setIsSavingDelayAction(true);
+    try {
+      const record: DelayLogRecord = {
+        serviceId: selectedDelayService.id,
+        reasonCategory: delayReasonCat,
+        reasonDetail: delayReasonDetail,
+        actionCategory: delayActionCat,
+        actionDetail: delayActionDetail,
+        revisedDueDate: delayRevisedDue || selectedDelayService.due_date || undefined,
+        loggedAt: new Date().toISOString(),
+        loggedBy: user?.user_metadata?.full_name || user?.email || 'HOD'
+      };
+
+      // Save locally and in state
+      const updatedLogs = { ...delayLogs, [selectedDelayService.id]: record };
+      setDelayLogs(updatedLogs);
+      localStorage.setItem('hod_delay_logs', JSON.stringify(updatedLogs));
+
+      // If a revised due date is given, optionally update services.due_date
+      if (delayRevisedDue) {
+        await supabase
+          .from('services')
+          .update({ due_date: delayRevisedDue })
+          .eq('id', selectedDelayService.id);
+      }
+
+      // Dual-Alert Broadcast to activity_log (Visible to Manager & HOD)
+      const empName = selectedDelayService.profiles?.full_name || 'Assignee';
+      const compName = selectedDelayService.clients?.company_name || 'Client';
+      
+      await logActivity(
+        user?.id || '',
+        user?.user_metadata?.full_name || user?.email || 'Department Head',
+        'delay_action_logged',
+        `[${deptConfig?.name} Alert] HOD Corrective Action for '${selectedDelayService.title}' (${compName}, ${empName}): Reason - '${delayReasonCat}'; Action - '${delayActionCat}'`,
+        `[تنبيه قسم ${deptConfig?.name}] إجراء تصحيحي من رئيس القسم لمهمة '${selectedDelayService.title}' (${compName}, ${empName}): السبب - '${delayReasonCat}'; الإجراء - '${delayActionCat}'`
+      );
+
+      alert(isAr 
+        ? 'تم توثيق وتعميم الإجراء التصحيحي وإشعار الإدارة العامة بنجاح!' 
+        : 'Corrective action logged and broadcasted to Executive Management successfully!');
+
+      setSelectedDelayService(null);
+      setDelayReasonDetail('');
+      setDelayActionDetail('');
+      fetchDepartmentData(true);
+    } catch (err: any) {
+      alert(err.message || 'Error saving delay action');
+    } finally {
+      setIsSavingDelayAction(false);
+    }
+  };
+
+  // ── Action: HOD Leave Request Approval ─────────────────────────────────────
+  const handleHodLeaveAction = async (id: string, action: 'Approved' | 'Rejected') => {
+    try {
+      await supabase
+        .from('hr_leave_requests')
+        .update({ managerApproval: action, status: action === 'Approved' ? 'Pending HR' : 'Rejected' })
+        .eq('id', id);
+
+      setHodLeaveRequests(prev => prev.map(r => r.id === id ? { ...r, managerApproval: action } : r));
+      alert(action === 'Approved' 
+        ? (isAr ? 'تمت الموافقة المبدئية وتحويل الطلب إلى الموارد البشرية (HR)' : 'Leave authorized by HOD and forwarded to HR!') 
+        : (isAr ? 'تم رفض طلب الإجازة.' : 'Leave request rejected by HOD.'));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Active path view parser
   const getViewFromPath = () => {
     const path = location.pathname;
     if (path.includes('/team-leadership')) return 'team';
@@ -275,173 +512,214 @@ const DepartmentHeadWorkspace = () => {
   };
   const activeView = getViewFromPath();
 
-  // Helper config
-  const deptConfig = getDepartmentById(currentDeptId) || getDepartmentById('audit');
+  // Metrics computation
+  const overdueServices = services.filter(s => s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed'));
+  const completedServices = services.filter(s => s.status === 'completed');
+  const activeServices = services.filter(s => s.status === 'ongoing' || s.status === 'under_review');
+  const completionRate = services.length > 0 ? Math.round((completedServices.length / services.length) * 100) : 100;
+  const avgLoad = personnel.length > 0 ? Math.round(personnel.reduce((sum, p) => sum + (p.load || 50), 0) / personnel.length) : 60;
 
-  // --- Dynamic Supabase Fetch (Mocked calls showing security query constraints) ---
-  const triggerMockSupabaseFetch = async () => {
-    console.log(`Executing SECURE Fetch constraint: SELECT * FROM tasks WHERE department = '${currentDeptId}'`);
-    console.log(`Executing SECURE Fetch constraint: SELECT * FROM members WHERE department = '${currentDeptId}'`);
-  };
-
-  useEffect(() => {
-    triggerMockSupabaseFetch();
-  }, [currentDeptId]);
-
-  // Action: Add Task
-  const handleAssignTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!taskTitle || !taskDue) return;
-
-    const newTask = {
-      id: `t${Date.now().toString().slice(-3)}`,
-      title: taskTitle,
-      client: taskClient,
-      assignee: taskAssignee,
-      status: 'todo' as const,
-      priority: taskPriority,
-      due: taskDue
-    };
-
-    setTasks(prev => {
-      const nextTasks = [newTask, ...prev];
-      localStorage.setItem(`hod_tasks_${currentDeptId}`, JSON.stringify(nextTasks));
-      return nextTasks;
-    });
-
-    // Optimistically update assignee load
-    setPersonnel(prev => prev.map(p => {
-      if (p.name === taskAssignee) {
-        return { ...p, load: Math.min(p.load + 10, 100) };
-      }
-      return p;
-    }));
-
-    // Reset fields
-    setTaskTitle('');
-    setTaskDesc('');
-    setTaskPriority('medium');
-    setTaskDue('');
-    alert(isAr ? 'تم توجيه وتعيين المهمة بنجاح!' : 'Task successfully dispatched and assigned!');
-  };
-
-  // Action: Escalate Task
-  const handleEscalateTask = (taskId: string, title: string) => {
-    alert(isAr 
-      ? `تم تصعيد المهمة: "${title}" إلى الإدارة التنفيذية العليا بنجاح.` 
-      : `Task: "${title}" has been escalated to Executive Management.`);
-    setTasks(prev => prev.map(t => {
-      if (t.id === taskId) {
-        return { ...t, priority: 'high' as const };
-      }
-      return t;
-    }));
-  };
-
-  // Action: Reassign Task
-  const handleReassignTask = (taskId: string, currentAssignee: string) => {
-    const nextPerson = personnel.find(p => p.name !== currentAssignee);
-    if (nextPerson) {
-      setTasks(prev => prev.map(t => {
-        if (t.id === taskId) {
-          return { ...t, assignee: nextPerson.name, status: 'todo' };
-        }
-        return t;
-      }));
-      alert(isAr 
-        ? `تمت إعادة التعيين لـ: ${nextPerson.name}` 
-        : `Successfully reassigned to: ${nextPerson.name}`);
-    }
-  };
-
-  // --- SUB-VIEWS RENDERERS ---
+  // ─────────────────────────────────────────────────────────────────────────
+  // SUB-VIEWS
+  // ─────────────────────────────────────────────────────────────────────────
 
   // 1. Dashboard View
   const renderDashboardView = () => {
-    const overdueCount = tasks.filter(t => t.status !== 'completed' && new Date(t.due) < new Date()).length;
-    const completedCount = tasks.filter(t => t.status === 'completed').length;
-    const completionRate = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 80;
-    
-    // Calculate average load
-    const avgLoad = personnel.length > 0 ? Math.round(personnel.reduce((sum, p) => sum + p.load, 0) / personnel.length) : 70;
-
     return (
       <div className="space-y-6">
-        {/* KPI Command Dashboard grid */}
+        {/* KPI Command Bar */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between hover:border-red-100 transition-all group">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between hover:border-brand-dark/30 transition-all">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{isAr ? 'معدل إنجاز المهام' : 'Total Task Completion'}</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{isAr ? 'معدل إنجاز المهام' : 'Department Completion'}</p>
               <h3 className="text-3xl font-black text-gray-900 leading-none">{completionRate}%</h3>
             </div>
             <div className="flex items-center gap-1.5 text-green-600 text-xs font-bold mt-4">
               <TrendingUp size={14} />
-              <span>+4.2% {isAr ? 'الشهر الماضي' : 'vs last month'}</span>
+              <span>{completedServices.length} {isAr ? 'مهام منجزة' : 'Deliverables Completed'}</span>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between hover:border-red-100 transition-all">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between hover:border-brand-dark/30 transition-all">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{isAr ? 'كفاءة طاقم العمل' : 'Team Workload Efficiency'}</p>
-              <h3 className="text-3xl font-black text-gray-900 leading-none">{100 - avgLoad}%</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{isAr ? 'أعباء عمل الفريق' : 'Team Unit Capacity'}</p>
+              <h3 className="text-3xl font-black text-gray-900 leading-none">{avgLoad}%</h3>
             </div>
-            <div className="flex items-center gap-1.5 text-[#A11212] text-xs font-bold mt-4">
+            <div className="flex items-center gap-1.5 text-brand-dark text-xs font-bold mt-4">
               <Activity size={14} />
-              <span>{avgLoad}% {isAr ? 'عبء العمل الحالي' : 'average unit capacity'}</span>
+              <span>{personnel.length} {isAr ? 'موظفين تحت الإشراف' : 'Assigned Staff Members'}</span>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between hover:border-red-100 transition-all">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between hover:border-brand-dark/30 transition-all">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{isAr ? 'العملاء النشطون بالقسم' : 'Active Managed Clients'}</p>
-              <h3 className="text-3xl font-black text-gray-900 leading-none">{clients.length}</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{isAr ? 'العمليات النشطة' : 'Active Deliverables'}</p>
+              <h3 className="text-3xl font-black text-gray-900 leading-none">{activeServices.length}</h3>
             </div>
             <div className="flex items-center gap-1.5 text-blue-600 text-xs font-bold mt-4">
               <ShieldCheck size={14} />
-              <span>{isAr ? 'مضمون العقد' : '100% Retained'}</span>
+              <span>{isAr ? 'قيد التنفيذ والمراجعة' : 'In Production Pipeline'}</span>
             </div>
           </div>
 
           <div className={`rounded-2xl p-6 shadow-sm border flex flex-col justify-between transition-all ${
-            overdueCount > 0 ? 'bg-red-50/50 border-red-100 text-red-900' : 'bg-white border-gray-100'
+            overdueServices.length > 0 ? 'bg-red-500 text-white shadow-lg shadow-red-500/10' : 'bg-white border-gray-100'
           }`}>
             <div>
               <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${
-                overdueCount > 0 ? 'text-red-500' : 'text-gray-400'
-              }`}>{isAr ? 'التسليمات المتأخرة' : 'Overdue Deliverables'}</p>
-              <h3 className={`text-3xl font-black leading-none ${overdueCount > 0 ? 'text-red-700' : 'text-gray-900'}`}>{overdueCount}</h3>
+                overdueServices.length > 0 ? 'text-white/80' : 'text-gray-400'
+              }`}>{isAr ? 'التسليمات المتعثرة' : 'Delayed Bottlenecks'}</p>
+              <h3 className={`text-3xl font-black leading-none ${overdueServices.length > 0 ? 'text-white' : 'text-gray-900'}`}>
+                {overdueServices.length}
+              </h3>
             </div>
             <div className="flex items-center gap-1.5 text-xs font-bold mt-4">
-              <AlertTriangle size={14} className={overdueCount > 0 ? 'text-red-500' : 'text-gray-400'} />
-              <span className={overdueCount > 0 ? 'text-red-600' : 'text-gray-500'}>
-                {overdueCount > 0 ? (isAr ? 'تتطلب تدخل فوري' : 'Require Immediate Action') : (isAr ? 'الجميع في المسار' : 'On Track')}
+              <AlertTriangle size={14} className={overdueServices.length > 0 ? 'text-white' : 'text-gray-400'} />
+              <span className={overdueServices.length > 0 ? 'text-white' : 'text-gray-500'}>
+                {overdueServices.length > 0 ? (isAr ? 'تتطلب تدخلاً وتوثيق إجراء' : 'Requires HOD Action') : (isAr ? 'الجميع في المسار' : 'On Track')}
               </span>
             </div>
           </div>
         </div>
 
+        {/* ── Delayed Deliverables Alert & Action Station ───────────────────── */}
+        <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-50 pb-4">
+            <div>
+              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                <AlertCircle size={20} className="text-red-500" />
+                {isAr ? 'محطة متابعة التأخيرات وتوثيق الإجراءات' : 'Delay Escalation & Corrective Action Hub'}
+              </h3>
+              <p className="text-xs text-gray-500 font-medium">
+                {isAr 
+                  ? 'رصد الموظفين المتعثرين وتوثيق سبب التأخير والإجراء المتخذ لإشعار الإدارة التنفيذية' 
+                  : 'Identify slippages, document root cause and record corrective intervention for executive review'}
+              </p>
+            </div>
+            <span className="text-[10px] font-black uppercase px-3 py-1 rounded-full bg-red-50 text-red-700 border border-red-100">
+              {overdueServices.length} {isAr ? 'مهام متأخرة' : 'Overdue Items'}
+            </span>
+          </div>
+
+          {overdueServices.length === 0 ? (
+            <div className="py-12 text-center text-gray-400 font-bold text-xs bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+              <CheckCircle2 size={32} className="mx-auto mb-2 text-green-500 opacity-60" />
+              {isAr ? 'رائع! لا توجد تسليمات متأخرة بالقسم حالياً.' : 'Excellent! All department deliverables are on track.'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {overdueServices.map(svc => {
+                const log = delayLogs[svc.id];
+                const now = new Date();
+                const due = svc.due_date ? new Date(svc.due_date) : now;
+                const daysOverdue = Math.max(1, Math.ceil((now.getTime() - due.getTime()) / (1000 * 60 * 60 * 24)));
+
+                return (
+                  <div key={svc.id} className="border border-red-100 rounded-2xl p-5 bg-red-50/30 hover:border-red-200 transition-all flex flex-col justify-between relative overflow-hidden">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-red-600 bg-red-100/80 px-2 py-0.5 rounded">
+                            {daysOverdue} {isAr ? 'أيام تأخير' : 'Days Overdue'}
+                          </span>
+                          <h4 className="font-black text-sm text-gray-900 mt-1.5">{svc.title}</h4>
+                          <p className="text-xs text-gray-500 font-bold flex items-center gap-1.5 mt-0.5">
+                            <Building2 size={12} className="text-gray-400" />
+                            {svc.clients?.company_name || 'Client'}
+                          </p>
+                        </div>
+                        <div className="text-end">
+                          <span className="text-[10px] font-bold text-gray-400 block">{isAr ? 'الموعد:' : 'Due:'} {svc.due_date || 'N/A'}</span>
+                          <span className="text-[9px] font-black uppercase text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 mt-1 inline-block">
+                            {svc.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Assignee Card */}
+                      <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-red-50">
+                        <div className="w-6 h-6 rounded-full bg-brand-dark text-white flex items-center justify-center text-[10px] font-black">
+                          {svc.profiles?.full_name ? svc.profiles.full_name.charAt(0).toUpperCase() : '?'}
+                        </div>
+                        <div className="text-start">
+                          <span className="text-xs font-bold text-gray-800 block leading-tight">{svc.profiles?.full_name || 'Unassigned'}</span>
+                          <span className="text-[9px] text-gray-400 font-medium">{svc.profiles?.role || 'Staff'}</span>
+                        </div>
+                      </div>
+
+                      {/* Logged HOD Action display if exists */}
+                      {log ? (
+                        <div className="bg-white/80 border border-green-200 rounded-xl p-3 space-y-1 text-start">
+                          <div className="flex items-center gap-1.5 text-green-700 font-black text-[10px]">
+                            <CheckCircle size={12} />
+                            <span>{isAr ? 'تم توثيق الإجراء بواسطة رئيس القسم' : 'HOD Action Recorded'}</span>
+                          </div>
+                          <p className="text-[11px] text-gray-700 font-semibold">
+                            <strong className="text-gray-900">{isAr ? 'السبب:' : 'Reason:'}</strong> {log.reasonCategory} {log.reasonDetail && `(${log.reasonDetail})`}
+                          </p>
+                          <p className="text-[11px] text-gray-700 font-semibold">
+                            <strong className="text-gray-900">{isAr ? 'الإجراء المتخذ:' : 'Action Taken:'}</strong> {log.actionCategory} {log.actionDetail && `(${log.actionDetail})`}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-2.5 text-[11px] text-amber-800 font-bold flex items-center gap-2">
+                          <HelpCircle size={14} className="shrink-0 text-amber-600" />
+                          <span>{isAr ? 'لم يتم توثيق سبب التأخير بعد؛ يرجى تسجيل الإجراء.' : 'No delay action recorded yet; action required.'}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-red-100 flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => setReassignService(svc)}
+                        className="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-700 hover:border-brand-dark text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <UserPlus size={13} />
+                        <span>{isAr ? 'إعادة تعيين' : 'Reassign'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setSelectedDelayService(svc);
+                          setDelayReasonCat(DELAY_REASONS_EN[0]);
+                          setDelayActionCat(DELAY_ACTIONS_EN[0]);
+                          setDelayRevisedDue(svc.due_date || '');
+                        }}
+                        className="px-4 py-1.5 bg-brand-dark hover:bg-brand text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                      >
+                        <AlertTriangle size={13} />
+                        <span>{log ? (isAr ? 'تعديل الإجراء' : 'Update Action') : (isAr ? 'تسجيل إجراء التأخير' : 'Log Delay Action')}</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Management Directives Panel */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
-          <h3 className="text-sm font-black text-[#A11212] uppercase tracking-widest mb-4 flex items-center gap-2">
-            <ShieldCheck size={18} /> {isAr ? 'توجيهات وقرارات الإدارة العليا' : 'Management Directives'}
+        <div className="bg-white border border-gray-100 rounded-[2rem] p-6 shadow-sm">
+          <h3 className="text-sm font-black text-brand-dark uppercase tracking-widest mb-4 flex items-center gap-2">
+            <ShieldCheck size={18} /> {isAr ? 'توجيهات وقرارات الإدارة العامة' : 'Management Directives'}
           </h3>
           <div className="space-y-3">
             {directives.map(d => (
-              <div key={d.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-150">
+              <div key={d.id} className="flex justify-between items-center bg-gray-50/70 p-4 rounded-2xl border border-gray-100">
                 <div className="flex items-start gap-3">
-                  <div className="w-2.5 h-2.5 rounded-full bg-[#A11212] mt-1.5" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-brand-dark mt-1.5 shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-gray-900">{d.text}</p>
                     <p className="text-[10px] text-gray-400 font-bold mt-1">Issued By: {d.issuedBy} &bull; {d.date}</p>
                   </div>
                 </div>
-                <span className="bg-[#A11212]/5 text-[#A11212] text-[9px] font-black uppercase px-2 py-1 rounded border border-[#A11212]/20">Active</span>
+                <span className="bg-brand-dark/10 text-brand-dark text-[9px] font-black uppercase px-2.5 py-1 rounded-lg border border-brand-dark/20 shrink-0">Active</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Dynamic Context Injected Specialist Module */}
+        {/* Contextual Specialist Module */}
         {renderSpecialistWorkspace()}
       </div>
     );
@@ -450,43 +728,53 @@ const DepartmentHeadWorkspace = () => {
   // 2. Team Leadership View
   const renderTeamView = () => {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-6">
-        <div>
-          <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <Users className="text-[#A11212]" size={20} />
-            {isAr ? 'مراقبة وتوزيع عبء عمل الفريق' : 'Team Leadership & Workload Capacity'}
-          </h2>
-          <p className="text-xs text-gray-500 font-bold mt-1">
-            {isAr ? 'تحليل معدل توزيع المهام لمنع الإرهاق الوظيفي بالقسم' : 'Roster of assigned personnel with current workload allocation metrics'}
-          </p>
+      <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-6">
+        <div className="flex justify-between items-center border-b border-gray-50 pb-4">
+          <div>
+            <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+              <Users className="text-brand-dark" size={20} />
+              {isAr ? 'إدارة طاقم العمل ومراقبة القدرة التشغيلية' : 'Team Leadership & Workload Distribution'}
+            </h2>
+            <p className="text-xs text-gray-500 font-medium mt-1">
+              {isAr ? 'تحليل معدل توزيع المهام والإنتاجية لكل موظف بالقسم' : 'Real-time staff allocation, active deliverables, and capacity metrics'}
+            </p>
+          </div>
+          <span className="px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-100 text-xs font-black text-brand-dark uppercase tracking-wider">
+            {personnel.length} {isAr ? 'موظفين' : 'Staff Members'}
+          </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {personnel.map(emp => {
-            const isOverloaded = emp.load > 80;
+            const isOverloaded = (emp.load || 50) > 80;
             return (
-              <div key={emp.id} className="border border-gray-100 rounded-2xl p-5 hover:border-gray-300 transition-colors bg-gray-50/30 flex flex-col justify-between">
+              <div key={emp.id} className="border border-gray-100 rounded-2xl p-5 hover:border-gray-200 transition-all bg-gray-50/40 flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-black text-sm text-gray-900">{emp.name}</h4>
-                      <p className="text-[10px] text-gray-400 font-bold mt-0.5">{emp.role}</p>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-2xl bg-brand-dark/10 text-brand-dark font-black flex items-center justify-center text-sm">
+                        {emp.full_name ? emp.full_name.charAt(0).toUpperCase() : '?'}
+                      </div>
+                      <div>
+                        <h4 className="font-black text-sm text-gray-900">{emp.full_name}</h4>
+                        <p className="text-[10px] text-gray-400 font-bold capitalize">{emp.role}</p>
+                      </div>
                     </div>
                     <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${
                       isOverloaded 
                         ? 'bg-red-50 text-red-700 border-red-150' 
                         : 'bg-green-50 text-green-700 border-green-150'
                     }`}>
-                      {isOverloaded ? 'Overloaded' : 'Optimal'}
+                      {isOverloaded ? 'High Load' : 'Optimal'}
                     </span>
                   </div>
 
                   <div className="space-y-1.5 pt-2">
                     <div className="flex justify-between text-[10px] font-bold text-gray-500">
-                      <span>Allocation Load</span>
-                      <span className={isOverloaded ? 'text-red-650 font-black' : 'text-gray-700 font-black'}>{emp.load}%</span>
+                      <span>{isAr ? 'عبء العمل' : 'Allocation Load'}</span>
+                      <span className={isOverloaded ? 'text-red-600 font-black' : 'text-gray-700 font-black'}>{emp.load}%</span>
                     </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
                       <div 
                         className={`h-2 rounded-full transition-all duration-500 ${isOverloaded ? 'bg-red-500' : 'bg-green-500'}`} 
                         style={{ width: `${emp.load}%` }}
@@ -495,9 +783,21 @@ const DepartmentHeadWorkspace = () => {
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center border-t border-gray-150 pt-4 mt-6 text-[10px] text-gray-400 font-bold">
-                  <span>Completed: {emp.tasksCompleted}</span>
-                  <span className={emp.delayed > 0 ? 'text-red-500 font-black' : ''}>Delayed: {emp.delayed}</span>
+                <div className="grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 mt-4 text-center">
+                  <div className="bg-white p-2 rounded-xl border border-gray-100">
+                    <span className="text-[9px] text-gray-400 font-bold block">{isAr ? 'نشط' : 'Active'}</span>
+                    <span className="text-xs font-black text-gray-900">{emp.activeTasks || 0}</span>
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-gray-100">
+                    <span className="text-[9px] text-gray-400 font-bold block">{isAr ? 'منجز' : 'Done'}</span>
+                    <span className="text-xs font-black text-green-600">{emp.tasksCompleted || 0}</span>
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-gray-100">
+                    <span className="text-[9px] text-gray-400 font-bold block">{isAr ? 'متأخر' : 'Delayed'}</span>
+                    <span className={`text-xs font-black ${emp.delayed && emp.delayed > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                      {emp.delayed || 0}
+                    </span>
+                  </div>
                 </div>
               </div>
             );
@@ -505,61 +805,61 @@ const DepartmentHeadWorkspace = () => {
         </div>
 
         {/* HOD Team Leave Approvals Section */}
-        <div className="border-t border-gray-150 pt-6 space-y-4">
+        <div className="border-t border-gray-100 pt-6 space-y-4">
           <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
-            <Calendar className="text-[#A11212]" size={18} />
-            {isAr ? 'اعتماد الإجازات للموظفين' : 'HOD Leave Authorization Queue'}
+            <Calendar className="text-brand-dark" size={18} />
+            {isAr ? 'اعتماد إجازات موظفي القسم' : 'HOD Leave Authorization Queue'}
           </h3>
-          <p className="text-xs text-gray-500 font-bold">
-            {isAr ? 'طلبات الإجازة المعلقة لموظفي القسم المباشرين' : 'Approve leave requests to ensure coverage matches department workloads.'}
+          <p className="text-xs text-gray-500 font-medium">
+            {isAr ? 'موافقة رئيس القسم المبدئية قبل تحويل الطلبات إلى الموارد البشرية' : 'Authorize leave requests ensuring department workload coverage.'}
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {hodLeaveRequests.filter(r => r.managerApproval === 'Pending').map(req => (
-              <div key={req.id} className="border border-gray-150 rounded-2xl p-5 bg-gray-50/50 shadow-xs hover:border-gray-300 transition-all flex flex-col justify-between">
+            {hodLeaveRequests.filter(r => r.managerApproval === 'Pending' || r.status === 'Pending').map(req => (
+              <div key={req.id} className="border border-gray-100 rounded-2xl p-5 bg-gray-50/50 shadow-xs hover:border-gray-200 transition-all flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-start">
                     <div>
-                      <h4 className="font-black text-sm text-gray-900">{req.employeeName}</h4>
-                      <span className="text-[8px] bg-red-50 text-[#A11212] px-1.5 py-0.5 rounded font-black uppercase tracking-wider">{req.type}</span>
+                      <h4 className="font-black text-sm text-gray-900">{req.employeeName || req.employee_name || 'Staff Member'}</h4>
+                      <span className="text-[8px] bg-red-50 text-brand-dark px-2 py-0.5 rounded font-black uppercase tracking-wider">{req.type || 'Annual'}</span>
                     </div>
-                    <span className="text-[10px] text-gray-400 font-bold">{req.id}</span>
+                    <span className="text-[10px] text-gray-400 font-bold">#{req.id?.substring(0,6)}</span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-xl border border-gray-100">
                     <div>
                       <p className="text-[9px] text-gray-400 font-bold">Duration</p>
-                      <p className="font-black text-gray-800">{req.startDate} to {req.endDate}</p>
+                      <p className="font-black text-gray-800">{req.startDate || req.start_date} to {req.endDate || req.end_date}</p>
                     </div>
                     <div>
                       <p className="text-[9px] text-gray-400 font-bold">Total Days</p>
-                      <p className="font-black text-gray-800">{req.days} Days</p>
+                      <p className="font-black text-gray-800">{req.days || 1} Days</p>
                     </div>
                   </div>
                   {req.notes && (
-                    <p className="text-xs text-gray-550 font-bold mt-2 italic bg-white p-2 rounded-xl border border-gray-100">&ldquo;{req.notes}&rdquo;</p>
+                    <p className="text-xs text-gray-600 font-medium mt-2 italic bg-white p-2 rounded-xl border border-gray-100">&ldquo;{req.notes}&rdquo;</p>
                   )}
                 </div>
 
                 <div className="mt-4 flex gap-2 justify-end border-t border-gray-100 pt-3">
                   <button
                     onClick={() => handleHodLeaveAction(req.id, 'Rejected')}
-                    className="px-4 py-2 border border-gray-250 text-gray-700 hover:text-red-700 hover:border-red-200 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
+                    className="px-4 py-2 border border-gray-200 text-gray-700 hover:text-red-700 hover:border-red-200 rounded-xl text-xs font-black uppercase tracking-wider transition-colors cursor-pointer"
                   >
-                    Reject
+                    {isAr ? 'رفض' : 'Reject'}
                   </button>
                   <button
                     onClick={() => handleHodLeaveAction(req.id, 'Approved')}
-                    className="px-4 py-2 bg-[#A11212] text-white hover:bg-[#800e0e] rounded-xl text-xs font-black uppercase tracking-wider transition-colors shadow-sm"
+                    className="px-4 py-2 bg-brand-dark text-white hover:bg-brand rounded-xl text-xs font-black uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
                   >
-                    Authorize & Forward
+                    {isAr ? 'اعتماد وتحويل لـ HR' : 'Authorize & Forward'}
                   </button>
                 </div>
               </div>
             ))}
-            {hodLeaveRequests.filter(r => r.managerApproval === 'Pending').length === 0 && (
-              <div className="col-span-2 p-6 text-center text-gray-400 border border-dashed border-gray-200 rounded-2xl bg-white">
+            {hodLeaveRequests.filter(r => r.managerApproval === 'Pending' || r.status === 'Pending').length === 0 && (
+              <div className="col-span-2 p-8 text-center text-gray-400 border border-dashed border-gray-200 rounded-2xl bg-white">
                 <CheckCircle2 className="mx-auto mb-1 opacity-25" size={24} />
-                <p className="text-xs font-bold">No leave requests currently pending department head authorization.</p>
+                <p className="text-xs font-bold">{isAr ? 'لا توجد طلبات إجازة معلقة للمراجعة حالياً.' : 'No pending leave requests requiring department head authorization.'}</p>
               </div>
             )}
           </div>
@@ -568,178 +868,247 @@ const DepartmentHeadWorkspace = () => {
     );
   };
 
-  // 3. Work Routing View (Advanced Task Router)
+  // 3. Work Routing View (Live Task Dispatcher)
   const renderRoutingView = () => {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Assigner Matrix Form */}
-        <div className="lg:col-span-1 bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-5 flex items-center gap-2">
-            <PlusCircle size={18} className="text-[#A11212]" />
-            {isAr ? 'توجيه وتعيين الأهداف اليومية' : 'Advanced Task Router Matrix'}
+        <div className="lg:col-span-1 bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
+          <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <PlusCircle size={18} className="text-brand-dark" />
+            {isAr ? 'توجيه وتعيين مهمة جديدة' : 'Direct Task Dispatcher'}
           </h3>
+          <p className="text-xs text-gray-400 font-medium mb-4">
+            {isAr ? 'إنشاء مهام جديدة مباشرة في قاعدة بيانات النظام' : 'Creates real deliverable entries in Supabase synced with Employee portal.'}
+          </p>
+
           <form className="space-y-4" onSubmit={handleAssignTask}>
             <div>
-              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Task Title</label>
+              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'عنوان المهمة / الخدمة' : 'Service Title'}</label>
               <input 
                 type="text" 
                 required
                 value={taskTitle}
                 onChange={e => setTaskTitle(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-[#A11212] outline-none" 
-                placeholder="e.g. Audit Draft Sign-off"
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-brand-dark outline-none" 
+                placeholder={isAr ? 'مثال: إعداد الإقرار الضريبي...' : 'e.g. Audit Draft Sign-off'}
               />
+
+              {/* Quick suggestions */}
+              <div className="flex flex-wrap gap-1 mt-2">
+                {deptConfig?.services.slice(0, 3).map(s => (
+                  <button
+                    type="button"
+                    key={s}
+                    onClick={() => setTaskTitle(s)}
+                    className="text-[9px] bg-gray-100 hover:bg-brand-dark hover:text-white px-2 py-0.5 rounded font-bold text-gray-600 transition-all cursor-pointer"
+                  >
+                    + {s}
+                  </button>
+                ))}
+              </div>
             </div>
+
             <div>
-              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Description</label>
+              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'نطاق العمل والملاحظات' : 'Scope / Instructions'}</label>
               <textarea 
-                rows={3}
+                rows={2}
                 value={taskDesc}
                 onChange={e => setTaskDesc(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-[#A11212] outline-none resize-none" 
-                placeholder="Details of expectations..."
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-brand-dark outline-none resize-none" 
+                placeholder={isAr ? 'تفاصيل المهمة...' : 'Expectations and specific notes...'}
               />
             </div>
+
             <div>
-              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Client Association</label>
+              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'الشركة / العميل' : 'Client Company'}</label>
               <select 
-                value={taskClient}
-                onChange={e => setTaskClient(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-[#A11212] outline-none"
+                value={taskClientId}
+                onChange={e => setTaskClientId(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-brand-dark outline-none cursor-pointer"
               >
-                {clients.map(cl => <option key={cl.id} value={cl.name}>{cl.name}</option>)}
+                {clients.map(cl => <option key={cl.id} value={cl.id}>{cl.company_name}</option>)}
               </select>
             </div>
+
             <div>
-              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Target Employee</label>
+              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'الموظف المسؤول' : 'Assigned Staff'}</label>
               <select 
-                value={taskAssignee}
-                onChange={e => setTaskAssignee(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-[#A11212] outline-none"
+                value={taskEmployeeId}
+                onChange={e => setTaskEmployeeId(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-brand-dark outline-none cursor-pointer"
               >
-                {personnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                {personnel.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.full_name} ({p.role}) - {p.load || 50}% load
+                  </option>
+                ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Priority</label>
-                <select 
-                  value={taskPriority}
-                  onChange={e => setTaskPriority(e.target.value as any)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-[#A11212] outline-none"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Hard Deadline</label>
-                <input 
-                  type="date" 
-                  required
-                  value={taskDue}
-                  onChange={e => setTaskDue(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-[#A11212] outline-none"
-                />
-              </div>
+
+            <div>
+              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'الموعد النهائي (SLA)' : 'Hard Deadline'}</label>
+              <input 
+                type="date" 
+                required
+                value={taskDue}
+                onChange={e => setTaskDue(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-brand-dark outline-none"
+              />
             </div>
-            <button type="submit" className="w-full bg-[#A11212] text-white rounded-xl py-3 text-xs font-black uppercase tracking-widest hover:bg-[#800e0e] transition-colors mt-2 shadow-sm">
-              Dispatch Task
+
+            <button 
+              type="submit" 
+              disabled={isSubmittingTask}
+              className="w-full bg-brand-dark text-white rounded-xl py-3 text-xs font-black uppercase tracking-widest hover:bg-brand transition-colors mt-2 shadow-sm disabled:opacity-50 cursor-pointer"
+            >
+              {isSubmittingTask ? '...' : (isAr ? 'إسناد المهمة وتعميمها' : 'Dispatch Task to System')}
             </button>
           </form>
         </div>
 
-        {/* Current Dispatched tasks list */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-5 flex items-center gap-2">
-            <Clock size={18} className="text-[#A11212]" />
-            {isAr ? 'قائمة المهام الموزعة حالياً' : 'Active Dispatched Task ledger'}
-          </h3>
-          <div className="space-y-3">
-            {tasks.map(t => (
-              <div key={t.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-xl border border-gray-150">
-                <div>
-                  <h4 className="font-black text-sm text-gray-900">{t.title}</h4>
-                  <p className="text-[10px] text-gray-400 font-bold mt-1">
-                    Client: {t.client} &bull; Assignee: {t.assignee} &bull; Due: {t.due}
-                  </p>
-                </div>
-                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
-                  t.priority === 'high' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'
-                }`}>
-                  {t.priority}
-                </span>
-              </div>
-            ))}
+        {/* Current Dispatched Tasks Live Ledger */}
+        <div className="lg:col-span-2 bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                <Clock size={18} className="text-brand-dark" />
+                {isAr ? 'سجل المهام الموزعة الحية' : 'Live Department Deliverables Ledger'}
+              </h3>
+              <span className="text-[10px] font-black uppercase text-gray-400 bg-gray-50 px-2.5 py-1 rounded-xl">
+                {services.length} {isAr ? 'مهام' : 'Tasks'}
+              </span>
+            </div>
+
+            <div className="space-y-3 max-h-[520px] overflow-y-auto no-scrollbar pr-1">
+              {services.map(s => {
+                const isDelayed = s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed');
+                return (
+                  <div key={s.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-4 bg-gray-50/70 rounded-2xl border border-gray-100 gap-3 hover:border-gray-200 transition-all">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${s.status === 'completed' ? 'bg-green-500' : isDelayed ? 'bg-red-500' : 'bg-blue-500'}`} />
+                        <h4 className="font-black text-sm text-gray-900">{s.title}</h4>
+                      </div>
+                      <p className="text-[11px] text-gray-500 font-medium mt-1 flex flex-wrap items-center gap-2">
+                        <span><strong>Client:</strong> {s.clients?.company_name || 'Client'}</span>
+                        <span>&bull;</span>
+                        <span><strong>Assignee:</strong> {s.profiles?.full_name || 'Unassigned'}</span>
+                        <span>&bull;</span>
+                        <span><strong>Due:</strong> {s.due_date || 'N/A'}</span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                        s.status === 'completed' ? 'bg-green-50 text-green-700' : isDelayed ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+                      }`}>
+                        {s.status}
+                      </span>
+                      <button
+                        onClick={() => setReassignService(s)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-brand-dark hover:bg-white transition-colors cursor-pointer"
+                        title={isAr ? 'إعادة التعيين' : 'Reassign'}
+                      >
+                        <UserPlus size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
     );
   };
 
-  // 4. Quality Control & Kanban Intervention
+  // 4. Quality Control & Live Kanban Intervention
   const renderQualityView = () => {
-    const statuses: Array<'todo' | 'in_progress' | 'under_review' | 'completed'> = ['todo', 'in_progress', 'under_review', 'completed'];
+    const statuses: Array<'ongoing' | 'under_review' | 'delayed' | 'completed'> = ['ongoing', 'under_review', 'delayed', 'completed'];
 
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-6">
+      <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-6">
         <div>
           <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <CheckSquare className="text-[#A11212]" size={20} />
-            {isAr ? 'لوحة المراقبة الحية والتدخل الفوري' : 'Real-Time Kanban Intervention Board'}
+            <CheckSquare className="text-brand-dark" size={20} />
+            {isAr ? 'لوحة المراقبة الحية والتدخل الفوري (كانبان)' : 'Real-Time Kanban Intervention Board'}
           </h2>
-          <p className="text-xs text-gray-500 font-bold mt-1">
-            {isAr ? 'متابعة مراحل التنفيذ وإجراء تدخلات فورية للمهام المتأخرة بالقسم' : 'Track staff progress and execute reassignments or escalations instantly'}
+          <p className="text-xs text-gray-500 font-medium mt-1">
+            {isAr ? 'متابعة مراحل التنفيذ وإجراء تعديلات وتدخلات فورية بالقسم' : 'Track live progress and execute reassignments or corrective actions on deliverables'}
           </p>
         </div>
 
-        {/* Board Columns */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 overflow-x-auto pb-4">
           {statuses.map(st => {
-            const list = tasks.filter(t => t.status === st);
+            const list = services.filter(s => {
+              if (st === 'delayed') return s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed');
+              if (st === 'ongoing') return s.status === 'ongoing' && !(s.due_date && new Date(s.due_date) < new Date());
+              return s.status === st;
+            });
+
             const titles: Record<string, string> = {
-              todo: isAr ? 'معلقة' : 'To Do',
-              in_progress: isAr ? 'قيد التنفيذ' : 'In Progress',
-              under_review: isAr ? 'تحت المراجعة والاعتماد' : 'Under Review',
+              ongoing: isAr ? 'قيد التنفيذ' : 'In Progress',
+              under_review: isAr ? 'تحت المراجعة' : 'Under Review',
+              delayed: isAr ? 'متأخرة / متعثرة' : 'Delayed / Action',
               completed: isAr ? 'مكتملة' : 'Completed'
             };
+
+            const headerColors: Record<string, string> = {
+              ongoing: 'text-blue-600',
+              under_review: 'text-amber-600',
+              delayed: 'text-red-600',
+              completed: 'text-green-600'
+            };
+
             return (
-              <div key={st} className="bg-gray-50/50 border border-gray-150 rounded-2xl p-4 min-h-[400px] flex flex-col">
-                <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-150">
-                  <h4 className="font-black text-xs uppercase tracking-widest text-gray-500">{titles[st]}</h4>
-                  <span className="bg-white text-gray-500 text-[9px] font-black px-2 py-0.5 rounded shadow-xs border">
+              <div key={st} className="bg-gray-50/60 border border-gray-100 rounded-2xl p-4 min-h-[440px] flex flex-col">
+                <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-100">
+                  <h4 className={`font-black text-xs uppercase tracking-widest ${headerColors[st]}`}>{titles[st]}</h4>
+                  <span className="bg-white text-gray-600 text-[10px] font-black px-2 py-0.5 rounded-lg shadow-xs border border-gray-100">
                     {list.length}
                   </span>
                 </div>
+
                 <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar">
-                  {list.map(t => (
-                    <div key={t.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs space-y-3">
+                  {list.map(s => (
+                    <div key={s.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs space-y-3 text-start hover:shadow-md transition-all">
                       <div>
-                        <h5 className="font-bold text-xs text-gray-900">{t.title}</h5>
-                        <p className="text-[9px] text-gray-400 font-bold mt-0.5">{t.client}</p>
-                        <p className="text-[9px] text-gray-500 font-bold mt-1">Assigned: {t.assignee}</p>
+                        <h5 className="font-bold text-xs text-gray-900">{s.title}</h5>
+                        <p className="text-[10px] text-gray-400 font-bold mt-0.5">{s.clients?.company_name || 'Client'}</p>
+                        <p className="text-[10px] text-gray-600 font-bold mt-1">
+                          {isAr ? 'المسؤول:' : 'Assigned:'} {s.profiles?.full_name || 'Unassigned'}
+                        </p>
                       </div>
 
-                      {/* Intervention action hooks */}
-                      {st !== 'completed' && (
-                        <div className="flex gap-1.5 pt-2 border-t border-gray-100 justify-end">
+                      <div className="flex gap-1.5 pt-2 border-t border-gray-50 justify-between items-center text-[9px]">
+                        <span className="text-gray-400 font-bold">Due: {s.due_date || 'N/A'}</span>
+                        
+                        <div className="flex items-center gap-1">
+                          {st !== 'completed' && (
+                            <button 
+                              onClick={() => handleUpdateStatus(s.id, 'completed')}
+                              className="bg-green-50 hover:bg-green-100 text-green-700 px-2 py-1 rounded text-[8px] font-black uppercase transition-colors cursor-pointer"
+                              title={isAr ? 'تحديد كمكتمل' : 'Mark Completed'}
+                            >
+                              ✓ Done
+                            </button>
+                          )}
                           <button 
-                            onClick={() => handleReassignTask(t.id, t.assignee)}
-                            className="bg-gray-50 hover:bg-gray-100 text-gray-600 border px-2 py-1 rounded text-[8px] font-black uppercase tracking-wider"
+                            onClick={() => setReassignService(s)}
+                            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-[8px] font-black uppercase transition-colors cursor-pointer"
                           >
                             Reassign
                           </button>
-                          <button 
-                            onClick={() => handleEscalateTask(t.id, t.title)}
-                            className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-100 px-2 py-1 rounded text-[8px] font-black uppercase tracking-wider"
-                          >
-                            Escalate
-                          </button>
                         </div>
-                      )}
+                      </div>
                     </div>
                   ))}
+                  {list.length === 0 && (
+                    <div className="text-center py-8 text-gray-300 font-bold text-[10px]">
+                      {isAr ? 'فارغ' : 'Empty'}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -752,51 +1121,54 @@ const DepartmentHeadWorkspace = () => {
   // 5. Client Directory View
   const renderClientsView = () => {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-6">
+      <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-6">
         <div>
           <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <Briefcase className="text-[#A11212]" size={20} />
-            {isAr ? 'مصفوفة تتبع حسابات وعملاء القسم' : 'Client Tracking Matrix'}
+            <Briefcase className="text-brand-dark" size={20} />
+            {isAr ? 'دليل عملاء القسم المباشر' : 'Department Client Directory'}
           </h2>
-          <p className="text-xs text-gray-500 font-bold mt-1">
-            {isAr ? 'العملاء النشطون الذين يتلقون خدمات من القسم حالياً' : 'Clients actively receiving services from your unit'}
+          <p className="text-xs text-gray-500 font-medium mt-1">
+            {isAr ? 'العملاء المستفيدون من خدمات هذا القسم حالياً' : 'Companies currently receiving services and deliverables from your department'}
           </p>
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-gray-100">
-          <table className="w-full text-start">
+          <table className="w-full text-start whitespace-nowrap">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'العميل' : 'Company Name'}</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الخدمة المفعلة' : 'Active Package'}</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'المشروع الحالي' : 'Active Project'}</th>
-                {currentDeptId === 'client_success' && (
-                  <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">CSI Rating</th>
-                )}
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الشركة / العميل' : 'Company Name'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'التواصل' : 'Contact'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'المهام المسندة' : 'Engagements'}</th>
                 <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الحالة' : 'Status'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {clients.map(cl => (
-                <tr key={cl.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 font-black text-sm text-gray-900">{cl.name}</td>
-                  <td className="px-6 py-4 text-xs font-bold text-gray-500">{cl.package}</td>
-                  <td className="px-6 py-4 text-xs font-bold text-gray-500">{cl.activeProject}</td>
-                  {currentDeptId === 'client_success' && (
-                    <td className="px-6 py-4 text-xs font-black text-amber-500 flex items-center gap-1">
-                      <ThumbsUp size={12} /> {cl.rating || 'N/A'}
+              {clients.map(cl => {
+                const clientTasks = services.filter(s => s.client_id === cl.id);
+                const hasDelay = clientTasks.some(s => s.status === 'delayed');
+
+                return (
+                  <tr key={cl.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4 font-black text-sm text-gray-900 flex items-center gap-2">
+                      <Building2 size={16} className="text-brand-dark shrink-0" />
+                      {cl.company_name}
                     </td>
-                  )}
-                  <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
-                      cl.status === 'good' ? 'bg-green-50 text-green-700 border-green-150' :
-                      cl.status === 'warning' ? 'bg-orange-50 text-orange-700 border-orange-150' : 'bg-red-50 text-red-700 border-red-150'
-                    }`}>
-                      {cl.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-6 py-4 text-xs font-bold text-gray-500">
+                      {cl.email || cl.phone || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-bold text-gray-700">
+                      {clientTasks.length} {isAr ? 'عمليات' : 'Services'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
+                        hasDelay ? 'bg-red-50 text-red-700 border-red-150' : 'bg-green-50 text-green-700 border-green-150'
+                      }`}>
+                        {hasDelay ? 'Attention Needed' : 'Good Standing'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -807,23 +1179,23 @@ const DepartmentHeadWorkspace = () => {
   // 6. Coordination Hub View
   const renderCoordinationView = () => {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-6">
+      <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-6">
         <div>
           <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <Layers className="text-[#A11212]" size={20} />
+            <Layers className="text-brand-dark" size={20} />
             {isAr ? 'مركز التنسيق والتكامل بين الأقسام' : 'Cross-Department Coordination Hub'}
           </h2>
-          <p className="text-xs text-gray-500 font-bold mt-1">
-            {isAr ? 'متابعة المشروعات والطلبات المشتركة بين الأقسام الأخرى لضمان سرعة الإنجاز' : 'Oversee cross-functional services and initiatives requiring inter-department collaboration'}
+          <p className="text-xs text-gray-500 font-medium mt-1">
+            {isAr ? 'متابعة المشروعات والطلبات المشتركة بين الأقسام' : 'Oversee cross-functional services requiring inter-department collaboration'}
           </p>
         </div>
 
         <div className="space-y-4">
           <div className="border border-gray-100 rounded-2xl p-5 bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <span className="bg-red-50 text-[#A11212] text-[8px] font-black uppercase px-2 py-0.5 rounded border border-red-150">Audit &harr; Tax</span>
-              <h4 className="font-black text-sm text-gray-900 mt-2">Annual Compliance Package Exchange</h4>
-              <p className="text-xs text-gray-400 font-bold mt-0.5">Audit files require VAT transaction summaries.</p>
+              <span className="bg-red-50 text-brand-dark text-[8px] font-black uppercase px-2 py-0.5 rounded border border-red-150">Audit &harr; Tax & VAT</span>
+              <h4 className="font-black text-sm text-gray-900 mt-2">Annual Statutory Tax Verification</h4>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">Audit files require VAT transaction summaries.</p>
             </div>
             <span className="bg-green-50 text-green-700 text-[10px] font-black px-3 py-1.5 rounded-lg border border-green-150 uppercase tracking-widest">
               Synced & Completed
@@ -832,11 +1204,11 @@ const DepartmentHeadWorkspace = () => {
 
           <div className="border border-gray-100 rounded-2xl p-5 bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <span className="bg-red-50 text-[#A11212] text-[8px] font-black uppercase px-2 py-0.5 rounded border border-red-150">Bookkeeping &harr; Success</span>
+              <span className="bg-red-50 text-brand-dark text-[8px] font-black uppercase px-2 py-0.5 rounded border border-red-150">Bookkeeping &harr; Client Success</span>
               <h4 className="font-black text-sm text-gray-900 mt-2">Client Bank Account Feeds Integration</h4>
-              <p className="text-xs text-gray-400 font-bold mt-0.5">Client Success team coordinating with bank advisors for access.</p>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">Client Success team coordinating with bank advisors for access.</p>
             </div>
-            <span className="bg-orange-50 text-orange-700 text-[10px] font-black px-3 py-1.5 rounded-lg border border-orange-150 uppercase tracking-widest">
+            <span className="bg-amber-50 text-amber-700 text-[10px] font-black px-3 py-1.5 rounded-lg border border-amber-150 uppercase tracking-widest">
               Pending Coordination
             </span>
           </div>
@@ -848,47 +1220,49 @@ const DepartmentHeadWorkspace = () => {
   // 7. Performance Reports View
   const renderPerformanceView = () => {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-6">
+      <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-6">
         <div>
           <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <FileBarChart className="text-[#A11212]" size={20} />
-            {isAr ? 'دفتر سجل أداء الموظفين' : 'Performance Analytics Ledger'}
+            <FileBarChart className="text-brand-dark" size={20} />
+            {isAr ? 'سجل الأداء والمؤشرات الرقابية للقسم' : 'Performance Analytics Ledger'}
           </h2>
-          <p className="text-xs text-gray-500 font-bold mt-1">
-            {isAr ? 'مؤشرات الأداء التاريخية، دقة العمليات، والملاحظات الإشرافية' : 'Historical reporting tracking staff accuracy, timely completions, and internal review logs'}
+          <p className="text-xs text-gray-500 font-medium mt-1">
+            {isAr ? 'مؤشرات الأداء التاريخية، دقة العمليات، والملاحظات الإشرافية' : 'Historical tracking of staff accuracy, timely completions, and internal review logs'}
           </p>
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-gray-100">
-          <table className="w-full text-start">
+          <table className="w-full text-start whitespace-nowrap">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الموظف' : 'Employee'}</th>
                 <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'المهام المنجزة' : 'Completions'}</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'معدل الدقة والالتزام' : 'Accuracy Index'}</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'ملاحظة المشرف ورئيس القسم' : 'Review Logs / Remarks'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'المتأخرات' : 'Delays'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'مؤشر الدقة' : 'Accuracy Index'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'ملاحظة المشرف ورئيس القسم' : 'Review Remarks'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {personnel.map(p => (
                 <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-6 py-4">
-                    <p className="font-black text-sm text-gray-900">{p.name}</p>
-                    <p className="text-[9px] text-gray-400 font-bold mt-0.5">{p.role}</p>
+                    <p className="font-black text-sm text-gray-900">{p.full_name}</p>
+                    <p className="text-[9px] text-gray-400 font-bold capitalize mt-0.5">{p.role}</p>
                   </td>
-                  <td className="px-6 py-4 text-xs font-bold text-gray-700">{p.tasksCompleted}</td>
+                  <td className="px-6 py-4 text-xs font-bold text-gray-700">{p.tasksCompleted || 0}</td>
+                  <td className="px-6 py-4 text-xs font-bold text-red-600">{p.delayed || 0}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-gray-950">{p.accuracy}%</span>
+                      <span className="text-xs font-black text-gray-900">{p.accuracy || 98}%</span>
                       <div className="w-16 bg-gray-100 h-1.5 rounded-full">
-                        <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${p.accuracy}%` }} />
+                        <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${p.accuracy || 98}%` }} />
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-xs font-bold text-gray-500">
-                    {p.delayed > 2 
-                      ? (isAr ? 'تم رصد تأخير متكرر؛ يتطلب توجيه.' : 'Frequent deadline slippages noted; coaching required.')
-                      : (isAr ? 'أداء ممتاز وملتزم بالدقة والمهام.' : 'Demonstrates excellent work quality and compliance.')}
+                  <td className="px-6 py-4 text-xs font-medium text-gray-500">
+                    {(p.delayed || 0) > 1 
+                      ? (isAr ? 'تم رصد تأخير متكرر؛ يتطلب توجيه وإشراف.' : 'Deadline slippage noted; coaching required.')
+                      : (isAr ? 'أداء ممتاز وملتزم بالدقة والمواعيد.' : 'Demonstrates excellent work quality and compliance.')}
                   </td>
                 </tr>
               ))}
@@ -899,47 +1273,44 @@ const DepartmentHeadWorkspace = () => {
     );
   };
 
-  // --- CONTEXTUAL WORKSPACES INJECTIONS ---
-
+  // ── Contextual Specialist Workspace Modules ────────────────────────────────
   const renderSpecialistWorkspace = () => {
     switch (currentDeptId) {
       case 'audit':
         return (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            {/* Stage tracker */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-              <h3 className="text-xs font-black text-[#A11212] uppercase tracking-widest mb-4 flex items-center gap-2">
+            <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
+              <h3 className="text-xs font-black text-brand-dark uppercase tracking-widest mb-4 flex items-center gap-2">
                 <Clock size={16} /> {isAr ? 'مسار مراحل التدقيق' : 'Engagement Stages Pipeline'}
               </h3>
-              <div className="space-y-4">
-                {['Oman Telco Q4 Review', 'Muscat Port statutory audit'].map((proj, idx) => (
-                  <div key={idx} className="bg-gray-50 p-4 rounded-xl border">
+              <div className="space-y-3">
+                {['Statutory Audit Review', 'Internal Controls Compliance'].map((proj, idx) => (
+                  <div key={idx} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <h4 className="font-bold text-xs text-gray-900 mb-2">{proj}</h4>
                     <div className="flex justify-between items-center text-[9px] text-gray-400 font-black uppercase tracking-wider">
-                      <span className="text-[#A11212]">Planning</span>
+                      <span className="text-brand-dark">Planning</span>
                       <ChevronRight size={10} />
-                      <span className="text-[#A11212]">Fieldwork</span>
+                      <span className="text-brand-dark">Fieldwork</span>
                       <ChevronRight size={10} />
-                      <span className={idx === 0 ? 'text-[#A11212]' : ''}>Draft Report</span>
+                      <span className={idx === 0 ? 'text-brand-dark' : ''}>Draft Report</span>
                       <ChevronRight size={10} />
-                      <span>Final Review</span>
+                      <span>Final Sign-off</span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Authoritative Sign-off Verification */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-              <h3 className="text-xs font-black text-[#A11212] uppercase tracking-widest mb-4 flex items-center gap-2">
-                <CheckSquare size={16} /> {isAr ? 'مركز اعتماد وتوقيع التقارير' : 'Report Sign-Off & Verification Ledger'}
+            <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
+              <h3 className="text-xs font-black text-brand-dark uppercase tracking-widest mb-4 flex items-center gap-2">
+                <CheckSquare size={16} /> {isAr ? 'مركز اعتماد وتوقيع التقارير' : 'Report Sign-Off & Verification'}
               </h3>
               <div className="space-y-3">
-                {clients.map(cl => (
-                  <div key={cl.id} className="flex justify-between items-center p-3.5 bg-gray-50 rounded-xl border">
+                {clients.slice(0, 3).map(cl => (
+                  <div key={cl.id} className="flex justify-between items-center p-3.5 bg-gray-50 rounded-xl border border-gray-100">
                     <div>
-                      <p className="font-bold text-xs text-gray-900">{cl.name}</p>
-                      <p className="text-[9px] text-gray-400 mt-1">{cl.activeProject}</p>
+                      <p className="font-bold text-xs text-gray-900">{cl.company_name}</p>
+                      <p className="text-[9px] text-gray-400 mt-1">Audit Report Sign-off</p>
                     </div>
                     {auditSignedLedger.includes(cl.id) ? (
                       <span className="bg-green-50 text-green-700 text-[8px] font-black uppercase px-2 py-1 rounded border border-green-150 flex items-center gap-1">
@@ -951,7 +1322,7 @@ const DepartmentHeadWorkspace = () => {
                           setAuditSignedLedger(prev => [...prev, cl.id]);
                           alert(isAr ? 'تم توقيع وتصديق تقرير الحسابات الختامي بنجاح.' : 'Audit report signed & verified successfully.');
                         }}
-                        className="bg-[#A11212] hover:bg-[#800e0e] text-white text-[9px] font-black uppercase px-3 py-1.5 rounded-lg transition-colors"
+                        className="bg-brand-dark hover:bg-brand text-white text-[9px] font-black uppercase px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                       >
                         Sign-Off
                       </button>
@@ -966,76 +1337,59 @@ const DepartmentHeadWorkspace = () => {
       case 'tax_vat':
         return (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            {/* VAT Calendar */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+            <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xs font-black text-[#A11212] uppercase tracking-widest flex items-center gap-2">
+                <h3 className="text-xs font-black text-brand-dark uppercase tracking-widest flex items-center gap-2">
                   <Calendar size={16} /> {isAr ? 'تقويم الإقرارات الضريبية' : 'Regulatory VAT Calendar'}
                 </h3>
-                <span className="text-[10px] bg-red-50 text-[#A11212] font-black px-2 py-0.5 rounded border border-red-150">{vatQuarter}</span>
+                <span className="text-[10px] bg-red-50 text-brand-dark font-black px-2.5 py-0.5 rounded-lg border border-red-100">{vatQuarter}</span>
               </div>
               <div className="space-y-3">
-                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-150">
+                <div className="flex justify-between items-center p-3.5 bg-gray-50 rounded-xl border border-gray-100">
                   <div>
-                    <p className="font-bold text-xs text-gray-900">Mazoon Electricity return</p>
-                    <p className="text-[9px] text-gray-400 mt-1">Submission Target: 2026-07-28</p>
+                    <p className="font-bold text-xs text-gray-900">VAT Quarterly Return</p>
+                    <p className="text-[9px] text-gray-400 mt-1">Target Submission: 2026-07-28</p>
                   </div>
-                  <span className="bg-orange-50 text-orange-700 text-[8px] font-black px-2 py-1 rounded border border-orange-150 uppercase tracking-widest">
+                  <span className="bg-amber-50 text-amber-700 text-[8px] font-black px-2 py-1 rounded border border-amber-150 uppercase tracking-widest">
                     Action Required
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-150">
-                  <div>
-                    <p className="font-bold text-xs text-gray-900">Sohar Steel Exemption Case</p>
-                    <p className="text-[9px] text-gray-400 mt-1">Hearing: 2026-07-25</p>
-                  </div>
-                  <span className="bg-blue-50 text-blue-700 text-[8px] font-black px-2 py-1 rounded border border-blue-150 uppercase tracking-widest">
-                    On Track
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Penalty Alert Engine */}
-            <div className="bg-[#A11212] text-white rounded-2xl p-6 shadow-sm relative overflow-hidden flex flex-col justify-between">
+            <div className="bg-brand-dark text-white rounded-[2rem] p-6 shadow-sm relative overflow-hidden flex flex-col justify-between">
               <div className="absolute -end-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl" />
               <div className="relative z-10">
                 <h3 className="text-xs font-black uppercase tracking-widest text-white/70 mb-4 flex items-center gap-2">
                   <AlertTriangle size={16} /> {isAr ? 'محرك تنبيهات الغرامات المالية' : 'Penalty Alert Engine'}
                 </h3>
                 <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-xl space-y-2">
-                  <h4 className="font-black text-sm">Oman Food Logistics Certificate</h4>
-                  <p className="text-[11px] text-white/80">Exceeds renewal period by 5 days. High penalty risk of OMR 500 under Tax Regulations.</p>
+                  <h4 className="font-black text-sm">Tax Certificate Expiration Watch</h4>
+                  <p className="text-[11px] text-white/80">Automated monitoring for expiry deadlines to avoid tax authority penalty fines.</p>
                 </div>
               </div>
-              <button 
-                onClick={() => alert(isAr ? 'تم تصعيد التحذير وتكليف الفريق بمتابعة التجديد فوراً!' : 'Warning escalated to executive team to execute renewal immediately!')}
-                className="mt-6 w-full bg-white hover:bg-gray-100 text-[#A11212] py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-colors shadow-sm"
-              >
-                Escalate Penalty Threat
-              </button>
             </div>
           </div>
         );
 
       case 'bookkeeping':
         return (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm mt-6">
+          <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm mt-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xs font-black text-[#A11212] uppercase tracking-widest flex items-center gap-2">
+              <h3 className="text-xs font-black text-brand-dark uppercase tracking-widest flex items-center gap-2">
                 <CheckCircle2 size={16} /> {isAr ? 'قائمة الفحص للإغلاق الشهري' : 'Interactive Monthly Closure Checklist'}
               </h3>
-              <span className="text-[10px] bg-green-50 text-green-700 border border-green-150 px-2 py-0.5 rounded font-black">
+              <span className="text-[10px] bg-green-50 text-green-700 border border-green-150 px-2.5 py-0.5 rounded-lg font-black">
                 {checklist.filter(c => c.done).length} / {checklist.length} Completed
               </span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {checklist.map(item => (
                 <div 
                   key={item.id} 
                   onClick={() => setChecklist(prev => prev.map(c => c.id === item.id ? { ...c, done: !c.done } : c))}
                   className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-colors ${
-                    item.done ? 'bg-green-50/20 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+                    item.done ? 'bg-green-50/30 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-300'
                   }`}
                 >
                   <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
@@ -1046,123 +1400,6 @@ const DepartmentHeadWorkspace = () => {
                   <span className={`text-xs font-bold ${item.done ? 'text-green-800 line-through' : 'text-gray-700'}`}>{item.label}</span>
                 </div>
               ))}
-            </div>
-          </div>
-        );
-
-      case 'business_advisory':
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            {/* Gantt milestones */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-              <h3 className="text-xs font-black text-[#A11212] uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Activity size={16} /> {isAr ? 'مخطط مراحل المشروعات' : 'Custom Project Milestone Gantt'}
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-[10px] font-bold text-gray-500 mb-1">
-                    <span>Khimji Feasibility Assessment</span>
-                    <span>70%</span>
-                  </div>
-                  <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                    <div className="bg-brand-red h-2 rounded-full" style={{ width: '70%', backgroundColor: '#A11212' }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-[10px] font-bold text-gray-500 mb-1">
-                    <span>Al Zawawi Re-structuring</span>
-                    <span>40%</span>
-                  </div>
-                  <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                    <div className="bg-brand-red h-2 rounded-full" style={{ width: '40%', backgroundColor: '#A11212' }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Proposal validation */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-              <h3 className="text-xs font-black text-[#A11212] uppercase tracking-widest mb-4 flex items-center gap-2">
-                <CheckSquare size={16} /> {isAr ? 'مركز اعتماد المقترحات المالية والتعاقدية' : 'Proposal Approvals Validation Interface'}
-              </h3>
-              <div className="space-y-3">
-                {proposals.map(prop => (
-                  <div key={prop.id} className="flex justify-between items-center p-3.5 bg-gray-50 rounded-xl border">
-                    <div>
-                      <p className="font-bold text-xs text-gray-900">{prop.client}</p>
-                      <p className="text-[10px] text-gray-500 mt-1">{prop.type} &bull; {prop.budget}</p>
-                    </div>
-                    {prop.status === 'approved' ? (
-                      <span className="bg-green-50 text-green-700 text-[8px] font-black uppercase px-2.5 py-1 rounded border border-green-150">APPROVED</span>
-                    ) : (
-                      <button 
-                        onClick={() => {
-                          setProposals(prev => prev.map(p => p.id === prop.id ? { ...p, status: 'approved' } : p));
-                          alert(isAr ? 'تم اعتماد المقترح وإرساله للعميل للتوقيع.' : 'Proposal approved & forwarded to client.');
-                        }}
-                        className="bg-[#A11212] hover:bg-[#800e0e] text-white text-[9px] font-black uppercase px-3 py-1.5 rounded-lg transition-colors"
-                      >
-                        Approve
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'client_success':
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            {/* Customer Satisfaction Index index metrics */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-              <h3 className="text-xs font-black text-[#A11212] uppercase tracking-widest mb-4 flex items-center gap-2">
-                <ThumbsUp size={16} /> {isAr ? 'مؤشرات رضا العملاء CSI' : 'Client Satisfaction Index (CSI)'}
-              </h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-                  <div>
-                    <p className="font-bold text-xs text-gray-900">Department CSI Average</p>
-                    <p className="text-[9px] text-gray-400 mt-0.5">Based on client feedback log</p>
-                  </div>
-                  <span className="text-lg font-black text-amber-500">4.6 / 5.0</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-                  <div>
-                    <p className="font-bold text-xs text-gray-900">Bottlenecks Identified</p>
-                    <p className="text-[9px] text-gray-400 mt-0.5">Fulfillment delays at Ministry</p>
-                  </div>
-                  <span className="text-sm font-black text-red-600">2 Active</span>
-                </div>
-              </div>
-            </div>
-
-            {/* route/delivery status boards */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-              <h3 className="text-xs font-black text-[#A11212] uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Truck size={16} /> {isAr ? 'جدولة وتوزيع مستندات وزارة التجارة' : 'Route & Governmental Document Delivery Board'}
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border">
-                  <div>
-                    <p className="font-bold text-xs text-gray-900">MOCI Document Dispatch</p>
-                    <p className="text-[9px] text-gray-500 mt-0.5">Said Al-Rawahi &bull; Route: Ruwi &rarr; Al-Khuwair</p>
-                  </div>
-                  <span className="bg-blue-50 text-blue-700 text-[8px] font-black px-2 py-1 rounded border border-blue-150 uppercase tracking-widest">
-                    In Transit
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border">
-                  <div>
-                    <p className="font-bold text-xs text-gray-900">Tax Authority Objection Delivery</p>
-                    <p className="text-[9px] text-gray-500 mt-0.5">Hamad Al-Ghafri &bull; Route: Corporate Office HQ</p>
-                  </div>
-                  <span className="bg-green-50 text-green-700 text-[8px] font-black px-2 py-1 rounded border border-green-150 uppercase tracking-widest">
-                    Delivered
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
         );
@@ -1185,34 +1422,201 @@ const DepartmentHeadWorkspace = () => {
   };
 
   return (
-    <div className="space-y-6" dir={isAr ? 'rtl' : 'ltr'}>
-      {/* View Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-gray-100 shadow-xs">
+    <div className="space-y-6 pb-12" dir={isAr ? 'rtl' : 'ltr'}>
+      {/* ── View Header ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
         <div>
-          <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
-            <ShieldCheck className="text-[#A11212]" size={22} />
-            {isAr ? 'بوابة رئيس قسم العمليات والخدمات' : 'Department Head Portal'}
+          <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2.5">
+            <ShieldCheck className="text-brand-dark" size={26} />
+            {isAr ? 'بوابة رئيس القسم الإشرافية' : 'Department Head Control Center'}
           </h2>
-          <p className="text-xs text-gray-500 font-bold">
+          <p className="text-xs text-gray-500 font-bold mt-1">
             {isAr 
-              ? `إدارة شؤون قسم: ${deptConfig?.name || ''} والمتابعة الإشرافية المباشرة` 
-              : `Operational control center for ${deptConfig?.name || ''} unit`}
+              ? `إدارة عمليات قسم: ${deptConfig?.name || ''} والرقابة على الفريق والمهام الموزعة` 
+              : `Supervisory operations control for ${deptConfig?.name || ''} unit`}
           </p>
         </div>
-        
-        {/* Dynamic Context Display indicator badge */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{isAr ? 'القسم الحالي:' : 'Scope Context:'}</span>
-          <span className="bg-red-50 text-[#A11212] border border-red-100 text-[10px] font-black px-3 py-1.5 rounded-xl uppercase tracking-wider">
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => fetchDepartmentData()}
+            className="p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-gray-600 hover:text-brand-dark transition-all cursor-pointer flex items-center gap-2 text-xs font-bold"
+            title={isAr ? 'تحديث البيانات' : 'Sync Live Data'}
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">{isAr ? 'تحديث' : 'Sync'}</span>
+          </button>
+
+          <span className="bg-red-50 text-brand-dark border border-red-100 text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider">
             {deptConfig?.name}
           </span>
         </div>
       </div>
 
-      {/* Render Active Tab / View content */}
-      <div className="animate-in fade-in duration-300">
-        {renderActiveView()}
-      </div>
+      {/* ── Active View Rendering ───────────────────────────────────────── */}
+      {loading ? (
+        <div className="p-20 flex justify-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-dark" />
+        </div>
+      ) : (
+        <div className="animate-in fade-in duration-300">
+          {renderActiveView()}
+        </div>
+      )}
+
+      {/* ── Delay Action & Root-Cause Logging Modal ───────────────────────── */}
+      {selectedDelayService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden p-6 animate-scale-up border border-gray-100 text-start">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                <AlertTriangle size={18} className="text-red-500" />
+                {isAr ? 'توثيق سبب التأخير والإجراء المتخذ' : 'Log Delay Root Cause & HOD Action'}
+              </h3>
+              <button 
+                onClick={() => setSelectedDelayService(null)} 
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="bg-red-50/60 p-3.5 rounded-2xl border border-red-100 mb-4 space-y-1 text-xs">
+              <p className="font-black text-gray-900">{selectedDelayService.title}</p>
+              <p className="text-gray-600"><strong>{isAr ? 'العميل:' : 'Client:'}</strong> {selectedDelayService.clients?.company_name || 'Client'}</p>
+              <p className="text-gray-600"><strong>{isAr ? 'الموظف المسؤول:' : 'Assignee:'}</strong> {selectedDelayService.profiles?.full_name || 'Unassigned'}</p>
+            </div>
+
+            <form onSubmit={handleSaveDelayAction} className="space-y-4 text-start">
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'تصنيف سبب التأخير' : 'Delay Root Cause Category'}
+                </label>
+                <select
+                  value={delayReasonCat}
+                  onChange={e => setDelayReasonCat(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-brand-dark outline-none cursor-pointer"
+                >
+                  {(isAr ? DELAY_REASONS_AR : DELAY_REASONS_EN).map((r, i) => (
+                    <option key={i} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'تفاصيل إضافية حول سبب التأخير' : 'Specific Delay Notes'}
+                </label>
+                <textarea
+                  rows={2}
+                  value={delayReasonDetail}
+                  onChange={e => setDelayReasonDetail(e.target.value)}
+                  placeholder={isAr ? 'اكتب ملاحظات توضيحية إضافية...' : 'Describe specific circumstances...'}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-medium focus:border-brand-dark outline-none resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'الإجراء التصحيحي المتخذ من رئيس القسم' : 'Corrective Action Taken by HOD'}
+                </label>
+                <select
+                  value={delayActionCat}
+                  onChange={e => setDelayActionCat(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-brand-dark outline-none cursor-pointer"
+                >
+                  {(isAr ? DELAY_ACTIONS_AR : DELAY_ACTIONS_EN).map((a, i) => (
+                    <option key={i} value={a}>{a}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'تفاصيل الإجراء والمتابعة' : 'Action Details & Follow-up Plan'}
+                </label>
+                <textarea
+                  rows={2}
+                  value={delayActionDetail}
+                  onChange={e => setDelayActionDetail(e.target.value)}
+                  placeholder={isAr ? 'تفاصيل الإجراء وخطة تدارك التأخير...' : 'Action steps taken to recover deadline...'}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-medium focus:border-brand-dark outline-none resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'تاريخ الإنجاز المستهدف الجديد (اختياري)' : 'Revised Target Completion Date (Optional)'}
+                </label>
+                <input
+                  type="date"
+                  value={delayRevisedDue}
+                  onChange={e => setDelayRevisedDue(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-brand-dark outline-none"
+                />
+              </div>
+
+              <div className="pt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDelayService(null)}
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingDelayAction}
+                  className="flex-1 py-3 bg-brand-dark hover:bg-brand text-white rounded-xl font-black text-xs uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer shadow-md"
+                >
+                  {isSavingDelayAction ? '...' : (isAr ? 'حفظ وتعميم الإجراء' : 'Save & Broadcast Action')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reassign Employee Modal ───────────────────────────────────────── */}
+      {reassignService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden p-6 animate-scale-up border border-gray-100 text-start">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                <UserCheck size={18} className="text-brand-dark" />
+                {isAr ? 'إعادة تعيين مسؤول المهمة' : 'Reassign Staff Member'}
+              </h3>
+              <button 
+                onClick={() => setReassignService(null)} 
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-500 font-bold mb-4">{reassignService.title}</p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {personnel.map(emp => (
+                <button
+                  key={emp.id}
+                  onClick={() => handleReassignSubmit(reassignService.id, emp.id)}
+                  className="w-full text-start p-3 rounded-xl border border-gray-100 hover:border-brand-dark hover:bg-brand-dark/5 transition-all flex items-center justify-between cursor-pointer"
+                >
+                  <div>
+                    <p className="text-xs font-black text-gray-900">{emp.full_name}</p>
+                    <p className="text-[10px] font-bold text-gray-400 capitalize">{emp.role || 'Staff'}</p>
+                  </div>
+                  {reassignService.employee_id === emp.id && (
+                    <span className="w-2 h-2 rounded-full bg-green-500" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
