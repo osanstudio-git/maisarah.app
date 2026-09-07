@@ -177,6 +177,17 @@ const OperationsCenter = () => {
     };
   }, [fetchServices]);
 
+  // Click outside listener for action dropdown
+  useEffect(() => {
+    const handleDocClick = () => setActiveMenuId(null);
+    if (activeMenuId) {
+      window.addEventListener('click', handleDocClick);
+    }
+    return () => {
+      window.removeEventListener('click', handleDocClick);
+    };
+  }, [activeMenuId]);
+
   // ── Map service title to department ────────────────────────────────────────
   const getDepartmentForService = (title: string) => {
     const depts = getAllDepartments();
@@ -445,7 +456,7 @@ const OperationsCenter = () => {
         </div>
 
         {/* High-Density Pipeline Table */}
-        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-visible">
+        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-visible min-h-[380px] pb-10">
           {loading ? (
             <div className="p-20 flex justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark" />
@@ -455,15 +466,18 @@ const OperationsCenter = () => {
               {isAr ? 'لا توجد عمليات تطابق البحث' : 'No operations found matching your filters.'}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-visible">
               <table className="w-full text-start whitespace-nowrap">
                 <thead className="bg-gray-50/75 border-b border-gray-100">
                   <tr>
-                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider w-24">
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider w-20">
                       {isAr ? 'الرقم / الكود' : '# / ID'}
                     </th>
                     <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
-                      {isAr ? 'الشركة والعميل' : 'Company (Client)'}
+                      {isAr ? 'الشركة' : 'Company'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                      {isAr ? 'العميل' : 'Client'}
                     </th>
                     <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
                       {isAr ? 'القسم والخدمة' : 'Dept & Service'}
@@ -489,6 +503,7 @@ const OperationsCenter = () => {
                     const deptCode = DEPARTMENT_CODES[dept.id] || 'OPS';
                     const sla = getSLAStatus(svc.due_date);
                     const isMenuOpen = activeMenuId === svc.id;
+                    const isNearBottom = index >= Math.max(0, filtered.length - 2);
 
                     return (
                       <tr key={svc.id} className="group hover:bg-gray-50/60 transition-colors relative">
@@ -500,43 +515,45 @@ const OperationsCenter = () => {
                           </div>
                         </td>
 
-                        {/* 2. Company & Client Contact */}
+                        {/* 2. Company */}
                         <td className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-2">
-                              <Building2 size={15} className="text-brand-dark shrink-0" />
-                              <span className="text-xs font-black text-gray-900 tracking-tight">
-                                {svc.clients?.company_name || (isAr ? 'عميل عام' : 'Generic Client')}
-                              </span>
-                            </div>
-                            {svc.clients?.email ? (
-                              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-500 ps-5 font-medium">
-                                <Mail size={11} className="text-gray-400 shrink-0" />
-                                <span className="truncate max-w-[180px]">{svc.clients.email}</span>
-                              </div>
-                            ) : svc.clients?.phone ? (
-                              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-500 ps-5 font-medium">
-                                <Phone size={11} className="text-gray-400 shrink-0" />
-                                <span>{svc.clients.phone}</span>
-                              </div>
-                            ) : (
-                              <span className="text-[10px] text-gray-400 ps-5 mt-0.5">
-                                {isAr ? 'عميل مسجل' : 'Registered Client'}
-                              </span>
-                            )}
+                          <div className="flex items-center gap-2">
+                            <Building2 size={16} className="text-brand-dark shrink-0" />
+                            <span className="text-xs font-black text-gray-900 tracking-tight">
+                              {svc.clients?.company_name || (isAr ? 'عميل عام' : 'Generic Client')}
+                            </span>
                           </div>
                         </td>
 
-                        {/* 3. Department & Service Deliverable */}
+                        {/* 3. Client Contact */}
                         <td className="px-6 py-4">
-                          <p className="text-[10px] font-black text-brand-dark uppercase tracking-widest mb-0.5">{dept.name}</p>
-                          <p className="text-xs font-bold text-gray-900 truncate max-w-[240px]" title={svc.title}>{svc.title}</p>
-                          {svc.description && (
-                            <p className="text-[10px] text-gray-400 truncate max-w-[240px] mt-0.5">{svc.description}</p>
+                          {svc.clients?.email ? (
+                            <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+                              <Mail size={13} className="text-gray-400 shrink-0" />
+                              <span className="truncate max-w-[170px]">{svc.clients.email}</span>
+                            </div>
+                          ) : svc.clients?.phone ? (
+                            <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+                              <Phone size={13} className="text-gray-400 shrink-0" />
+                              <span>{svc.clients.phone}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400 font-medium">
+                              {isAr ? 'غير محدد' : 'Not set'}
+                            </span>
                           )}
                         </td>
 
-                        {/* 4. Handled By (Assignee) */}
+                        {/* 4. Department & Service Deliverable */}
+                        <td className="px-6 py-4">
+                          <p className="text-[10px] font-black text-brand-dark uppercase tracking-widest mb-0.5">{dept.name}</p>
+                          <p className="text-xs font-bold text-gray-900 truncate max-w-[220px]" title={svc.title}>{svc.title}</p>
+                          {svc.description && (
+                            <p className="text-[10px] text-gray-400 truncate max-w-[220px] mt-0.5">{svc.description}</p>
+                          )}
+                        </td>
+
+                        {/* 5. Handled By (Assignee) */}
                         <td className="px-6 py-4">
                           <button
                             onClick={() => setReassignService(svc)}
@@ -559,7 +576,7 @@ const OperationsCenter = () => {
                           </button>
                         </td>
 
-                        {/* 5. SLA Status */}
+                        {/* 6. SLA Status */}
                         <td className="px-6 py-4">
                           <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase inline-flex items-center gap-1 ${sla.bg} ${sla.color}`}>
                             <Clock size={11} />
@@ -567,7 +584,7 @@ const OperationsCenter = () => {
                           </span>
                         </td>
 
-                        {/* 6. State / Status */}
+                        {/* 7. State / Status */}
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <span className={`w-2.5 h-2.5 rounded-full ${status.bg.replace('-50', '-500')}`} />
@@ -577,10 +594,13 @@ const OperationsCenter = () => {
                           </div>
                         </td>
 
-                        {/* 7. Actions Menu */}
+                        {/* 8. Actions Menu */}
                         <td className="px-6 py-4 text-end relative">
                           <button 
-                            onClick={() => setActiveMenuId(isMenuOpen ? null : svc.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuId(isMenuOpen ? null : svc.id);
+                            }}
                             className="p-1.5 rounded-lg text-gray-400 hover:text-brand-dark hover:bg-gray-100 transition-colors cursor-pointer"
                           >
                             <MoreVertical size={16} />
@@ -588,31 +608,34 @@ const OperationsCenter = () => {
 
                           {/* Dropdown Action Menu */}
                           {isMenuOpen && (
-                            <div className={`absolute ${isAr ? 'left-6' : 'right-6'} mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-scale-up text-start`}>
-                              <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-50">
+                            <div 
+                              onClick={(e) => e.stopPropagation()}
+                              className={`absolute ${isAr ? 'left-2' : 'right-2'} ${isNearBottom ? 'bottom-10' : 'top-10'} w-52 bg-white rounded-2xl shadow-2xl border border-gray-200/90 py-2 z-50 text-start`}
+                            >
+                              <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">
                                 {isAr ? 'تغيير الحالة' : 'Change State'}
                               </div>
                               <button
                                 onClick={() => handleStatusChange(svc.id, 'ongoing')}
-                                className="w-full px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2 cursor-pointer transition-colors"
                               >
                                 <PlayCircle size={14} /> Ongoing
                               </button>
                               <button
                                 onClick={() => handleStatusChange(svc.id, 'under_review')}
-                                className="w-full px-3 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 flex items-center gap-2 cursor-pointer transition-colors"
                               >
                                 <Clock size={14} /> Review
                               </button>
                               <button
                                 onClick={() => handleStatusChange(svc.id, 'completed')}
-                                className="w-full px-3 py-2 text-xs font-bold text-green-600 hover:bg-green-50 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs font-bold text-green-600 hover:bg-green-50 flex items-center gap-2 cursor-pointer transition-colors"
                               >
                                 <CheckCircle2 size={14} /> Completed
                               </button>
                               <button
                                 onClick={() => handleStatusChange(svc.id, 'delayed')}
-                                className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer transition-colors"
                               >
                                 <AlertTriangle size={14} /> Delayed
                               </button>
@@ -624,7 +647,7 @@ const OperationsCenter = () => {
                                   setActiveMenuId(null);
                                   setReassignService(svc);
                                 }}
-                                className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors"
                               >
                                 <UserPlus size={14} className="text-gray-400" /> {isAr ? 'إعادة تعيين المسؤول' : 'Reassign Assignee'}
                               </button>
@@ -642,13 +665,13 @@ const OperationsCenter = () => {
                                   });
                                   setShowCreateModal(true);
                                 }}
-                                className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors"
                               >
                                 <Edit size={14} className="text-gray-400" /> {isAr ? 'تعديل العملية' : 'Edit Operation'}
                               </button>
                               <button
                                 onClick={() => handleDeleteService(svc.id)}
-                                className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer transition-colors"
                               >
                                 <Trash2 size={14} /> {isAr ? 'حذف العملية' : 'Delete Operation'}
                               </button>
