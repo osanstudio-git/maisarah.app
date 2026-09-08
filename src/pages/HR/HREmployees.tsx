@@ -971,8 +971,7 @@ export default function HREmployees() {
           bonuses: [],
           transfers: [],
           role: formData.role,
-          dept: formData.dept,
-          department_id: departmentId
+          dept: formData.dept
         }, { onConflict: 'id' });
       }
 

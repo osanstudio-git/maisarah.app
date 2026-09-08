@@ -639,7 +639,6 @@ const EmployeeManagement = () => {
           email: formData.email,
           phone: formData.phone,
           dept: deptNames[formData.department_id] || 'Audit',
-          department_id: formData.department_id,
           role: formData.role === 'department_head' ? 'Department Head (HOD)' : (editingEmployee.job_title || 'Employee')
         };
 
@@ -751,7 +750,6 @@ const EmployeeManagement = () => {
           email: formData.email,
           phone: formData.phone,
           dept: deptNames[formData.department_id] || 'Audit',
-          department_id: formData.department_id,
           role: formData.role === 'department_head' ? 'Department Head (HOD)' : 'Employee'
         }, { onConflict: 'id' });
       }
@@ -809,7 +807,6 @@ const EmployeeManagement = () => {
         phone: editFormData.phone,
         role: editFormData.accessRole === 'department_head' ? 'Department Head (HOD)' : editFormData.jobTitle,
         dept: deptNames[editFormData.department_id] || 'Audit',
-        department_id: editFormData.department_id,
         employee_type: editFormData.employeeType,
         joined_date: editFormData.joinedDate,
         immediate_supervisor: editFormData.immediateSupervisor,
