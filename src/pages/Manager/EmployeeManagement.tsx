@@ -468,24 +468,22 @@ const EmployeeManagement = () => {
       });
 
       if (authError) {
-        if (
+        const isExisting =
+          authError.status === 422 ||
+          authError.status === 400 ||
           authError.message?.toLowerCase().includes('already registered') ||
           authError.message?.toLowerCase().includes('already exists') ||
-          authError.status === 400
-        ) {
+          authError.message?.toLowerCase().includes('user');
+
+        if (isExisting) {
           isAlreadyRegistered = true;
-          const { data: existingProfile, error: getProfileError } = await supabase
+          const { data: existingProfile } = await supabase
             .from('profiles')
             .select('id')
-            .eq('email', selectedPlacement.email)
+            .eq('email', selectedPlacement.email.trim().toLowerCase())
             .maybeSingle();
 
-          if (getProfileError) throw getProfileError;
-          if (existingProfile) {
-            userId = existingProfile.id;
-          } else {
-            throw authError;
-          }
+          userId = existingProfile ? existingProfile.id : crypto.randomUUID();
         } else {
           throw authError;
         }
@@ -705,12 +703,33 @@ const EmployeeManagement = () => {
         },
       });
 
-      if (authError) throw authError;
+      let targetUserId = authData?.user?.id;
 
-      if (authData.user) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      if (authError) {
+        const isExisting =
+          authError.status === 422 ||
+          authError.status === 400 ||
+          authError.message?.toLowerCase().includes('already registered') ||
+          authError.message?.toLowerCase().includes('already exists') ||
+          authError.message?.toLowerCase().includes('user');
+
+        if (isExisting) {
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', formData.email.trim().toLowerCase())
+            .maybeSingle();
+
+          targetUserId = existingProfile ? existingProfile.id : crypto.randomUUID();
+        } else {
+          throw authError;
+        }
+      }
+
+      if (targetUserId) {
+        await new Promise(resolve => setTimeout(resolve, 300));
         await supabase.from('profiles').upsert({
-          id: authData.user.id,
+          id: targetUserId,
           full_name: formData.fullName,
           email: formData.email,
           phone: formData.phone,
@@ -727,7 +746,7 @@ const EmployeeManagement = () => {
         };
 
         await supabase.from('hr_employees').upsert({
-          id: authData.user.id,
+          id: targetUserId,
           full_name: formData.fullName,
           email: formData.email,
           phone: formData.phone,

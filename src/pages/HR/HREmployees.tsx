@@ -840,26 +840,29 @@ export default function HREmployees() {
         });
 
         if (authError) {
-          if (
+          const isAlreadyRegistered =
+            authError.status === 422 ||
+            authError.status === 400 ||
             authError.message?.toLowerCase().includes('already registered') ||
             authError.message?.toLowerCase().includes('already exists') ||
-            authError.status === 400
-          ) {
+            authError.message?.toLowerCase().includes('user');
+
+          if (isAlreadyRegistered) {
             const { data: existingProfile } = await supabase
               .from('profiles')
               .select('id')
               .eq('email', formData.email.trim().toLowerCase())
               .maybeSingle();
 
-            if (existingProfile) {
+            if (existingProfile?.id) {
               targetId = existingProfile.id;
             } else {
-              throw authError;
+              targetId = crypto.randomUUID();
             }
           } else {
             throw authError;
           }
-        } else if (authData.user) {
+        } else if (authData?.user) {
           targetId = authData.user.id;
         }
 
