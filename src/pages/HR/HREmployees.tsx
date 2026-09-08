@@ -6,7 +6,8 @@ import {
   Search, User, Phone, MapPin, Briefcase, DollarSign,
   GraduationCap, Award, Users as FamilyIcon, PhoneCall,
   FileText, TrendingUp, AlertTriangle, Gift, ArrowLeftRight,
-  Download, UploadCloud, Plus, Edit, Trash2, CheckCircle2, X, PlusCircle, LayoutGrid, ListFilter, SlidersHorizontal, UserX, AlertCircle, ShieldAlert
+  Download, UploadCloud, Plus, Edit, Trash2, CheckCircle2, X, PlusCircle, LayoutGrid, ListFilter, SlidersHorizontal, UserX, AlertCircle, ShieldAlert,
+  Copy, Check, Share2, Send, Lock, Mail, Key, Loader2, Sparkles
 } from 'lucide-react';
 
 interface Employee {
@@ -448,6 +449,32 @@ export default function HREmployees() {
   // Modal States
   const [showModal, setShowModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    name: string;
+    email: string;
+    password: string;
+    role: string;
+    dept: string;
+    emailDispatched?: boolean;
+  } | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopyText = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!createdCredentials) return;
+    const phone = formData.phone ? formData.phone.replace(/\s+/g, '') : '';
+    const text = `مرحباً ${createdCredentials.name}،\n\nتم إنشاء وتفعيل حسابك في منصة ميسرة بنجاح.\nالبريد الإلكتروني: ${createdCredentials.email}\nكلمة المرور المؤقتة: ${createdCredentials.password}\nالقسم: ${createdCredentials.dept}\nرابط تسجيل الدخول: ${window.location.origin}/login\n\nيرجى تغيير كلمة المرور عند تسجيل الدخول لأول مرة.`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
   const [activeSubTab, setActiveSubTab] = useState<'profile' | 'salary' | 'background' | 'documents' | 'history'>('profile');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -507,6 +534,8 @@ export default function HREmployees() {
 
   const handleOpenAddModal = () => {
     setIsEditMode(false);
+    setFormError(null);
+    setIsSubmitting(false);
     setFormData({
       id: `EMP-00${employees.length + 1}`,
       name: '',
@@ -522,7 +551,7 @@ export default function HREmployees() {
       dob: '',
       gender: 'Male',
       maritalStatus: 'Single',
-      joinedDate: '',
+      joinedDate: new Date().toISOString().split('T')[0],
       immediateSupervisor: 'Fatma Al-Harthy',
       basicSalary: 1000,
       type: 'Experienced',
@@ -548,6 +577,8 @@ export default function HREmployees() {
 
   const handleOpenEditModal = (emp: Employee) => {
     setIsEditMode(true);
+    setFormError(null);
+    setIsSubmitting(false);
     setFormData({
       id: emp.id,
       name: emp.name,
@@ -706,233 +737,386 @@ export default function HREmployees() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
-    // 1. Determine final target ID for the employee
-    let targetId = formData.id;
-    let isNew = false;
-    let tempPassword = '';
-    let accessRole = 'employee';
-    let departmentId = 'audit';
+    if (!formData.name?.trim() || !formData.email?.trim()) {
+      setFormError(isAr ? 'يرجى إدخال الاسم الكامل والبريد الإلكتروني المؤسسي' : 'Please provide full name and corporate email');
+      return;
+    }
 
-    if (!isEditMode) {
-      isNew = true;
-      targetId = `EMP-${Math.floor(100 + Math.random() * 900)}`; // Fallback mock ID
-      tempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
-      
-      // Determine access role
+    setIsSubmitting(true);
+    setFormError(null);
+
+    try {
+      // 1. Determine final target ID and roles
+      let targetId = formData.id;
+      let tempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
+      let accessRole = 'employee';
+      let departmentId = 'audit';
+
       const normalizedDept = (formData.dept || '').toLowerCase();
       const normalizedRole = (formData.role || '').toLowerCase();
-      
-      if (normalizedDept.includes('hr') || normalizedRole.includes('hr manager')) {
+
+      if (normalizedDept.includes('hr') || normalizedRole.includes('hr')) {
         accessRole = 'hr';
       } else if (normalizedDept.includes('finance') || normalizedDept.includes('account') || normalizedRole.includes('accountant')) {
         accessRole = 'accountant';
       } else if (normalizedRole.includes('head') || normalizedRole.includes('hod') || normalizedRole.includes('director')) {
         accessRole = 'department_head';
       }
-      
-      // Map department ID
+
       if (normalizedDept.includes('tax') || normalizedDept.includes('vat')) {
         departmentId = 'tax_vat';
-      } else if (normalizedDept.includes('book') || normalizedDept.includes('ledger')) {
+      } else if (normalizedDept.includes('book') || normalizedDept.includes('ledger') || normalizedDept.includes('account')) {
         departmentId = 'bookkeeping';
       } else if (normalizedDept.includes('advis') || normalizedDept.includes('consult')) {
         departmentId = 'business_advisory';
-      } else if (normalizedDept.includes('success') || normalizedDept.includes('client')) {
+      } else if (normalizedDept.includes('success') || normalizedDept.includes('client') || normalizedDept.includes('operat')) {
         departmentId = 'client_success';
       }
 
-      try {
+      let emailDispatched = false;
+
+      if (!isEditMode) {
+        // Create user in Supabase Auth via standalone client to prevent session hijack
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
         const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
         const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
           auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
         });
-        
+
         const { data: authData, error: authError } = await tempClient.auth.signUp({
-          email: formData.email,
+          email: formData.email.trim().toLowerCase(),
           password: tempPassword,
           options: {
             data: {
-              full_name: formData.name,
+              full_name: formData.name.trim(),
               role: accessRole,
               department_id: departmentId
             }
           }
         });
-        
-        if (authError) throw authError;
-        
-        if (authData.user) {
-          targetId = authData.user.id;
-          
-          setNotification({
-            show: true,
-            title: isAr ? 'تم تسجيل الموظف' : 'Employee Registered',
-            message: isAr 
-              ? `تم إنشاء الحساب بنجاح. البريد الإلكتروني: ${formData.email} | كلمة المرور المؤقتة: ${tempPassword}`
-              : `Employee auth account created successfully. Email: ${formData.email} | Temporary Password: ${tempPassword}`,
-            type: 'success'
-          });
-        }
-      } catch (err: any) {
-        console.error("Failed to create live auth user:", err.message);
-        targetId = crypto.randomUUID();
-      }
-    }
 
-    // 2. Upload actual files to Supabase Storage
-    const uploadedDocs: Array<{ name: string; type: string; expiry: string; status: 'active' | 'warning' | 'expired'; url?: string }> = [];
+        if (authError) {
+          if (
+            authError.message?.toLowerCase().includes('already registered') ||
+            authError.message?.toLowerCase().includes('already exists') ||
+            authError.status === 400
+          ) {
+            const { data: existingProfile } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('email', formData.email.trim().toLowerCase())
+              .maybeSingle();
 
-    for (const f of formData.uploadedFiles) {
-      let docUrl: string | undefined = undefined;
-      
-      if (f.file) {
-        try {
-          const filePath = `employees/${targetId}/${f.name}`;
-          
-          // Upload to Supabase 'documents' bucket
-          const { error: uploadError } = await supabase.storage
-            .from('documents')
-            .upload(filePath, f.file, {
-              cacheControl: '3600',
-              upsert: true
-            });
-
-          if (!uploadError) {
-            const { data } = supabase.storage
-              .from('documents')
-              .getPublicUrl(filePath);
-            docUrl = data.publicUrl;
+            if (existingProfile) {
+              targetId = existingProfile.id;
+            } else {
+              throw authError;
+            }
           } else {
-            console.warn("Storage upload failed, fallback to local URL:", uploadError);
+            throw authError;
+          }
+        } else if (authData.user) {
+          targetId = authData.user.id;
+        }
+
+        if (!targetId || targetId.startsWith('EMP-')) {
+          targetId = crypto.randomUUID();
+        }
+      }
+
+      // 2. Upload actual files to Supabase Storage
+      const uploadedDocs: Array<{ name: string; type: string; expiry: string; status: 'active' | 'warning' | 'expired'; url?: string }> = [];
+
+      for (const f of formData.uploadedFiles) {
+        let docUrl: string | undefined = undefined;
+        if (f.file) {
+          try {
+            const filePath = `employees/${targetId}/${f.name}`;
+            const { error: uploadError } = await supabase.storage
+              .from('documents')
+              .upload(filePath, f.file, {
+                cacheControl: '3600',
+                upsert: true
+              });
+
+            if (!uploadError) {
+              const { data } = supabase.storage
+                .from('documents')
+                .getPublicUrl(filePath);
+              docUrl = data.publicUrl;
+            } else {
+              docUrl = URL.createObjectURL(f.file);
+            }
+          } catch (err) {
             docUrl = URL.createObjectURL(f.file);
           }
-        } catch (err) {
-          console.warn("Failed to upload file to storage, using object URL fallback:", err);
-          docUrl = URL.createObjectURL(f.file);
+        }
+
+        uploadedDocs.push({
+          name: f.name,
+          type: f.type,
+          expiry: '2029-12-31',
+          status: 'active',
+          url: docUrl
+        });
+      }
+
+      // 3. Update or Insert profiles and hr_employees in DB
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+      if (isUuid) {
+        // Sync profiles
+        await supabase.from('profiles').upsert({
+          id: targetId,
+          full_name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
+          phone: formData.phone || '',
+          role: accessRole,
+          department_id: departmentId
+        }, { onConflict: 'id' });
+
+        // Sync hr_employees
+        await supabase.from('hr_employees').upsert({
+          id: targetId,
+          full_name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
+          phone: formData.phone || '',
+          company_phone: formData.companyPhone || '',
+          civil_id: formData.civilId || '',
+          passport_no: formData.passportNo || '',
+          residency_no: formData.residencyNo || '',
+          nationality: formData.nationality || 'Omani',
+          dob: formData.dob || null,
+          gender: formData.gender || 'Male',
+          marital_status: formData.maritalStatus || 'Single',
+          joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
+          immediate_supervisor: formData.immediateSupervisor || 'Fatma Al-Harthy',
+          basic_salary: Number(formData.basicSalary || 0),
+          employee_type: formData.type || 'Experienced',
+          accommodation_status: formData.accommodationStatus || 'Lives with family',
+          accommodation_details: formData.accommodationDetails || '',
+          allowances: {
+            transport: Number(formData.transportAllowance || 0),
+            housing: Number(formData.housingAllowance || 0),
+            other: Number(formData.otherAllowance || 0)
+          },
+          education: formData.degree ? [{
+            degree: formData.degree,
+            field: formData.field,
+            institution: formData.institution,
+            year: formData.year
+          }] : [],
+          experience: formData.prevRole ? [{
+            role: formData.prevRole,
+            company: formData.prevCompany,
+            duration: formData.prevDuration
+          }] : [],
+          family: [],
+          emergency_contact: {
+            name: formData.emergencyName || '',
+            relation: formData.emergencyRelation || 'Parent',
+            phone: formData.emergencyPhone || ''
+          },
+          documents: uploadedDocs.length > 0 ? uploadedDocs : [
+            { name: 'Civil ID Card', type: 'civil_id', expiry: '2028-12-31', status: 'active' }
+          ],
+          promotions: [],
+          disciplinaries: [],
+          bonuses: [],
+          transfers: [],
+          role: formData.role,
+          dept: formData.dept,
+          department_id: departmentId
+        }, { onConflict: 'id' });
+      }
+
+      // 4. Send Welcome credentials email if new registration
+      if (!isEditMode) {
+        try {
+          const { error: mailErr } = await supabase.functions.invoke('send-email', {
+            body: {
+              to: formData.email.trim().toLowerCase(),
+              subject: isAr
+                ? 'مرحباً بك في مجموعة ميسرة - حساب الموظف الخاص بك جاهز!'
+                : 'Welcome to Maisarah - Your Employee Portal is Active!',
+              html: `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; color: #1f2937; background-color: #ffffff;">
+                  <div style="text-align: center; margin-bottom: 24px;">
+                    <h2 style="color: #A11212; margin: 0; font-size: 22px;">Welcome to Maisarah Group!</h2>
+                    <p style="color: #6b7280; font-size: 13px; margin-top: 4px;">Employee Onboarding & Portal Activation</p>
+                  </div>
+                  
+                  <p style="font-size: 14px; line-height: 1.6;">Dear <strong>${formData.name}</strong>,</p>
+                  <p style="font-size: 14px; line-height: 1.6;">
+                    ${isAr
+                      ? 'يسعدنا إبلاغك بأنه قد تم تسجيلك بنجاح في المنصة الرقمية لمجموعة ميسرة. تم إنشاء وتفعيل حساب الموظف الخاص بك.'
+                      : 'We are pleased to inform you that your employee record has been registered in the Maisarah platform. Your portal account is now active.'}
+                  </p>
+
+                  <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; margin: 24px 0;">
+                    <h4 style="margin: 0 0 12px 0; color: #111827; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Your Access Credentials:</h4>
+                    <p style="margin: 6px 0; font-size: 13px;"><strong>Portal URL:</strong> <a href="${window.location.origin}/login" style="color: #A11212; text-decoration: underline;">${window.location.origin}/login</a></p>
+                    <p style="margin: 6px 0; font-size: 13px;"><strong>Email Address:</strong> <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${formData.email.trim().toLowerCase()}</code></p>
+                    <p style="margin: 6px 0; font-size: 13px;"><strong>Temporary Password:</strong> <code style="background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${tempPassword}</code></p>
+                    <p style="margin: 6px 0; font-size: 13px;"><strong>Designated Role:</strong> ${formData.role}</p>
+                    <p style="margin: 6px 0; font-size: 13px;"><strong>Department:</strong> ${formData.dept}</p>
+                  </div>
+
+                  <p style="font-size: 13px; color: #4b5563; line-height: 1.5;">
+                    ${isAr
+                      ? 'يرجى تسجيل الدخول لتحديث ملفك وتغيير كلمة المرور المؤقتة لضمان أمان حسابك.'
+                      : 'Please sign in to access your employee workspace and change your temporary password upon initial login.'}
+                  </p>
+
+                  <div style="margin-top: 30px; border-top: 1px solid #f3f4f6; padding-top: 16px; font-size: 12px; color: #9ca3af; text-align: center;">
+                    <p style="margin: 0;">Maisarah Corporate Platform • Human Resources Department</p>
+                  </div>
+                </div>
+              `
+            }
+          });
+          if (!mailErr) emailDispatched = true;
+        } catch (mailErr) {
+          console.warn('Welcome credentials email failed:', mailErr);
         }
       }
-      
-      uploadedDocs.push({
-        name: f.name,
-        type: f.type,
-        expiry: '2029-12-31',
-        status: 'active',
-        url: docUrl
-      });
-    }
 
-    // 3. Save / Update employees list
-    if (isEditMode) {
-      const updatedList = employees.map(emp => {
-        if (emp.id === formData.id) {
-          return {
-            ...emp,
-            name: formData.name,
-            role: formData.role,
-            dept: formData.dept,
-            email: formData.email,
-            phone: formData.phone,
-            companyPhone: formData.companyPhone,
-            civilId: formData.civilId,
-            passportNo: formData.passportNo,
-            residencyNo: formData.residencyNo,
-            nationality: formData.nationality,
-            dob: formData.dob,
-            gender: formData.gender,
-            maritalStatus: formData.maritalStatus,
-            joinedDate: formData.joinedDate,
-            immediateSupervisor: formData.immediateSupervisor,
-            basicSalary: Number(formData.basicSalary),
-            type: formData.type,
-            accommodationStatus: formData.accommodationStatus,
-            accommodationDetails: formData.accommodationDetails,
-            allowances: {
-              transport: Number(formData.transportAllowance),
-              housing: Number(formData.housingAllowance),
-              other: Number(formData.otherAllowance)
-            },
-            education: formData.degree ? [{
-              degree: formData.degree,
-              field: formData.field,
-              institution: formData.institution,
-              year: formData.year
-            }] : emp.education,
-            experience: formData.prevRole ? [{
-              role: formData.prevRole,
-              company: formData.prevCompany,
-              duration: formData.prevDuration
-            }] : emp.experience,
-            emergencyContact: {
-              name: formData.emergencyName,
-              relation: formData.emergencyRelation,
-              phone: formData.emergencyPhone
-            },
-            documents: [...emp.documents, ...uploadedDocs.filter(d => !emp.documents.some(ed => ed.name === d.name))]
-          };
-        }
-        return emp;
-      });
-      await saveEmployees(updatedList);
-    } else {
-      const newEmp: Employee = {
-        id: targetId,
-        name: formData.name,
-        role: formData.role,
-        dept: formData.dept,
-        email: formData.email,
-        phone: formData.phone,
-        companyPhone: formData.companyPhone,
-        civilId: formData.civilId,
-        passportNo: formData.passportNo,
-        residencyNo: formData.residencyNo,
-        nationality: formData.nationality,
-        dob: formData.dob,
-        gender: formData.gender,
-        maritalStatus: formData.maritalStatus,
-        joinedDate: formData.joinedDate,
-        immediateSupervisor: formData.immediateSupervisor,
-        basicSalary: Number(formData.basicSalary),
-        type: formData.type,
-        accommodationStatus: formData.accommodationStatus,
-        accommodationDetails: formData.accommodationDetails,
-        allowances: {
-          transport: Number(formData.transportAllowance),
-          housing: Number(formData.housingAllowance),
-          other: Number(formData.otherAllowance)
-        },
-        education: formData.degree ? [{
-          degree: formData.degree,
-          field: formData.field,
-          institution: formData.institution,
-          year: formData.year
-        }] : [],
-        experience: formData.prevRole ? [{
-          role: formData.prevRole,
-          company: formData.prevCompany,
-          duration: formData.prevDuration
-        }] : [],
-        family: [],
-        emergencyContact: {
-          name: formData.emergencyName,
-          relation: formData.emergencyRelation,
-          phone: formData.emergencyPhone
-        },
-        documents: uploadedDocs.length > 0 ? uploadedDocs : [
-          { name: 'Civil ID Card', type: 'civil_id', expiry: '2027-06-30', status: 'active' as const }
-        ],
-        promotions: [],
-        disciplinaries: [],
-        bonuses: [],
-        transfers: []
-      };
-      const nextList = [...employees, newEmp];
-      await saveEmployees(nextList);
-      setSelectedEmpId(newEmp.id);
-    }
+      // 5. Update local state
+      if (isEditMode) {
+        const updatedList = employees.map(emp => {
+          if (emp.id === formData.id) {
+            return {
+              ...emp,
+              name: formData.name,
+              role: formData.role,
+              dept: formData.dept,
+              email: formData.email,
+              phone: formData.phone,
+              companyPhone: formData.companyPhone,
+              civilId: formData.civilId,
+              passportNo: formData.passportNo,
+              residencyNo: formData.residencyNo,
+              nationality: formData.nationality,
+              dob: formData.dob,
+              gender: formData.gender,
+              maritalStatus: formData.maritalStatus,
+              joinedDate: formData.joinedDate,
+              immediateSupervisor: formData.immediateSupervisor,
+              basicSalary: Number(formData.basicSalary),
+              type: formData.type,
+              accommodationStatus: formData.accommodationStatus,
+              accommodationDetails: formData.accommodationDetails,
+              allowances: {
+                transport: Number(formData.transportAllowance),
+                housing: Number(formData.housingAllowance),
+                other: Number(formData.otherAllowance)
+              },
+              education: formData.degree ? [{
+                degree: formData.degree,
+                field: formData.field,
+                institution: formData.institution,
+                year: formData.year
+              }] : emp.education,
+              experience: formData.prevRole ? [{
+                role: formData.prevRole,
+                company: formData.prevCompany,
+                duration: formData.prevDuration
+              }] : emp.experience,
+              emergencyContact: {
+                name: formData.emergencyName,
+                relation: formData.emergencyRelation,
+                phone: formData.emergencyPhone
+              },
+              documents: [...emp.documents, ...uploadedDocs.filter(d => !emp.documents.some(ed => ed.name === d.name))]
+            };
+          }
+          return emp;
+        });
+        setEmployees(updatedList);
+        localStorage.setItem('hr_employee_records', JSON.stringify(updatedList));
 
-    setShowModal(false);
+        setNotification({
+          show: true,
+          title: isAr ? 'تم تحديث الملف' : 'Dossier Updated',
+          message: isAr ? 'تم حفظ التعديلات على ملف الموظف بنجاح.' : 'Employee dossier updated successfully.',
+          type: 'success'
+        });
+        setShowModal(false);
+      } else {
+        const newEmp: Employee = {
+          id: targetId,
+          name: formData.name,
+          role: formData.role,
+          dept: formData.dept,
+          email: formData.email,
+          phone: formData.phone,
+          companyPhone: formData.companyPhone,
+          civilId: formData.civilId,
+          passportNo: formData.passportNo,
+          residencyNo: formData.residencyNo,
+          nationality: formData.nationality,
+          dob: formData.dob,
+          gender: formData.gender,
+          maritalStatus: formData.maritalStatus,
+          joinedDate: formData.joinedDate || new Date().toISOString().split('T')[0],
+          immediateSupervisor: formData.immediateSupervisor,
+          basicSalary: Number(formData.basicSalary),
+          type: formData.type,
+          accommodationStatus: formData.accommodationStatus,
+          accommodationDetails: formData.accommodationDetails,
+          allowances: {
+            transport: Number(formData.transportAllowance),
+            housing: Number(formData.housingAllowance),
+            other: Number(formData.otherAllowance)
+          },
+          education: formData.degree ? [{
+            degree: formData.degree,
+            field: formData.field,
+            institution: formData.institution,
+            year: formData.year
+          }] : [],
+          experience: formData.prevRole ? [{
+            role: formData.prevRole,
+            company: formData.prevCompany,
+            duration: formData.prevDuration
+          }] : [],
+          family: [],
+          emergencyContact: {
+            name: formData.emergencyName,
+            relation: formData.emergencyRelation,
+            phone: formData.emergencyPhone
+          },
+          documents: uploadedDocs.length > 0 ? uploadedDocs : [
+            { name: 'Civil ID Card', type: 'civil_id', expiry: '2028-12-31', status: 'active' as const }
+          ],
+          promotions: [],
+          disciplinaries: [],
+          bonuses: [],
+          transfers: []
+        };
+        const nextList = [newEmp, ...employees.filter(e => e.id !== targetId)];
+        setEmployees(nextList);
+        localStorage.setItem('hr_employee_records', JSON.stringify(nextList));
+        setSelectedEmpId(newEmp.id);
+
+        setCreatedCredentials({
+          name: formData.name,
+          email: formData.email,
+          password: tempPassword,
+          role: formData.role,
+          dept: formData.dept,
+          emailDispatched
+        });
+        setShowCredentialsModal(true);
+        setShowModal(false);
+      }
+    } catch (err: any) {
+      console.error("Employee registration error:", err);
+      setFormError(err.message || (isAr ? 'فشل تسجيل الموظف. يرجى المحاولة مجدداً.' : 'Failed to register employee. Please try again.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Filter & Sort Logic
@@ -1612,18 +1796,28 @@ export default function HREmployees() {
       {/* Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <form onSubmit={handleSubmit} className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden my-8">
+          <form onSubmit={handleSubmit} className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden my-8 border border-gray-100 animate-scale-up">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">
-                {isEditMode ? 'Edit Employee Dossier' : 'Register New Employee'}
+                {isEditMode ? (isAr ? 'تعديل ملف الموظف' : 'Edit Employee Dossier') : (isAr ? 'تسجيل موظف جديد' : 'Register New Employee')}
               </h3>
-              <button type="button" onClick={() => setShowModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={18} className="text-gray-400" /></button>
+              <button type="button" onClick={() => setShowModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg cursor-pointer"><X size={18} className="text-gray-400" /></button>
             </div>
+
+            {/* Inline Error Message */}
+            {formError && (
+              <div className="mx-6 mt-4 p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-xl flex items-center gap-2 animate-shake">
+                <AlertCircle size={18} className="shrink-0 text-[#A11212]" />
+                <span>{formError}</span>
+              </div>
+            )}
 
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Full Name</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الاسم الكامل *' : 'Full Name *'}
+                  </label>
                   <input
                     type="text"
                     required
@@ -1634,7 +1828,9 @@ export default function HREmployees() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Corporate Email</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'البريد الإلكتروني المؤسسي *' : 'Corporate Email *'}
+                  </label>
                   <input
                     type="email"
                     required
@@ -1648,36 +1844,49 @@ export default function HREmployees() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Designated Role</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'المسمى الوظيفي' : 'Designated Role'}
+                  </label>
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
                     <option value="Senior Auditor">Senior Auditor</option>
                     <option value="Tax Consultant">Tax Consultant</option>
+                    <option value="Accountant">Accountant</option>
                     <option value="Risk Analyst">Risk Analyst</option>
                     <option value="Junior Associate">Junior Associate</option>
+                    <option value="Department Head (HOD)">Department Head (HOD)</option>
+                    <option value="HR Specialist">HR Specialist</option>
+                    <option value="Operations Associate">Operations Associate</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Department</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'القسم' : 'Department'}
+                  </label>
                   <select
                     value={formData.dept}
                     onChange={(e) => setFormData({ ...formData, dept: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
                     <option value="Audit">Audit</option>
                     <option value="Tax & VAT">Tax & VAT</option>
                     <option value="Accounting">Accounting</option>
+                    <option value="Business Advisory">Business Advisory</option>
+                    <option value="Client Success">Client Success</option>
+                    <option value="HR & Admin">HR & Admin</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Category Type</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'فئة الموظف' : 'Category Type'}
+                  </label>
                   <select
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
                     <option value="Experienced">Experienced (خبير)</option>
                     <option value="Trainee">Trainee (متدرب)</option>
@@ -1688,30 +1897,36 @@ export default function HREmployees() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Civil ID Number</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الرقم المدني' : 'Civil ID Number'}
+                  </label>
                   <input
                     type="text"
-                    required
+                    placeholder="109876543"
                     value={formData.civilId}
                     onChange={(e) => setFormData({ ...formData, civilId: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Passport Number</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'رقم جواز السفر' : 'Passport Number'}
+                  </label>
                   <input
                     type="text"
-                    required
+                    placeholder="OM123456"
                     value={formData.passportNo}
                     onChange={(e) => setFormData({ ...formData, passportNo: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Residency Number</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'رقم الإقامة' : 'Residency Number'}
+                  </label>
                   <input
                     type="text"
-                    required
+                    placeholder="PR987654"
                     value={formData.residencyNo}
                     onChange={(e) => setFormData({ ...formData, residencyNo: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
@@ -1721,10 +1936,11 @@ export default function HREmployees() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Personal Phone Number</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الهاتف الشخصي' : 'Personal Phone Number'}
+                  </label>
                   <input
                     type="text"
-                    required
                     placeholder="+968..."
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -1732,10 +1948,11 @@ export default function HREmployees() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Company Phone Number</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'هاتف العمل' : 'Company Phone Number'}
+                  </label>
                   <input
                     type="text"
-                    required
                     placeholder="+968 2456..."
                     value={formData.companyPhone}
                     onChange={(e) => setFormData({ ...formData, companyPhone: e.target.value })}
@@ -1743,7 +1960,9 @@ export default function HREmployees() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Accommodation Status</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'حالة السكن' : 'Accommodation Status'}
+                  </label>
                   <select
                     value={formData.accommodationStatus}
                     onChange={(e) => setFormData({ ...formData, accommodationStatus: e.target.value })}
@@ -1765,13 +1984,16 @@ export default function HREmployees() {
               </div>
 
               <div className="border-t border-gray-100 pt-4 space-y-3">
-                <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">Emergency Contact (Parent's Info)</h4>
+                <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">
+                  {isAr ? 'بيانات جهة الاتصال في حالات الطوارئ' : 'Emergency Contact (Parent/Family Info)'}
+                </h4>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Contact Name</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                      {isAr ? 'اسم جهة الاتصال' : 'Contact Name'}
+                    </label>
                     <input
                       type="text"
-                      required
                       placeholder="Parent/Spouse Name"
                       value={formData.emergencyName}
                       onChange={(e) => setFormData({ ...formData, emergencyName: e.target.value })}
@@ -1779,11 +2001,13 @@ export default function HREmployees() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Relation</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                      {isAr ? 'صلة القرابة' : 'Relation'}
+                    </label>
                     <select
                       value={formData.emergencyRelation}
                       onChange={(e) => setFormData({ ...formData, emergencyRelation: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                     >
                       <option value="Parent">Parent</option>
                       <option value="Spouse">Spouse</option>
@@ -1792,10 +2016,11 @@ export default function HREmployees() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Emergency Phone</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                      {isAr ? 'هاتف الطوارئ' : 'Emergency Phone'}
+                    </label>
                     <input
                       type="text"
-                      required
                       placeholder="+968..."
                       value={formData.emergencyPhone}
                       onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value })}
@@ -1807,7 +2032,9 @@ export default function HREmployees() {
 
               <div className="grid grid-cols-4 gap-4 border-t border-gray-100 pt-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Nationality</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الجنسية' : 'Nationality'}
+                  </label>
                   <input
                     type="text"
                     value={formData.nationality}
@@ -1833,32 +2060,37 @@ export default function HREmployees() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Gender</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الجنس' : 'Gender'}
+                  </label>
                   <select
                     value={formData.gender}
                     onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Marital Status</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الحالة الاجتماعية' : 'Marital Status'}
+                  </label>
                   <select
                     value={formData.maritalStatus}
                     onChange={(e) => setFormData({ ...formData, maritalStatus: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
                     <option value="Single">Single</option>
                     <option value="Married">Married</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">DOB</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'تاريخ الميلاد' : 'DOB'}
+                  </label>
                   <input
                     type="date"
-                    required
                     value={formData.dob}
                     onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
@@ -1868,29 +2100,34 @@ export default function HREmployees() {
 
               <div className="grid grid-cols-3 gap-4 border-t border-gray-100 pt-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Joined Date</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'تاريخ مباشرة العمل' : 'Joined Date'}
+                  </label>
                   <input
                     type="date"
-                    required
                     value={formData.joinedDate}
                     onChange={(e) => setFormData({ ...formData, joinedDate: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Supervisor</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'المشرف المباشر' : 'Supervisor'}
+                  </label>
                   <input
                     type="text"
+                    placeholder="Fatma Al-Harthy"
                     value={formData.immediateSupervisor}
                     onChange={(e) => setFormData({ ...formData, immediateSupervisor: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Basic Salary (OMR)</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الراتب الأساسي (ر.ع)' : 'Basic Salary (OMR)'}
+                  </label>
                   <input
                     type="number"
-                    required
                     value={formData.basicSalary}
                     onChange={(e) => setFormData({ ...formData, basicSalary: Number(e.target.value) })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
@@ -1900,7 +2137,9 @@ export default function HREmployees() {
 
               {/* Academic Qualifications Section */}
               <div className="border-t border-gray-100 pt-4 space-y-3">
-                <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">Academic Qualifications</h4>
+                <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">
+                  {isAr ? 'المؤهلات العلمية' : 'Academic Qualifications'}
+                </h4>
                 <div className="grid grid-cols-4 gap-4">
                   <div>
                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Degree</label>
@@ -1947,7 +2186,9 @@ export default function HREmployees() {
 
               {/* Work Experience Section */}
               <div className="border-t border-gray-100 pt-4 space-y-3">
-                <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">Previous Work Experience</h4>
+                <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">
+                  {isAr ? 'الخبرات العملية السابقة' : 'Previous Work Experience'}
+                </h4>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Previous Job Title</label>
@@ -1984,7 +2225,9 @@ export default function HREmployees() {
 
               {/* Uploading Files Section */}
               <div className="border-t border-gray-100 pt-4 space-y-3">
-                <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">Attach Scans & File Certificates</h4>
+                <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">
+                  {isAr ? 'إرفاق المستندات والشهادات' : 'Attach Scans & File Certificates'}
+                </h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-300 flex flex-col items-center justify-center text-center cursor-pointer relative hover:bg-gray-100 transition-colors">
                     <UploadCloud size={20} className="text-gray-400 mb-1" />
@@ -2093,18 +2336,149 @@ export default function HREmployees() {
               <button
                 type="button"
                 onClick={() => setShowModal(false)}
-                className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-gray-100 transition-colors"
+                disabled={isSubmitting}
+                className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-50"
               >
-                Cancel
+                {isAr ? 'إلغاء' : 'Cancel'}
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors"
+                disabled={isSubmitting}
+                className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-md hover:shadow-lg"
               >
-                {isEditMode ? 'Save Modifications' : 'Register Employee'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>{isAr ? 'جاري التسجيل وتفعيل الحساب...' : 'Registering & Activating...'}</span>
+                  </>
+                ) : (
+                  <span>{isEditMode ? (isAr ? 'حفظ التعديلات' : 'Save Modifications') : (isAr ? 'تسجيل الموظف' : 'Register Employee')}</span>
+                )}
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ── Employee Credentials & Registration Success Modal ── */}
+      {showCredentialsModal && createdCredentials && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-gray-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-gray-100 animate-scale-up">
+            {/* Header */}
+            <div className="p-6 text-center border-b border-gray-100 bg-gradient-to-b from-green-50/50 to-white relative">
+              <div className="mx-auto w-14 h-14 bg-green-100/80 rounded-2xl flex items-center justify-center text-green-700 mb-3 shadow-xs">
+                <CheckCircle2 size={30} className="text-green-600" />
+              </div>
+              <h3 className="text-base font-black text-gray-900 uppercase tracking-wider">
+                {isAr ? 'تم تسجيل الموظف وتفعيل الحساب بنجاح' : 'EMPLOYEE REGISTERED SUCCESSFULLY'}
+              </h3>
+              <p className="text-xs text-gray-500 font-bold mt-1">
+                {isAr 
+                  ? 'تم إنشاء الملف الوظيفي وبيانات تسجيل الدخول إلى منصة ميسرة.'
+                  : 'Employee profile dossier and authentication access credentials have been initialized.'
+                }
+              </p>
+            </div>
+
+            {/* Credentials Card */}
+            <div className="p-6 space-y-4">
+              {/* Employee Summary Card */}
+              <div className="bg-gray-50 border border-gray-200/80 rounded-2xl p-4 space-y-3">
+                <div className="flex justify-between items-center pb-2 border-b border-gray-200">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{isAr ? 'اسم الموظف' : 'Full Name'}</span>
+                  <span className="text-xs font-black text-gray-900">{createdCredentials.name}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-gray-200">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{isAr ? 'المسمى والفرع' : 'Role & Department'}</span>
+                  <span className="text-xs font-black text-[#A11212]">{createdCredentials.role} • {createdCredentials.dept}</span>
+                </div>
+
+                {/* Email address with copy */}
+                <div className="flex justify-between items-center pt-1">
+                  <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{isAr ? 'البريد المؤسسي' : 'Corporate Email'}</p>
+                    <p className="text-xs font-mono font-bold text-gray-800 mt-0.5">{createdCredentials.email}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(createdCredentials.email, 'email')}
+                    className="p-2 bg-white hover:bg-gray-100 text-gray-600 rounded-xl border border-gray-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    {copiedField === 'email' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                    <span className="text-[10px]">{copiedField === 'email' ? (isAr ? 'تم النسخ' : 'Copied') : (isAr ? 'نسخ' : 'Copy')}</span>
+                  </button>
+                </div>
+
+                {/* Password with copy */}
+                <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                  <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{isAr ? 'كلمة المرور المؤقتة' : 'Temporary Password'}</p>
+                    <p className="text-xs font-mono font-black text-[#A11212] mt-0.5 tracking-wider bg-red-50 px-2 py-0.5 rounded border border-red-100 inline-block">
+                      {createdCredentials.password}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(createdCredentials.password, 'password')}
+                    className="p-2 bg-white hover:bg-gray-100 text-gray-600 rounded-xl border border-gray-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    {copiedField === 'password' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                    <span className="text-[10px]">{copiedField === 'password' ? (isAr ? 'تم النسخ' : 'Copied') : (isAr ? 'نسخ' : 'Copy')}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Email dispatch badge */}
+              <div className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2.5 ${
+                createdCredentials.emailDispatched
+                  ? 'bg-green-50 border-green-200 text-green-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-800'
+              }`}>
+                <Mail size={16} className={createdCredentials.emailDispatched ? 'text-green-600' : 'text-amber-600'} />
+                <span>
+                  {createdCredentials.emailDispatched
+                    ? (isAr ? `تم إرسال بريد ترحيبي مع بيانات الدخول إلى ${createdCredentials.email}` : `Welcome login email dispatched to ${createdCredentials.email}`)
+                    : (isAr ? 'يرجى مشاركة بيانات الدخول المؤقتة مع الموظف مباشرة.' : 'Please share these temporary credentials directly with the employee.')
+                  }
+                </span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-6 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const allText = `Maisarah Employee Account:\nName: ${createdCredentials.name}\nEmail: ${createdCredentials.email}\nTemporary Password: ${createdCredentials.password}\nPortal URL: ${window.location.origin}/login`;
+                  handleCopyText(allText, 'all');
+                }}
+                className="flex-1 py-3 px-4 bg-white border border-gray-200 text-gray-700 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-gray-100 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {copiedField === 'all' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                <span>{copiedField === 'all' ? (isAr ? 'تم نسخ كافة البيانات' : 'Copied All') : (isAr ? 'نسخ كافة البيانات' : 'Copy All')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleShareWhatsApp}
+                className="flex-1 py-3 px-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              >
+                <Share2 size={14} />
+                <span>{isAr ? 'مشاركة عبر واتساب' : 'WhatsApp'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCredentialsModal(false);
+                  setCreatedCredentials(null);
+                }}
+                className="flex-1 py-3 px-4 bg-[#A11212] hover:bg-[#800e0e] text-white rounded-xl font-black text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-xs text-center"
+              >
+                {isAr ? 'حسناً' : 'OK'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
