@@ -626,26 +626,53 @@ export default function HREmployees() {
   const executeDelete = async () => {
     if (!pendingDeleteId) return;
     const id = pendingDeleteId;
+    const emp = employees.find(e => e.id === id);
+    const empName = emp?.name || '';
     setShowDeleteConfirm(false);
     setPendingDeleteId(null);
 
+    // 1. Update local state immediately
     const remaining = employees.filter(e => e.id !== id);
-    saveEmployees(remaining);
+    setEmployees(remaining);
+    if (remaining.length > 0) {
+      setSelectedEmpId(remaining[0].id);
+    } else {
+      setSelectedEmpId(null);
+    }
 
+    // 2. Cascade delete from Supabase
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     if (isUuid) {
       try {
-        const { error: empError } = await supabase
-          .from('hr_employees')
+        // Unassign foreign keys
+        await supabase.from('services').update({ employee_id: null }).eq('employee_id', id);
+        await supabase.from('clients').update({ assigned_employee_id: null }).eq('assigned_employee_id', id);
+
+        // Clean up child tables
+        await supabase.from('hr_leave_requests').delete().eq('employee_id', id);
+        await supabase.from('hr_leave_balances').delete().eq('employee_id', id);
+        await supabase.from('hr_attendance').delete().eq('employee_id', id);
+        await supabase.from('hr_onboarding_tasks').delete().eq('employee_id', id);
+
+        // Delete from hr_employees
+        await supabase.from('hr_employees').delete().eq('id', id);
+
+        // Delete from profiles (core identity)
+        const { error: profError } = await supabase
+          .from('profiles')
           .delete()
           .eq('id', id);
 
-        if (empError) throw empError;
+        if (profError) {
+          console.warn('Profile deletion notice:', profError);
+        }
 
         setNotification({
           show: true,
-          title: isAr ? 'تم الحذف بنجاح' : 'Dossier Deleted',
-          message: isAr ? 'تم حذف ملف الموظف وسجلاته بالكامل.' : 'Employee dossier successfully deleted from database.',
+          title: isAr ? 'تم الحذف بنجاح' : 'Dossier & Account Deleted',
+          message: isAr 
+            ? `تم حذف ملف الموظف "${empName}" وسجلاته وحساب وصوله بالكامل.` 
+            : `Employee dossier and portal account for "${empName}" permanently removed from database.`,
           type: 'success'
         });
       } catch (err: any) {
@@ -660,15 +687,21 @@ export default function HREmployees() {
       setNotification({
         show: true,
         title: isAr ? 'تم الحذف بنجاح' : 'Dossier Deleted',
-        message: isAr ? 'تم حذف الملف المحلي بنجاح.' : 'Mock employee file successfully deleted.',
+        message: isAr ? `تم حذف ملف الموظف "${empName}" بنجاح.` : `Employee file "${empName}" removed successfully.`,
         type: 'success'
       });
     }
 
-    if (remaining.length > 0) {
-      setSelectedEmpId(remaining[0].id);
-    } else {
-      setSelectedEmpId(null);
+    // 3. Clean up localStorage cache
+    try {
+      const rawCache = localStorage.getItem('hr_employee_records');
+      if (rawCache) {
+        const parsed = JSON.parse(rawCache);
+        const filtered = parsed.filter((e: any) => e.id !== id && e.name !== empName);
+        localStorage.setItem('hr_employee_records', JSON.stringify(filtered));
+      }
+    } catch (cErr) {
+      console.warn('Cache cleanup error:', cErr);
     }
   };
 

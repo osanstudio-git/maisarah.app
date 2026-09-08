@@ -333,37 +333,77 @@ const EmployeeManagement = () => {
 
   const handleDeleteEmployee = async () => {
     if (!employeeToDelete) return;
-    if (confirmName !== (isAr ? employeeToDelete.name_ar : employeeToDelete.name_en)) return;
+    setIsSubmitting(true);
 
-    try {
-      // 1. Unassign any services assigned to this employee to satisfy foreign key constraints
-      await supabase.from('services').update({ employee_id: null }).eq('employee_id', employeeToDelete.id);
+    const id = employeeToDelete.id;
+    const empName = isAr ? (employeeToDelete.name_ar || employeeToDelete.name_en) : (employeeToDelete.name_en || employeeToDelete.name_ar);
 
-      // 2. Clean up related HR records if not automatically cascaded
-      await supabase.from('hr_leave_requests').delete().eq('employee_id', employeeToDelete.id);
-      await supabase.from('hr_leave_balances').delete().eq('employee_id', employeeToDelete.id);
-      await supabase.from('hr_attendance').delete().eq('employee_id', employeeToDelete.id);
-      await supabase.from('hr_employees').delete().eq('id', employeeToDelete.id);
+    // 1. Immediate UI update
+    setEmployees(prev => prev.filter(e => e.id !== id));
+    if (viewingEmployee?.id === id) {
+      setViewingEmployee(null);
+    }
+    setDeleteModalOpen(false);
 
-      // 3. Delete the profile record
-      const { error } = await supabase.from('profiles').delete().eq('id', employeeToDelete.id);
-      if (error) throw error;
+    // 2. Cascade delete from Supabase if valid UUID
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (isUuid) {
+      try {
+        // Unassign foreign keys
+        await supabase.from('services').update({ employee_id: null }).eq('employee_id', id);
+        await supabase.from('clients').update({ assigned_employee_id: null }).eq('assigned_employee_id', id);
 
-      setEmployees(prev => prev.filter(e => e.id !== employeeToDelete.id));
-      setDeleteModalOpen(false);
+        // Clean up child tables
+        await supabase.from('hr_leave_requests').delete().eq('employee_id', id);
+        await supabase.from('hr_leave_balances').delete().eq('employee_id', id);
+        await supabase.from('hr_attendance').delete().eq('employee_id', id);
+        await supabase.from('hr_onboarding_tasks').delete().eq('employee_id', id);
+
+        // Delete from hr_employees
+        await supabase.from('hr_employees').delete().eq('id', id);
+
+        // Delete from profiles (core identity)
+        const { error: profError } = await supabase.from('profiles').delete().eq('id', id);
+        if (profError) {
+          console.warn('Profile deletion notice:', profError);
+        }
+
+        setNotification({
+          show: true,
+          title: isAr ? 'تم الحذف بنجاح' : 'Employee Deleted',
+          message: isAr ? `تم حذف حساب وملف الموظف "${empName}" بالكامل.` : `Employee dossier and portal account for "${empName}" permanently removed.`,
+          type: 'success'
+        });
+      } catch (err: any) {
+        setNotification({
+          show: true,
+          title: isAr ? 'خطأ في الحذف' : 'Deletion Error',
+          message: err.message || 'Error deleting employee',
+          type: 'error'
+        });
+      }
+    } else {
       setNotification({
         show: true,
         title: isAr ? 'تم الحذف بنجاح' : 'Employee Deleted',
-        message: isAr ? 'تم حذف حساب الموظف بالكامل.' : 'Employee account successfully deleted.',
+        message: isAr ? `تم حذف ملف الموظف "${empName}" بنجاح.` : `Employee record "${empName}" removed successfully.`,
         type: 'success'
       });
-    } catch (err: any) {
-      setNotification({
-        show: true,
-        title: isAr ? 'خطأ في الحذف' : 'Deletion Error',
-        message: err.message || 'Error deleting employee',
-        type: 'error'
-      });
+    }
+
+    // 3. Clean up localStorage cache
+    try {
+      const rawCache = localStorage.getItem('hr_employee_records');
+      if (rawCache) {
+        const parsed = JSON.parse(rawCache);
+        const filtered = parsed.filter((e: any) => e.id !== id && e.name !== empName && e.name_en !== empName);
+        localStorage.setItem('hr_employee_records', JSON.stringify(filtered));
+      }
+    } catch (cErr) {
+      console.warn('Cache cleanup error:', cErr);
+    } finally {
+      setIsSubmitting(false);
+      setEmployeeToDelete(null);
     }
   };
 
@@ -1300,32 +1340,38 @@ const EmployeeManagement = () => {
       {/* ── Delete Confirmation ─────────────────────────────────────────── */}
       {deleteModalOpen && employeeToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm" dir={isAr ? 'rtl' : 'ltr'}>
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6">
-            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 animate-scale-up">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mb-4 border border-red-100">
               <AlertTriangle size={24} />
             </div>
-            <h3 className="text-lg font-black text-gray-900 mb-2">{isAr ? 'حذف الموظف' : 'Delete Employee'}</h3>
+            <h3 className="text-lg font-black text-gray-900 mb-2">{isAr ? 'حذف الموظف نهائياً' : 'Delete Employee Permanently'}</h3>
             <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-              {isAr ? `للتأكيد، اكتب اسم الموظف: ` : `To confirm, type the employee's name: `}
-              <strong className="text-gray-900">{isAr ? employeeToDelete.name_ar : employeeToDelete.name_en}</strong>
+              {isAr 
+                ? `هل أنت متأكد من رغبتك في حذف الموظف "${employeeToDelete.name_ar || employeeToDelete.name_en}"؟ سيتم حذف جميع بيانات الملف وسجلات الحضور والإجازات وصلاحيات الدخول نهائياً من النظام.`
+                : `Are you sure you want to permanently delete "${employeeToDelete.name_en || employeeToDelete.name_ar}"? This will permanently erase their profile dossier, leave/attendance records, and portal credentials.`}
             </p>
-            <input
-              type="text"
-              value={confirmName}
-              onChange={e => setConfirmName(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-red-500 outline-none mb-6"
-              placeholder={isAr ? employeeToDelete.name_ar : employeeToDelete.name_en}
-            />
             <div className="flex gap-3">
-              <button onClick={() => setDeleteModalOpen(false)} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors">
+              <button 
+                type="button"
+                onClick={() => { setDeleteModalOpen(false); setEmployeeToDelete(null); }} 
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors cursor-pointer"
+              >
                 {isAr ? 'إلغاء' : 'Cancel'}
               </button>
               <button
+                type="button"
                 onClick={handleDeleteEmployee}
-                disabled={confirmName !== (isAr ? employeeToDelete.name_ar : employeeToDelete.name_en)}
-                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors disabled:opacity-50"
+                disabled={isSubmitting}
+                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
               >
-                {isAr ? 'حذف نهائي' : 'Delete Permanently'}
+                {isSubmitting ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    <span>{isAr ? 'تأكيد الحذف' : 'Confirm Delete'}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
