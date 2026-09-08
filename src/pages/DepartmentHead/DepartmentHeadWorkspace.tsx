@@ -42,7 +42,9 @@ import {
   Sparkles,
   AlertCircle,
   HelpCircle,
-  CheckCircle
+  CheckCircle,
+  Download,
+  Filter
 } from 'lucide-react';
 import { getDepartmentById, getAllDepartments } from '../../config/departments';
 
@@ -187,6 +189,20 @@ const DepartmentHeadWorkspace = () => {
   const [delayLogs, setDelayLogs] = useState<Record<string, DelayLogRecord>>({});
   const [loading, setLoading] = useState(true);
 
+  // Search and Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Task Edit Modal State
+  const [editModalService, setEditModalService] = useState<ServiceDeliverable | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editClientId, setEditClientId] = useState('');
+  const [editEmployeeId, setEditEmployeeId] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editStatus, setEditStatus] = useState<ServiceDeliverable['status']>('ongoing');
+  const [isUpdatingTask, setIsUpdatingTask] = useState(false);
+
   // Task Router Form State
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDesc, setTaskDesc] = useState('');
@@ -284,22 +300,34 @@ const DepartmentHeadWorkspace = () => {
       if (pErr) console.error('HOD fetch profiles error:', pErr);
       if (cErr) console.error('HOD fetch clients error:', cErr);
 
+      // Normalize department code helper
+      const normalizeDept = (d?: string | null) => {
+        if (!d) return '';
+        const val = d.trim().toLowerCase();
+        if (val.includes('tax') || val.includes('vat')) return 'tax_vat';
+        if (val.includes('book') || val.includes('account')) return 'bookkeeping';
+        if (val.includes('advis') || val.includes('consult')) return 'business_advisory';
+        if (val.includes('success') || val.includes('client') || val.includes('operat')) return 'client_success';
+        if (val.includes('audit')) return 'audit';
+        return val;
+      };
+
       // Filter employees by department
       const allProfiles: EmployeeProfile[] = (pData as any[]) || [];
       const deptEmployees = allProfiles.filter(p => {
-        if (!p.department_id) return true; // Include unassigned as eligible
-        const d = p.department_id.toLowerCase();
+        const d = normalizeDept(p.department_id || (p as any).department);
+        if (!d) return true; // Include unassigned as eligible
         return d === currentDeptId || d.includes(currentDeptId) || currentDeptId.includes(d);
       });
 
       // Map services for this department
       const allServices: ServiceDeliverable[] = (sData as any[]) || [];
       const deptServices = allServices.filter(s => {
-        // Check if assigned employee is in this department or if service title matches department config
         const emp = allProfiles.find(p => p.id === s.employee_id);
-        const matchesEmp = emp && (emp.department_id === currentDeptId || (emp.department_id || '').includes(currentDeptId));
+        const empDept = normalizeDept(emp?.department_id || (emp as any)?.department);
+        const matchesEmp = emp && (empDept === currentDeptId || empDept.includes(currentDeptId) || currentDeptId.includes(empDept));
         const matchesTitle = deptConfig?.services.some(srv => s.title.toLowerCase().includes(srv.toLowerCase()));
-        return matchesEmp || matchesTitle || allServices.length < 5;
+        return matchesEmp || matchesTitle || allServices.length <= 5;
       });
 
       // Calculate real workload & stats per employee
@@ -340,7 +368,7 @@ const DepartmentHeadWorkspace = () => {
   useEffect(() => {
     fetchDepartmentData();
 
-    // Live Supabase Realtime Subscription
+    // Live Supabase Realtime Subscription across tables
     const channel = supabase
       .channel(`hod-${currentDeptId}-live-sync`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => fetchDepartmentData(true))
@@ -353,6 +381,124 @@ const DepartmentHeadWorkspace = () => {
       supabase.removeChannel(channel);
     };
   }, [fetchDepartmentData, currentDeptId]);
+
+  // ── Action: Open Edit Modal ────────────────────────────────────────────────
+  const openEditModal = (service: ServiceDeliverable) => {
+    setEditModalService(service);
+    setEditTitle(service.title);
+    setEditDesc(service.description || '');
+    setEditClientId(service.client_id || service.clients?.id || '');
+    setEditEmployeeId(service.employee_id || service.profiles?.id || '');
+    setEditDueDate(service.due_date || '');
+    setEditStatus(service.status);
+  };
+
+  // ── Action: Save Edited Task ───────────────────────────────────────────────
+  const handleEditTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editModalService) return;
+    setIsUpdatingTask(true);
+    try {
+      const { error } = await supabase
+        .from('services')
+        .update({
+          title: editTitle.trim(),
+          description: editDesc.trim() || null,
+          client_id: editClientId || null,
+          employee_id: editEmployeeId || null,
+          due_date: editDueDate || null,
+          status: editStatus
+        })
+        .eq('id', editModalService.id);
+
+      if (error) throw error;
+
+      await logActivity(
+        user?.id || '',
+        user?.user_metadata?.full_name || user?.email || 'Department Head',
+        'service_updated',
+        `[${deptConfig?.name}] Updated deliverable '${editTitle}' (Status: ${editStatus})`,
+        `[${deptConfig?.name}] تم تعديل بيانات المهمة '${editTitle}' (الحالة: ${editStatus})`
+      );
+
+      setEditModalService(null);
+      fetchDepartmentData(true);
+    } catch (err: any) {
+      alert(err.message || 'Error updating task');
+    } finally {
+      setIsUpdatingTask(false);
+    }
+  };
+
+  // ── Action: Delete Task ────────────────────────────────────────────────────
+  const handleDeleteTask = async (serviceId: string, title: string) => {
+    if (!confirm(isAr ? `هل أنت متأكد من حذف المهمة '${title}'؟` : `Are you sure you want to delete deliverable '${title}'?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('services')
+        .delete()
+        .eq('id', serviceId);
+
+      if (error) throw error;
+
+      await logActivity(
+        user?.id || '',
+        user?.user_metadata?.full_name || user?.email || 'Department Head',
+        'service_deleted',
+        `[${deptConfig?.name}] Deleted deliverable '${title}'`,
+        `[${deptConfig?.name}] تم حذف المهمة '${title}'`
+      );
+
+      setServices(prev => prev.filter(s => s.id !== serviceId));
+      fetchDepartmentData(true);
+    } catch (err: any) {
+      alert(err.message || 'Error deleting task');
+    }
+  };
+
+  // ── Action: Export Performance CSV ─────────────────────────────────────────
+  const exportPerformanceCSV = () => {
+    const headers = ['Employee Name', 'Role', 'Active Tasks', 'Completed Tasks', 'Delayed Tasks', 'Capacity Load %', 'Accuracy Index %'];
+    const rows = personnel.map(p => [
+      `"${p.full_name}"`,
+      `"${p.role}"`,
+      p.activeTasks || 0,
+      p.tasksCompleted || 0,
+      p.delayed || 0,
+      `"${p.load || 50}%"`,
+      `"${p.accuracy || 98}%"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Department_Performance_${deptConfig?.id || 'HOD'}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // ── Action: Export Deliverables CSV ────────────────────────────────────────
+  const exportDeliverablesCSV = () => {
+    const headers = ['Deliverable Title', 'Company / Client', 'Assigned Staff', 'Status', 'Due Date', 'Created Date'];
+    const rows = services.map(s => [
+      `"${s.title.replace(/"/g, '""')}"`,
+      `"${(s.clients?.company_name || 'N/A').replace(/"/g, '""')}"`,
+      `"${(s.profiles?.full_name || 'Unassigned').replace(/"/g, '""')}"`,
+      `"${s.status}"`,
+      `"${s.due_date || 'N/A'}"`,
+      `"${s.created_at ? s.created_at.split('T')[0] : 'N/A'}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Department_Deliverables_${deptConfig?.id || 'HOD'}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // ── Action: Dispatch New Task Directly to Supabase ─────────────────────────
   const handleAssignTask = async (e: React.FormEvent) => {
@@ -896,6 +1042,22 @@ const DepartmentHeadWorkspace = () => {
 
   // 3. Work Routing View (Live Task Dispatcher)
   const renderRoutingView = () => {
+    const filteredTasks = services.filter(s => {
+      const isDelayed = s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed');
+      const matchesSearch = !searchQuery.trim() || 
+        s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.clients?.company_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.profiles?.full_name || '').toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus = 
+        statusFilter === 'all' ? true :
+        statusFilter === 'delayed' ? isDelayed :
+        statusFilter === 'ongoing' ? (s.status === 'ongoing' && !isDelayed) :
+        s.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Assigner Matrix Form */}
@@ -996,18 +1158,66 @@ const DepartmentHeadWorkspace = () => {
         {/* Current Dispatched Tasks Live Ledger */}
         <div className="lg:col-span-2 bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm flex flex-col justify-between">
           <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
-                <Clock size={18} className="text-brand-dark" />
-                {isAr ? 'سجل المهام الموزعة الحية' : 'Live Department Deliverables Ledger'}
-              </h3>
-              <span className="text-[10px] font-black uppercase text-gray-400 bg-gray-50 px-2.5 py-1 rounded-xl">
-                {services.length} {isAr ? 'مهام' : 'Tasks'}
-              </span>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-4">
+              <div>
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                  <Clock size={18} className="text-brand-dark" />
+                  {isAr ? 'سجل المهام الموزعة الحية' : 'Live Department Deliverables Ledger'}
+                </h3>
+                <p className="text-[11px] text-gray-400 font-medium">{filteredTasks.length} {isAr ? 'مهام مطابقة' : 'matching tasks'}</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={exportDeliverablesCSV}
+                  className="px-3 py-1.5 bg-gray-50 hover:bg-brand-dark hover:text-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 transition-all flex items-center gap-1.5 cursor-pointer"
+                  title={isAr ? 'تصدير السجل إلى ملف CSV' : 'Export to CSV'}
+                >
+                  <Download size={13} />
+                  <span>{isAr ? 'تصدير' : 'Export'}</span>
+                </button>
+              </div>
             </div>
 
-            <div className="space-y-3 max-h-[520px] overflow-y-auto no-scrollbar pr-1">
-              {services.map(s => {
+            {/* Filter Bar & Search */}
+            <div className="space-y-3 mb-4">
+              <div className="relative">
+                <Search size={14} className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder={isAr ? 'بحث بالعنوان، العميل، أو الموظف...' : 'Search deliverable, client, or staff...'}
+                  className="w-full bg-gray-50 border border-gray-100 rounded-xl ps-9 pe-4 py-2 text-xs font-bold focus:border-brand-dark outline-none"
+                />
+              </div>
+
+              {/* Status Filter Tabs */}
+              <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                {[
+                  { id: 'all', label: isAr ? 'الكل' : 'All' },
+                  { id: 'ongoing', label: isAr ? 'قيد التنفيذ' : 'In Progress' },
+                  { id: 'under_review', label: isAr ? 'قيد المراجعة' : 'Under Review' },
+                  { id: 'delayed', label: isAr ? 'متأخرة' : 'Delayed' },
+                  { id: 'completed', label: isAr ? 'مكتملة' : 'Completed' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setStatusFilter(tab.id)}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      statusFilter === tab.id 
+                        ? 'bg-brand-dark text-white font-black shadow-xs' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 max-h-[460px] overflow-y-auto no-scrollbar pr-1">
+              {filteredTasks.map(s => {
                 const isDelayed = s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed');
                 return (
                   <div key={s.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-4 bg-gray-50/70 rounded-2xl border border-gray-100 gap-3 hover:border-gray-200 transition-all">
@@ -1025,23 +1235,42 @@ const DepartmentHeadWorkspace = () => {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
                         s.status === 'completed' ? 'bg-green-50 text-green-700' : isDelayed ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
                       }`}>
                         {s.status}
                       </span>
                       <button
+                        onClick={() => openEditModal(s)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-brand-dark hover:bg-white transition-colors cursor-pointer"
+                        title={isAr ? 'تعديل المهمة' : 'Edit Deliverable'}
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                      <button
                         onClick={() => setReassignService(s)}
                         className="p-1.5 rounded-lg text-gray-400 hover:text-brand-dark hover:bg-white transition-colors cursor-pointer"
                         title={isAr ? 'إعادة التعيين' : 'Reassign'}
                       >
-                        <UserPlus size={14} />
+                        <UserPlus size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTask(s.id, s.title)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                        title={isAr ? 'حذف المهمة' : 'Delete Task'}
+                      >
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   </div>
                 );
               })}
+              {filteredTasks.length === 0 && (
+                <div className="p-8 text-center text-gray-400 border border-dashed border-gray-200 rounded-2xl">
+                  <p className="text-xs font-bold">{isAr ? 'لا توجد مهام مطابقة للبحث أو التصفية.' : 'No deliverables matching current search or filter.'}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1053,21 +1282,42 @@ const DepartmentHeadWorkspace = () => {
   const renderQualityView = () => {
     const statuses: Array<'ongoing' | 'under_review' | 'delayed' | 'completed'> = ['ongoing', 'under_review', 'delayed', 'completed'];
 
+    const filteredServices = services.filter(s => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return s.title.toLowerCase().includes(q) || 
+        (s.clients?.company_name || '').toLowerCase().includes(q) ||
+        (s.profiles?.full_name || '').toLowerCase().includes(q);
+    });
+
     return (
       <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-6">
-        <div>
-          <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <CheckSquare className="text-brand-dark" size={20} />
-            {isAr ? 'لوحة المراقبة الحية والتدخل الفوري (كانبان)' : 'Real-Time Kanban Intervention Board'}
-          </h2>
-          <p className="text-xs text-gray-500 font-medium mt-1">
-            {isAr ? 'متابعة مراحل التنفيذ وإجراء تعديلات وتدخلات فورية بالقسم' : 'Track live progress and execute reassignments or corrective actions on deliverables'}
-          </p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+              <CheckSquare className="text-brand-dark" size={20} />
+              {isAr ? 'لوحة المراقبة الحية والتدخل الفوري (كانبان)' : 'Real-Time Kanban Intervention Board'}
+            </h2>
+            <p className="text-xs text-gray-500 font-medium mt-1">
+              {isAr ? 'متابعة مراحل التنفيذ وإجراء تعديلات وتدخلات فورية بالقسم' : 'Track live progress and execute reassignments or corrective actions on deliverables'}
+            </p>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search size={14} className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder={isAr ? 'بحث في الكانبان...' : 'Filter board...'}
+              className="w-full bg-gray-50 border border-gray-100 rounded-xl ps-9 pe-4 py-2 text-xs font-bold focus:border-brand-dark outline-none"
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 overflow-x-auto pb-4">
           {statuses.map(st => {
-            const list = services.filter(s => {
+            const list = filteredServices.filter(s => {
               if (st === 'delayed') return s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed');
               if (st === 'ongoing') return s.status === 'ongoing' && !(s.due_date && new Date(s.due_date) < new Date());
               return s.status === st;
@@ -1121,10 +1371,16 @@ const DepartmentHeadWorkspace = () => {
                             </button>
                           )}
                           <button 
+                            onClick={() => openEditModal(s)}
+                            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-[8px] font-black uppercase transition-colors cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                          <button 
                             onClick={() => setReassignService(s)}
                             className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-[8px] font-black uppercase transition-colors cursor-pointer"
                           >
-                            Reassign
+                            Assign
                           </button>
                         </div>
                       </div>
@@ -1146,16 +1402,37 @@ const DepartmentHeadWorkspace = () => {
 
   // 5. Client Directory View
   const renderClientsView = () => {
+    const filteredClients = clients.filter(c => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return c.company_name.toLowerCase().includes(q) || 
+        (c.email || '').toLowerCase().includes(q) || 
+        (c.phone || '').toLowerCase().includes(q);
+    });
+
     return (
       <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-6">
-        <div>
-          <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <Briefcase className="text-brand-dark" size={20} />
-            {isAr ? 'دليل عملاء القسم المباشر' : 'Department Client Directory'}
-          </h2>
-          <p className="text-xs text-gray-500 font-medium mt-1">
-            {isAr ? 'العملاء المستفيدون من خدمات هذا القسم حالياً' : 'Companies currently receiving services and deliverables from your department'}
-          </p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+              <Briefcase className="text-brand-dark" size={20} />
+              {isAr ? 'دليل عملاء القسم المباشر' : 'Department Client Directory'}
+            </h2>
+            <p className="text-xs text-gray-500 font-medium mt-1">
+              {isAr ? 'العملاء المستفيدون من خدمات هذا القسم حالياً' : 'Companies currently receiving services and deliverables from your department'}
+            </p>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search size={14} className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder={isAr ? 'بحث في العملاء...' : 'Search companies...'}
+              className="w-full bg-gray-50 border border-gray-100 rounded-xl ps-9 pe-4 py-2 text-xs font-bold focus:border-brand-dark outline-none"
+            />
+          </div>
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-gray-100">
@@ -1169,7 +1446,7 @@ const DepartmentHeadWorkspace = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {clients.map(cl => {
+              {filteredClients.map(cl => {
                 const clientTasks = services.filter(s => s.client_id === cl.id);
                 const hasDelay = clientTasks.some(s => s.status === 'delayed');
 
@@ -1245,16 +1522,45 @@ const DepartmentHeadWorkspace = () => {
 
   // 7. Performance Reports View
   const renderPerformanceView = () => {
+    const filteredPersonnel = personnel.filter(p => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return p.full_name.toLowerCase().includes(q) || (p.role || '').toLowerCase().includes(q);
+    });
+
     return (
       <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-6">
-        <div>
-          <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <FileBarChart className="text-brand-dark" size={20} />
-            {isAr ? 'سجل الأداء والمؤشرات الرقابية للقسم' : 'Performance Analytics Ledger'}
-          </h2>
-          <p className="text-xs text-gray-500 font-medium mt-1">
-            {isAr ? 'مؤشرات الأداء التاريخية، دقة العمليات، والملاحظات الإشرافية' : 'Historical tracking of staff accuracy, timely completions, and internal review logs'}
-          </p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+              <FileBarChart className="text-brand-dark" size={20} />
+              {isAr ? 'سجل الأداء والمؤشرات الرقابية للقسم' : 'Performance Analytics Ledger'}
+            </h2>
+            <p className="text-xs text-gray-500 font-medium mt-1">
+              {isAr ? 'مؤشرات الأداء التاريخية، دقة العمليات، والملاحظات الإشرافية' : 'Historical tracking of staff accuracy, timely completions, and internal review logs'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-56">
+              <Search size={14} className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder={isAr ? 'بحث بالموظف...' : 'Filter staff...'}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl ps-9 pe-4 py-2 text-xs font-bold focus:border-brand-dark outline-none"
+              />
+            </div>
+
+            <button
+              onClick={exportPerformanceCSV}
+              className="px-3.5 py-2 bg-brand-dark hover:bg-brand text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+            >
+              <Download size={13} />
+              <span>{isAr ? 'تقرير الأداء (CSV)' : 'Export CSV'}</span>
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-gray-100">
@@ -1269,7 +1575,7 @@ const DepartmentHeadWorkspace = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {personnel.map(p => (
+              {filteredPersonnel.map(p => (
                 <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <p className="font-black text-sm text-gray-900">{p.full_name}</p>
@@ -1465,6 +1771,15 @@ const DepartmentHeadWorkspace = () => {
 
         <div className="flex items-center gap-3">
           <button
+            onClick={exportDeliverablesCSV}
+            className="p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-gray-600 hover:text-brand-dark transition-all cursor-pointer flex items-center gap-2 text-xs font-bold"
+            title={isAr ? 'تصدير جدول التسليمات والمهام (CSV)' : 'Export Deliverables Report (CSV)'}
+          >
+            <Download size={15} />
+            <span className="hidden sm:inline">{isAr ? 'تصدير المهام (CSV)' : 'Export CSV'}</span>
+          </button>
+
+          <button
             onClick={() => fetchDepartmentData()}
             className="p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-gray-600 hover:text-brand-dark transition-all cursor-pointer flex items-center gap-2 text-xs font-bold"
             title={isAr ? 'تحديث البيانات' : 'Sync Live Data'}
@@ -1639,6 +1954,118 @@ const DepartmentHeadWorkspace = () => {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Deliverable Modal ─────────────────────────────────────── */}
+      {editModalService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden p-6 animate-scale-up border border-gray-100 text-start">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                <Edit2 size={18} className="text-brand-dark" />
+                {isAr ? 'تعديل بيانات المهمة / التسليم' : 'Edit Deliverable Details'}
+              </h3>
+              <button 
+                onClick={() => setEditModalService(null)} 
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditTaskSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'عنوان المهمة' : 'Deliverable Title'}</label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-brand-dark outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'الوصف ونطاق العمل' : 'Description / Scope'}</label>
+                <textarea
+                  rows={2}
+                  value={editDesc}
+                  onChange={e => setEditDesc(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-medium focus:border-brand-dark outline-none resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'العميل' : 'Client'}</label>
+                  <select
+                    value={editClientId}
+                    onChange={e => setEditClientId(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:border-brand-dark outline-none cursor-pointer"
+                  >
+                    <option value="">{isAr ? '-- غير محدد --' : '-- None --'}</option>
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'الموظف المسؤول' : 'Assigned Staff'}</label>
+                  <select
+                    value={editEmployeeId}
+                    onChange={e => setEditEmployeeId(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:border-brand-dark outline-none cursor-pointer"
+                  >
+                    <option value="">{isAr ? '-- غير محدد --' : '-- None --'}</option>
+                    {personnel.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'الموعد النهائي' : 'Due Date'}</label>
+                  <input
+                    type="date"
+                    value={editDueDate}
+                    onChange={e => setEditDueDate(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:border-brand-dark outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'الحالة' : 'Status'}</label>
+                  <select
+                    value={editStatus}
+                    onChange={e => setEditStatus(e.target.value as any)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:border-brand-dark outline-none cursor-pointer"
+                  >
+                    <option value="ongoing">{isAr ? 'قيد التنفيذ' : 'Ongoing'}</option>
+                    <option value="under_review">{isAr ? 'قيد المراجعة' : 'Under Review'}</option>
+                    <option value="delayed">{isAr ? 'متأخرة' : 'Delayed'}</option>
+                    <option value="completed">{isAr ? 'مكتملة' : 'Completed'}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditModalService(null)}
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingTask}
+                  className="flex-1 py-3 bg-brand-dark hover:bg-brand text-white rounded-xl font-black text-xs uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer shadow-md"
+                >
+                  {isUpdatingTask ? '...' : (isAr ? 'حفظ التعديلات' : 'Save Changes')}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
