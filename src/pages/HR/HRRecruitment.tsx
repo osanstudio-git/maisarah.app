@@ -54,6 +54,15 @@ export default function HRRecruitment() {
     message: '',
     type: 'success'
   });
+
+  useEffect(() => {
+    if (notification.show) {
+      const timer = setTimeout(() => {
+        setNotification(prev => ({ ...prev, show: false }));
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification.show]);
   const [formError, setFormError] = useState<string | null>(null);
   const [candidateToDelete, setCandidateToDelete] = useState<Candidate | null>(null);
 
@@ -1267,34 +1276,30 @@ export default function HRRecruitment() {
         </div>
       )}
 
-      {/* Custom Notification Modal Card */}
+      {/* ── Sleek Floating Toast Notification ─────────────────────────── */}
       {notification.show && (
-        <div className="fixed inset-0 z-55 flex items-center justify-center bg-gray-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden p-6 text-center space-y-4 animate-scale-up border border-gray-100">
-            <div className={`mx-auto w-12 h-12 rounded-2xl flex items-center justify-center ${
-              notification.type === 'success' ? 'bg-green-50 text-green-600 animate-bounce' : 'bg-red-50 text-[#A11212]'
+        <div className="fixed top-6 end-6 z-55 max-w-md w-full animate-slide-down pointer-events-auto" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-2xl border border-gray-100/80 flex items-start gap-3.5 ring-1 ring-black/5">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+              notification.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-[#A11212]'
             }`}>
-              {notification.type === 'success' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
+              {notification.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
             </div>
-            <div>
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+            <div className="flex-1 min-w-0 pt-0.5">
+              <h4 className="text-xs font-black text-gray-900 tracking-tight">
                 {notification.title}
-              </h3>
-              <p className="text-xs text-gray-505 mt-2 leading-relaxed font-bold">
+              </h4>
+              <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed font-medium">
                 {notification.message}
               </p>
             </div>
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => setNotification(prev => ({ ...prev, show: false }))}
-                className={`w-full text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:shadow-lg transition-all cursor-pointer ${
-                  notification.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-[#A11212] hover:bg-[#800e0e]'
-                }`}
-              >
-                {isAr ? 'حسناً' : 'OK'}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setNotification(prev => ({ ...prev, show: false }))}
+              className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
       )}
