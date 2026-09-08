@@ -1401,13 +1401,15 @@ export default function HREmployees() {
 
                   {/* Actions */}
                   <div className="flex gap-2 items-center">
-                    <button
-                      onClick={() => handleRevokeAccess(selectedEmp.id)}
-                      className="px-3.5 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-red-700 transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
-                      title="Revoke System Access"
-                    >
-                      <UserX size={14} /> Revoke Access
-                    </button>
+                    {selectedEmp.email !== 'hr@maisarah.om' && selectedEmp.email !== 'manager@maisarah.om' && (
+                      <button
+                        onClick={() => handleRevokeAccess(selectedEmp.id)}
+                        className="px-3.5 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-red-700 transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        title="Revoke System Access"
+                      >
+                        <UserX size={14} /> Revoke Access
+                      </button>
+                    )}
                     <button
                       onClick={() => handleOpenEditModal(selectedEmp)}
                       className="p-2.5 bg-gray-50 border border-gray-200 text-gray-600 rounded-xl hover:text-[#A11212] hover:border-[#A11212] transition-colors"
@@ -1415,13 +1417,19 @@ export default function HREmployees() {
                     >
                       <Edit size={16} />
                     </button>
-                    <button
-                      onClick={() => handleDelete(selectedEmp.id)}
-                      className="p-2.5 bg-gray-50 border border-gray-200 text-gray-655 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition-colors"
-                      title="Delete Dossier"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {selectedEmp.email !== 'hr@maisarah.om' && selectedEmp.email !== 'manager@maisarah.om' ? (
+                      <button
+                        onClick={() => handleDelete(selectedEmp.id)}
+                        className="p-2.5 bg-gray-50 border border-gray-200 text-gray-655 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition-colors cursor-pointer"
+                        title="Delete Dossier"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    ) : (
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-200/60" title="Core System Administrator cannot be deleted">
+                        {isAr ? 'حساب نظام محمي' : 'Protected Account'}
+                      </span>
+                    )}
                   </div>
                 </div>
 

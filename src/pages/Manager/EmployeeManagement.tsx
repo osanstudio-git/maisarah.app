@@ -1100,13 +1100,19 @@ const EmployeeManagement = () => {
                                 >
                                   <Pencil size={16} />
                                 </button>
-                                <button 
-                                  onClick={() => { setEmployeeToDelete(emp); setConfirmName(''); setDeleteModalOpen(true); }} 
-                                  title={isAr ? 'حذف الحساب' : 'Delete Account'}
-                                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
+                                {emp.email !== 'manager@maisarah.om' && emp.email !== 'hr@maisarah.om' ? (
+                                  <button 
+                                    onClick={() => { setEmployeeToDelete(emp); setConfirmName(''); setDeleteModalOpen(true); }} 
+                                    title={isAr ? 'حذف الحساب' : 'Delete Account'}
+                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                ) : (
+                                  <span className="p-2 text-gray-300 inline-flex items-center" title="Core System Administrator Protected">
+                                    <ShieldCheck size={16} className="text-amber-500" />
+                                  </span>
+                                )}
                               </td>
                             </tr>
                           );
