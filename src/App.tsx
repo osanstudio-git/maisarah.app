@@ -6,7 +6,6 @@ import { AuthProvider } from './hooks/useAuth';
 // Layout & Protection
 import { MainLayout } from './components/MainLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import HODLayout from './components/HODLayout';
 
 // Auth
 import Login from './pages/Auth/Login';
@@ -130,15 +129,14 @@ function App() {
 
             {/* Department Head Routes */}
             <Route element={<ProtectedRoute allowedRoles={['department_head']} />}>
-              <Route element={<HODLayout />}>
-                <Route path="/hod/dashboard" element={<DepartmentHeadWorkspace />} />
-                <Route path="/hod/team-leadership" element={<DepartmentHeadWorkspace />} />
-                <Route path="/hod/work-routing" element={<DepartmentHeadWorkspace />} />
-                <Route path="/hod/quality-control" element={<DepartmentHeadWorkspace />} />
-                <Route path="/hod/client-directory" element={<DepartmentHeadWorkspace />} />
-                <Route path="/hod/coordination" element={<DepartmentHeadWorkspace />} />
-                <Route path="/hod/performance" element={<DepartmentHeadWorkspace />} />
-              </Route>
+              <Route path="/hod" element={<Navigate to="/hod/dashboard" replace />} />
+              <Route path="/hod/dashboard" element={<DepartmentHeadWorkspace />} />
+              <Route path="/hod/team-leadership" element={<DepartmentHeadWorkspace />} />
+              <Route path="/hod/work-routing" element={<DepartmentHeadWorkspace />} />
+              <Route path="/hod/quality-control" element={<DepartmentHeadWorkspace />} />
+              <Route path="/hod/client-directory" element={<DepartmentHeadWorkspace />} />
+              <Route path="/hod/coordination" element={<DepartmentHeadWorkspace />} />
+              <Route path="/hod/performance" element={<DepartmentHeadWorkspace />} />
             </Route>
 
             {/* HR Routes - All 15 Modules */}

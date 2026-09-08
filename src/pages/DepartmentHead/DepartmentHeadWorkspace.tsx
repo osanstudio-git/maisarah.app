@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useOutletContext } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../hooks/useAuth';
 import { logActivity } from '../../lib/activityLogger';
@@ -148,9 +148,35 @@ const DepartmentHeadWorkspace = () => {
   const isAr = i18n.language === 'ar';
   const location = useLocation();
 
-  // Retrieve department context from Layout outlet context
-  const context = useOutletContext<{ deptContext: string }>() || { deptContext: 'audit' };
-  const currentDeptId = context.deptContext || 'audit';
+  // Retrieve department context dynamically from Supabase user profile
+  const [deptContext, setDeptContext] = useState<string>('audit');
+
+  useEffect(() => {
+    const fetchDeptContext = async () => {
+      if (!user) return;
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('department_id, department')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const deptValue = data?.department_id || data?.department;
+        if (deptValue) {
+          let dept = deptValue.trim().toLowerCase();
+          if (dept === 'tax & vat' || dept === 'tax_and_vat' || dept === 'tax') dept = 'tax_vat';
+          if (dept === 'business advisory' || dept === 'advisory') dept = 'business_advisory';
+          if (dept === 'client success' || dept === 'operations') dept = 'client_success';
+          setDeptContext(dept);
+        }
+      } catch (err) {
+        console.error('Error fetching department context:', err);
+      }
+    };
+    fetchDeptContext();
+  }, [user]);
+
+  const currentDeptId = deptContext;
   const deptConfig = getDepartmentById(currentDeptId) || getDepartmentById('audit');
 
   // Core Data States

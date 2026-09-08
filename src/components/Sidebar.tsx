@@ -29,7 +29,8 @@ import {
   DoorOpen,
   Bot,
   Bell,
-  CreditCard
+  CreditCard,
+  Send
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
@@ -42,6 +43,16 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
   // Define menus based on role
   const getMenuItems = () => {
     switch (role) {
+      case 'department_head':
+        return [
+          { title: isAr ? 'لوحة قيادة القسم' : 'Dashboard', icon: BarChart2, path: '/hod/dashboard' },
+          { title: isAr ? 'قيادة الفريق' : 'Team Leadership', icon: Users, path: '/hod/team-leadership' },
+          { title: isAr ? 'توجيه المهام' : 'Work Routing', icon: Send, path: '/hod/work-routing' },
+          { title: isAr ? 'رقابة الجودة والاعتمادات' : 'Quality Control', icon: ClipboardCheck, path: '/hod/quality-control' },
+          { title: isAr ? 'دليل عملاء القسم' : 'Client Directory', icon: Building2, path: '/hod/client-directory' },
+          { title: isAr ? 'تنسيق المشروعات المشتركة' : 'Coordination Hub', icon: Layers, path: '/hod/coordination' },
+          { title: isAr ? 'تقارير الأداء والأرشيف' : 'Performance Reports', icon: FileBarChart, path: '/hod/performance' },
+        ];
       case 'employee':
         return [
           { title: t('employee.dashboardTitle'), icon: Home, path: '/employee' },
