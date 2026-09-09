@@ -44,7 +44,10 @@ import {
   HelpCircle,
   CheckCircle,
   Download,
-  Filter
+  Filter,
+  Bell,
+  BriefcaseIcon,
+  Loader2
 } from 'lucide-react';
 import { getDepartmentById, getAllDepartments } from '../../config/departments';
 
@@ -690,6 +693,113 @@ const DepartmentHeadWorkspace = () => {
   const activeServices = services.filter(s => s.status === 'ongoing' || s.status === 'under_review');
   const completionRate = services.length > 0 ? Math.round((completedServices.length / services.length) * 100) : 100;
   const avgLoad = personnel.length > 0 ? Math.round(personnel.reduce((sum, p) => sum + (p.load || 50), 0) / personnel.length) : 60;
+
+  // ── Notifications State ────────────────────────────────────────────────────────
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [assignJobNotif, setAssignJobNotif] = useState<any | null>(null); // notification that triggers job assignment
+  const [assignJobForm, setAssignJobForm] = useState({
+    serviceType: 'Bookkeeping',
+    billingType: 'one_time' as 'one_time' | 'recurring' | 'advance',
+    employeeId: '',
+    description: '',
+    deadline: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+    amount: '',
+  });
+  const [isAssigningJob, setIsAssigningJob] = useState(false);
+
+  const SERVICE_TYPES = ['Bookkeeping', 'Tax & VAT', 'Audit', 'Business Advisory', 'Financial Consulting', 'Company Formation'];
+
+  const fetchNotifications = useCallback(async () => {
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('role', 'hod')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (data) setNotifications(data);
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+    const ch = supabase
+      .channel('hod_notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => fetchNotifications())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [fetchNotifications]);
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const markAllRead = async () => {
+    await supabase.from('notifications').update({ is_read: true }).eq('role', 'hod').eq('is_read', false);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  };
+
+  const dismissNotification = async (id: string) => {
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+  };
+
+  const handleAssignJobSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignJobNotif) return;
+    setIsAssigningJob(true);
+    try {
+      const selectedEmp = personnel.find(p => p.id === assignJobForm.employeeId) || personnel[0];
+
+      // Insert into client_jobs table
+      const { error } = await supabase.from('client_jobs').insert([{
+        client_id: assignJobNotif.ref_id || null,
+        service_type: assignJobForm.serviceType,
+        billing_type: assignJobForm.billingType,
+        assigned_hod: user?.id || null,
+        assigned_employee: selectedEmp?.id || null,
+        description: assignJobForm.description || null,
+        deadline: assignJobForm.deadline,
+        amount: parseFloat(assignJobForm.amount) || 0,
+        vat_amount: parseFloat(assignJobForm.amount) ? +(parseFloat(assignJobForm.amount) * 0.05).toFixed(3) : 0,
+        status: 'pending',
+      }]);
+
+      if (error) throw error;
+
+      // Also create a service entry so it appears in HOD work-routing view
+      await supabase.from('services').insert([{
+        title: `${assignJobForm.serviceType} — ${assignJobNotif.message?.match(/"([^"]+)"/)?.at(1) || 'New Client'}`,
+        description: assignJobForm.description || `${assignJobForm.serviceType} job assigned by HOD`,
+        client_id: assignJobNotif.ref_id || null,
+        employee_id: selectedEmp?.id || null,
+        due_date: assignJobForm.deadline,
+        status: 'ongoing',
+      }]);
+
+      // Notify assigned employee
+      if (selectedEmp?.id) {
+        await supabase.from('notifications').insert([{
+          user_id: selectedEmp.id,
+          role: 'employee',
+          type: 'job_assigned',
+          title: 'New Job Assigned by HOD',
+          message: `You have been assigned: ${assignJobForm.serviceType}. Deadline: ${assignJobForm.deadline}. Amount: OMR ${parseFloat(assignJobForm.amount).toFixed(3)}.`,
+          ref_id: assignJobNotif.ref_id,
+          ref_table: 'client_jobs',
+        }]);
+      }
+
+      // Dismiss original HOD notification
+      await dismissNotification(assignJobNotif.id);
+
+      setAssignJobNotif(null);
+      setAssignJobForm({ serviceType: 'Bookkeeping', billingType: 'one_time', employeeId: '', description: '', deadline: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0], amount: '' });
+      fetchDepartmentData(true);
+      alert(isAr ? 'تم إسناد المهمة للموظف وإشعاره بنجاح!' : `Job successfully assigned to ${selectedEmp?.full_name || 'employee'}!`);
+    } catch (err: any) {
+      alert(err.message || 'Error assigning job');
+    } finally {
+      setIsAssigningJob(false);
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   // SUB-VIEWS
@@ -1788,6 +1898,20 @@ const DepartmentHeadWorkspace = () => {
             <span className="hidden sm:inline">{isAr ? 'تحديث' : 'Sync'}</span>
           </button>
 
+          {/* ── Notification Bell ── */}
+          <button
+            onClick={() => { setShowNotifPanel(true); }}
+            className="relative p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-gray-600 hover:text-brand-dark transition-all cursor-pointer"
+            title={isAr ? 'الإشعارات' : 'Notifications'}
+          >
+            <Bell size={15} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-pulse">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
           <span className="bg-red-50 text-brand-dark border border-red-100 text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider">
             {deptConfig?.name}
           </span>
@@ -2063,6 +2187,254 @@ const DepartmentHeadWorkspace = () => {
                   className="flex-1 py-3 bg-brand-dark hover:bg-brand text-white rounded-xl font-black text-xs uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer shadow-md"
                 >
                   {isUpdatingTask ? '...' : (isAr ? 'حفظ التعديلات' : 'Save Changes')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── NOTIFICATION PANEL SLIDE-IN ───────────────────────────────────── */}
+      {showNotifPanel && (
+        <div className="fixed inset-0 z-50 flex" dir={isAr ? 'rtl' : 'ltr'}>
+          {/* Backdrop */}
+          <div className="flex-1 bg-black/30 backdrop-blur-sm" onClick={() => setShowNotifPanel(false)} />
+          {/* Panel */}
+          <div className="w-full max-w-sm bg-white shadow-2xl flex flex-col" style={{ maxHeight: '100vh', overflowY: 'auto' }}>
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between z-10">
+              <div>
+                <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
+                  <Bell size={16} className="text-[#A11212]" />
+                  {isAr ? 'الإشعارات' : 'Notifications'}
+                </h3>
+                <p className="text-[10px] text-gray-400 font-bold mt-0.5">
+                  {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button onClick={markAllRead} className="text-[10px] font-black text-[#A11212] hover:underline cursor-pointer">
+                    Mark all read
+                  </button>
+                )}
+                <button onClick={() => setShowNotifPanel(false)} className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Notification List */}
+            <div className="flex-1 divide-y divide-gray-50">
+              {notifications.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">
+                  <Bell size={32} className="mx-auto mb-3 opacity-20" />
+                  <p className="text-xs font-bold">No notifications yet</p>
+                </div>
+              ) : notifications.map(notif => (
+                <div
+                  key={notif.id}
+                  className={`px-5 py-4 transition-colors ${!notif.is_read ? 'bg-red-50/30' : 'bg-white'}`}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Icon by type */}
+                    <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      notif.type === 'new_client'     ? 'bg-green-100 text-green-700' :
+                      notif.type === 'job_complete'   ? 'bg-blue-100 text-blue-700'  :
+                      notif.type === 'invoice_ready'  ? 'bg-amber-100 text-amber-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {notif.type === 'new_client'    && <UserPlus size={14} />}
+                      {notif.type === 'job_complete'  && <CheckCircle2 size={14} />}
+                      {notif.type === 'invoice_ready' && <FileText size={14} />}
+                      {!['new_client','job_complete','invoice_ready'].includes(notif.type) && <Bell size={14} />}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-black text-gray-900 truncate">{notif.title}</p>
+                        {!notif.is_read && <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />}
+                      </div>
+                      <p className="text-[10px] text-gray-500 font-medium mt-0.5 leading-relaxed line-clamp-2">{notif.message}</p>
+                      <p className="text-[9px] text-gray-400 font-bold mt-1">
+                        {new Date(notif.created_at).toLocaleDateString('en-OM', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+
+                      {/* Action buttons per type */}
+                      <div className="flex gap-2 mt-2">
+                        {notif.type === 'new_client' && !notif.is_read && (
+                          <button
+                            onClick={() => {
+                              setAssignJobNotif(notif);
+                              setAssignJobForm(prev => ({ ...prev, employeeId: personnel[0]?.id || '' }));
+                              setShowNotifPanel(false);
+                            }}
+                            className="px-3 py-1.5 bg-[#A11212] text-white text-[10px] font-black rounded-lg hover:bg-[#800e0e] transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <ArrowRight size={10} /> Assign Job
+                          </button>
+                        )}
+                        <button
+                          onClick={() => dismissNotification(notif.id)}
+                          className="px-3 py-1.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CLIENT JOB ASSIGNMENT MODAL ────────────────────────────────── */}
+      {assignJobNotif && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl p-6 border border-gray-100">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-5 pb-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                  <ArrowRight size={18} className="text-[#A11212]" />
+                  {isAr ? 'إسناد مهمة للموظف' : 'Assign Job to Employee'}
+                </h3>
+                <p className="text-[10px] text-gray-400 font-bold mt-1 truncate max-w-xs">
+                  📣 {assignJobNotif.message}
+                </p>
+              </div>
+              <button onClick={() => setAssignJobNotif(null)} className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer rounded-full">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAssignJobSubmit} className="space-y-4">
+              {/* Service Type */}
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'نوع الخدمة' : 'Service Type'}
+                </label>
+                <select
+                  value={assignJobForm.serviceType}
+                  onChange={e => setAssignJobForm(prev => ({ ...prev, serviceType: e.target.value }))}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:border-brand-dark outline-none cursor-pointer"
+                >
+                  {SERVICE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Billing Type */}
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'نوع الفوترة' : 'Billing Type'}
+                  </label>
+                  <select
+                    value={assignJobForm.billingType}
+                    onChange={e => setAssignJobForm(prev => ({ ...prev, billingType: e.target.value as any }))}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:border-brand-dark outline-none cursor-pointer"
+                  >
+                    <option value="one_time">One-Time</option>
+                    <option value="recurring">Monthly Recurring</option>
+                    <option value="advance">Advance Payment</option>
+                  </select>
+                </div>
+
+                {/* Amount */}
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'المبلغ (OMR)' : 'Amount (OMR)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    placeholder="0.000"
+                    value={assignJobForm.amount}
+                    onChange={e => setAssignJobForm(prev => ({ ...prev, amount: e.target.value }))}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:border-brand-dark outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Assigned Employee */}
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الموظف المسؤول' : 'Assign to Employee'}
+                  </label>
+                  <select
+                    value={assignJobForm.employeeId}
+                    onChange={e => setAssignJobForm(prev => ({ ...prev, employeeId: e.target.value }))}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:border-brand-dark outline-none cursor-pointer"
+                  >
+                    <option value="">-- Select Employee --</option>
+                    {personnel.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.full_name} ({p.activeTasks || 0} active)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Deadline */}
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الموعد النهائي' : 'Deadline'}
+                  </label>
+                  <input
+                    type="date"
+                    value={assignJobForm.deadline}
+                    onChange={e => setAssignJobForm(prev => ({ ...prev, deadline: e.target.value }))}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:border-brand-dark outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'تعليمات المهمة' : 'Job Instructions / Notes'}
+                </label>
+                <textarea
+                  rows={2}
+                  value={assignJobForm.description}
+                  onChange={e => setAssignJobForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder={isAr ? 'أضف أي تعليمات...' : 'Add any special instructions...'}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium focus:border-brand-dark outline-none resize-none"
+                />
+              </div>
+
+              {/* VAT Preview */}
+              {assignJobForm.amount && parseFloat(assignJobForm.amount) > 0 && (
+                <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 flex items-center justify-between">
+                  <span className="text-[10px] font-black text-amber-700">VAT 5% (Auto-calculated)</span>
+                  <span className="text-xs font-black text-amber-900">
+                    OMR {(parseFloat(assignJobForm.amount) * 0.05).toFixed(3)}
+                    {' '}→ Total: OMR {(parseFloat(assignJobForm.amount) * 1.05).toFixed(3)}
+                  </span>
+                </div>
+              )}
+
+              {/* Submit */}
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAssignJobNotif(null)}
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAssigningJob}
+                  className="flex-1 py-3 bg-[#A11212] hover:bg-[#800e0e] text-white rounded-xl font-black text-xs uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer shadow-md flex items-center justify-center gap-2"
+                >
+                  {isAssigningJob ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
+                  {isAssigningJob ? 'Assigning...' : (isAr ? 'إسناد وإشعار الموظف' : 'Assign & Notify Employee')}
                 </button>
               </div>
             </form>

@@ -103,17 +103,17 @@ export default function HRRecruitment() {
         .from('hr_recruits')
         .delete()
         .eq('id', candidateToDelete.id);
-        
+
       if (error) throw error;
-      
+
       setCandidates(prev => prev.filter(c => c.id !== candidateToDelete.id));
       setCandidateToDelete(null);
-      
+
       setNotification({
         show: true,
         title: isAr ? 'تم الحذف' : 'Candidate Deleted',
-        message: isAr 
-          ? 'تم حذف بيانات المرشح بنجاح من قاعدة البيانات.' 
+        message: isAr
+          ? 'تم حذف بيانات المرشح بنجاح من قاعدة البيانات.'
           : 'Candidate profile permanently removed from the system.',
         type: 'success'
       });
@@ -228,8 +228,8 @@ export default function HRRecruitment() {
       await supabase.functions.invoke('send-email', {
         body: {
           to: c.email,
-          subject: isAr 
-            ? 'مرحباً بك في مجموعة ميسرة - عرض العمل والخطوات القادمة' 
+          subject: isAr
+            ? 'مرحباً بك في مجموعة ميسرة - عرض العمل والخطوات القادمة'
             : 'Welcome to Maisarah Group - Job Offer & Next Steps',
           html: `
             <div style="font-family: sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #333;">
@@ -238,9 +238,9 @@ export default function HRRecruitment() {
               </h2>
               <p>${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${c.name}</strong>,</p>
               <p>
-                ${isAr 
-                  ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تفعيل عرض العمل الخاص بك وتوجيهه للمدير التنفيذي المسؤول لوضع اللمسات الأخيرة وتعيين القسم والمشرف المباشر.' 
-                  : 'We are absolutely thrilled to welcome you to the Maisarah Group family. We would like to inform you that your job offer has been successfully processed and forwarded to the Executive Operations Manager for final department and supervisor placement allocation.'}
+                ${isAr
+              ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تفعيل عرض العمل الخاص بك وتوجيهه للمدير التنفيذي المسؤول لوضع اللمسات الأخيرة وتعيين القسم والمشرف المباشر.'
+              : 'We are absolutely thrilled to welcome you to the Maisarah Group family. We would like to inform you that your job offer has been successfully processed and forwarded to the Executive Operations Manager for final department and supervisor placement allocation.'}
               </p>
               <div style="background-color: #fcfcfc; border: 1px solid #f0f0f0; padding: 15px; border-radius: 10px; margin: 20px 0;">
                 <h3 style="margin-top: 0; color: #555;">${isAr ? 'تفاصيل التوظيف الأولية:' : 'Initial Employment Details:'}</h3>
@@ -250,9 +250,9 @@ export default function HRRecruitment() {
                 <p><strong>${isAr ? 'نوع التوظيف:' : 'Employment Type:'}</strong> ${c.employment_type || 'Experienced'}</p>
               </div>
               <p>
-                ${isAr 
-                  ? 'بمجرد أن يقوم المدير المسؤول باعتماد تفاصيل التعيين، ستصلك رسالة بريد إلكتروني ثانية تحتوي على رابط تفعيل الحساب وبيانات تسجيل الدخول الخاصة بك لبدء مهام قائمة مباشرة العمل.' 
-                  : 'As soon as the responsible manager confirms your final placement, you will receive a second email containing your portal activation link and secure temporary credentials to access your Employee Dashboard and begin your onboarding checklist.'}
+                ${isAr
+              ? 'بمجرد أن يقوم المدير المسؤول باعتماد تفاصيل التعيين، ستصلك رسالة بريد إلكتروني ثانية تحتوي على رابط تفعيل الحساب وبيانات تسجيل الدخول الخاصة بك لبدء مهام قائمة مباشرة العمل.'
+              : 'As soon as the responsible manager confirms your final placement, you will receive a second email containing your portal activation link and secure temporary credentials to access your Employee Dashboard and begin your onboarding checklist.'}
               </p>
               <br/>
               <p>${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
@@ -265,7 +265,7 @@ export default function HRRecruitment() {
       setNotification({
         show: true,
         title: isAr ? 'تم تفعيل التوظيف' : 'Job Offer Extended',
-        message: isAr 
+        message: isAr
           ? `تم تحديث حالة المرشح ${c.name} إلى "مقبول" بنجاح، وتم إرسال البريد الترحيبي الأول.`
           : `Candidate ${c.name} promoted to Offered. Welcome offer email (Email A) dispatched, awaiting manager placement.`,
         type: 'success'
@@ -275,7 +275,7 @@ export default function HRRecruitment() {
       setNotification({
         show: true,
         title: isAr ? 'تم التحديث مع تنبيه' : 'Updated with Warning',
-        message: isAr 
+        message: isAr
           ? `تم تحديث حالة المرشح ولكن تعذر إرسال البريد الإلكتروني: ${mailErr.message}`
           : `Candidate updated, but welcome email dispatch failed: ${mailErr.message}`,
         type: 'error'
@@ -308,7 +308,7 @@ export default function HRRecruitment() {
     try {
       const { error } = await supabase
         .from('hr_recruits')
-        .update({ 
+        .update({
           stage: nextStage,
           ...(nextStage === 'offered' ? { placement_status: 'pending_placement' } : {})
         })
@@ -397,9 +397,9 @@ export default function HRRecruitment() {
   // Apply Search, Filter & Sort criteria
   const filteredCandidates = candidates
     .filter(c => {
-      const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            c.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            c.email.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.email.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesDept = deptFilter === 'all' || c.dept === deptFilter;
       return matchesSearch && matchesDept;
     })
@@ -436,8 +436,8 @@ export default function HRRecruitment() {
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="relative w-full md:w-80">
           <Search size={16} className={`absolute ${isAr ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-gray-400`} />
-          <input 
-            type="text" 
+          <input
+            type="text"
             placeholder={isAr ? 'بحث عن مرشح...' : 'Search candidates...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -480,17 +480,15 @@ export default function HRRecruitment() {
       <div className="flex border-b border-gray-100 text-xs font-bold gap-3 mb-2">
         <button
           onClick={() => setViewMode('pipeline')}
-          className={`px-4 py-2 border-b-2 transition-all ${
-            viewMode === 'pipeline' ? 'border-[#A11212] text-[#A11212]' : 'border-transparent text-gray-400'
-          }`}
+          className={`px-4 py-2 border-b-2 transition-all ${viewMode === 'pipeline' ? 'border-[#A11212] text-[#A11212]' : 'border-transparent text-gray-400'
+            }`}
         >
           {isAr ? 'عرض مخطط العمل (Kanban)' : 'Pipeline Board'}
         </button>
         <button
           onClick={() => setViewMode('list')}
-          className={`px-4 py-2 border-b-2 transition-all ${
-            viewMode === 'list' ? 'border-[#A11212] text-[#A11212]' : 'border-transparent text-gray-400'
-          }`}
+          className={`px-4 py-2 border-b-2 transition-all ${viewMode === 'list' ? 'border-[#A11212] text-[#A11212]' : 'border-transparent text-gray-400'
+            }`}
         >
           {isAr ? 'عرض القائمة' : 'List View Table'}
         </button>
@@ -503,114 +501,112 @@ export default function HRRecruitment() {
       ) : viewMode === 'pipeline' ? (
         <div className="overflow-x-auto pb-4">
           <div className="grid grid-cols-1 lg:grid-cols-7 gap-4 min-w-[1450px]">
-          {STAGES.map(stg => {
-            const colCandidates = filteredCandidates.filter(c => c.stage === stg.id);
-            const isDraggingOverThis = activeDragStage === stg.id;
+            {STAGES.map(stg => {
+              const colCandidates = filteredCandidates.filter(c => c.stage === stg.id);
+              const isDraggingOverThis = activeDragStage === stg.id;
 
-            return (
-              <div 
-                key={stg.id} 
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  if (activeDragStage !== stg.id) {
-                    setActiveDragStage(stg.id);
-                  }
-                }}
-                onDragLeave={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const x = e.clientX;
-                  const y = e.clientY;
-                  if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+              return (
+                <div
+                  key={stg.id}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (activeDragStage !== stg.id) {
+                      setActiveDragStage(stg.id);
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX;
+                    const y = e.clientY;
+                    if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+                      setActiveDragStage(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    const id = e.dataTransfer.getData('text/plain');
+                    handleMoveCard(id, stg.id);
                     setActiveDragStage(null);
-                  }
-                }}
-                onDrop={(e) => {
-                  const id = e.dataTransfer.getData('text/plain');
-                  handleMoveCard(id, stg.id);
-                  setActiveDragStage(null);
-                }}
-                className={`rounded-2xl p-4 border transition-all duration-200 flex flex-col min-h-[480px] ${
-                  isDraggingOverThis 
-                    ? 'border-dashed border-[#A11212] bg-[#A11212]/5 scale-[1.01]' 
-                    : 'bg-gray-50/30 border-gray-150'
-                }`}
-              >
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="font-black text-xs uppercase tracking-wider text-gray-500">{stg.label}</h4>
-                  <span className="bg-white text-gray-500 text-[10px] font-black px-2 py-0.5 rounded shadow-xs border border-gray-100">
-                    {colCandidates.length}
-                  </span>
-                </div>
+                  }}
+                  className={`rounded-2xl p-4 border transition-all duration-200 flex flex-col min-h-[480px] ${isDraggingOverThis
+                      ? 'border-dashed border-[#A11212] bg-[#A11212]/5 scale-[1.01]'
+                      : 'bg-gray-50/30 border-gray-150'
+                    }`}
+                >
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="font-black text-xs uppercase tracking-wider text-gray-500">{stg.label}</h4>
+                    <span className="bg-white text-gray-500 text-[10px] font-black px-2 py-0.5 rounded shadow-xs border border-gray-100">
+                      {colCandidates.length}
+                    </span>
+                  </div>
 
-                <div className="flex-1 space-y-3">
-                  {colCandidates.map(c => (
-                    <div
-                      key={c.id}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/plain', c.id);
-                        e.dataTransfer.effectAllowed = 'move';
-                      }}
-                      onClick={() => setSelectedCandidate(c)}
-                      className="bg-white p-4 rounded-xl border border-gray-150 hover:border-[#A11212] transition-all cursor-grab active:cursor-grabbing hover:shadow-md shadow-xs space-y-3 active:scale-[0.98] select-none"
-                    >
-                      <div>
-                        <p className="font-black text-xs text-gray-900">{c.name}</p>
-                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">{c.role}</p>
-                      </div>
-
-                      {c.stage === 'offered' && (
-                        <div className="space-y-1 border-t border-gray-50 pt-2">
-                          {(() => {
-                            const tasks = c.onboarding_tasks || { contract_signed: false, bank_details_submitted: false, documents_uploaded: false, it_assets_ready: false };
-                            const completed = Object.values(tasks).filter(Boolean).length;
-                            const total = 4;
-                            const pct = Math.round((completed / total) * 100);
-                            return (
-                              <>
-                                <div className="flex justify-between items-center text-[8px] font-bold text-gray-405">
-                                  <span>ONBOARDING CHECKS</span>
-                                  <span>{completed}/{total}</span>
-                                </div>
-                                <div className="w-full bg-gray-100 h-1 rounded-full overflow-hidden">
-                                  <div className="bg-green-600 h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }}></div>
-                                </div>
-                              </>
-                            );
-                          })()}
+                  <div className="flex-1 space-y-3">
+                    {colCandidates.map(c => (
+                      <div
+                        key={c.id}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', c.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onClick={() => setSelectedCandidate(c)}
+                        className="bg-white p-4 rounded-xl border border-gray-150 hover:border-[#A11212] transition-all cursor-grab active:cursor-grabbing hover:shadow-md shadow-xs space-y-3 active:scale-[0.98] select-none"
+                      >
+                        <div>
+                          <p className="font-black text-xs text-gray-900">{c.name}</p>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">{c.role}</p>
                         </div>
-                      )}
 
-                      <div className="flex justify-between items-center border-t border-gray-50 pt-2.5">
-                        <span className={`text-[10px] font-black ${
-                          c.score >= 85 ? 'text-green-600' : c.score >= 70 ? 'text-orange-500' : c.score > 0 ? 'text-red-500' : 'text-gray-400'
-                        }`}>
-                          {isAr ? 'التقييم:' : 'Score:'} {c.score > 0 ? `${c.score}%` : (isAr ? 'معلق' : 'Pending')}
-                        </span>
-                        {c.stage !== 'offered' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              promoteStage(c.id);
-                            }}
-                            className="bg-[#A11212] text-white p-1.5 rounded-lg hover:bg-[#800e0e] transition-colors"
-                            title="Advance Stage"
-                          >
-                            <ChevronRight size={12} className={isAr ? 'rotate-180' : ''} />
-                          </button>
+                        {c.stage === 'offered' && (
+                          <div className="space-y-1 border-t border-gray-50 pt-2">
+                            {(() => {
+                              const tasks = c.onboarding_tasks || { contract_signed: false, bank_details_submitted: false, documents_uploaded: false, it_assets_ready: false };
+                              const completed = Object.values(tasks).filter(Boolean).length;
+                              const total = 4;
+                              const pct = Math.round((completed / total) * 100);
+                              return (
+                                <>
+                                  <div className="flex justify-between items-center text-[8px] font-bold text-gray-405">
+                                    <span>ONBOARDING CHECKS</span>
+                                    <span>{completed}/{total}</span>
+                                  </div>
+                                  <div className="w-full bg-gray-100 h-1 rounded-full overflow-hidden">
+                                    <div className="bg-green-600 h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }}></div>
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
                         )}
+
+                        <div className="flex justify-between items-center border-t border-gray-50 pt-2.5">
+                          <span className={`text-[10px] font-black ${c.score >= 85 ? 'text-green-600' : c.score >= 70 ? 'text-orange-500' : c.score > 0 ? 'text-red-500' : 'text-gray-400'
+                            }`}>
+                            {isAr ? 'التقييم:' : 'Score:'} {c.score > 0 ? `${c.score}%` : (isAr ? 'معلق' : 'Pending')}
+                          </span>
+                          {c.stage !== 'offered' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                promoteStage(c.id);
+                              }}
+                              className="bg-[#A11212] text-white p-1.5 rounded-lg hover:bg-[#800e0e] transition-colors"
+                              title="Advance Stage"
+                            >
+                              <ChevronRight size={12} className={isAr ? 'rotate-180' : ''} />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {colCandidates.length === 0 && (
-                    <div className="h-full flex items-center justify-center border border-dashed border-gray-200 rounded-xl py-12 text-center text-[10px] text-gray-400">
-                      {isAr ? 'لا يوجد مرشحين' : 'No candidates'}
-                    </div>
-                  )}
+                    ))}
+                    {colCandidates.length === 0 && (
+                      <div className="h-full flex items-center justify-center border border-dashed border-gray-200 rounded-xl py-12 text-center text-[10px] text-gray-400">
+                        {isAr ? 'لا يوجد مرشحين' : 'No candidates'}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
           </div>
         </div>
       ) : (
@@ -630,8 +626,8 @@ export default function HRRecruitment() {
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs font-bold text-gray-700">
                 {filteredCandidates.map(c => {
-                  const completedTasks = c.onboarding_tasks 
-                    ? Object.values(c.onboarding_tasks).filter(Boolean).length 
+                  const completedTasks = c.onboarding_tasks
+                    ? Object.values(c.onboarding_tasks).filter(Boolean).length
                     : 0;
 
                   return (
@@ -645,15 +641,14 @@ export default function HRRecruitment() {
                       <td className="px-6 py-4">{c.role}</td>
                       <td className="px-6 py-4">{c.dept}</td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                          c.stage === 'offered' ? 'bg-green-50 text-green-700 border border-green-100' :
-                          c.stage === 'interview_done' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
-                          c.stage === 'interview_scheduled' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
-                          c.stage === 'shortlisted' ? 'bg-orange-50 text-orange-700 border border-orange-100' :
-                          c.stage === 'on_hold' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-                          c.stage === 'rejected' ? 'bg-red-50 text-red-700 border border-red-100' :
-                          'bg-gray-100 text-gray-600 border border-gray-200'
-                        }`}>
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${c.stage === 'offered' ? 'bg-green-50 text-green-700 border border-green-100' :
+                            c.stage === 'interview_done' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
+                              c.stage === 'interview_scheduled' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+                                c.stage === 'shortlisted' ? 'bg-orange-50 text-orange-700 border border-orange-100' :
+                                  c.stage === 'on_hold' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+                                    c.stage === 'rejected' ? 'bg-red-50 text-red-700 border border-red-100' :
+                                      'bg-gray-100 text-gray-600 border border-gray-200'
+                          }`}>
                           {c.stage.replace('_', ' ')}
                           {c.stage === 'offered' && ` (${completedTasks}/4)`}
                         </span>
@@ -736,26 +731,24 @@ export default function HRRecruitment() {
                 </button>
               </div>
             </div>
-            
+
             <div className="p-6 space-y-4">
               {/* Tab Navigation if Offered (Active Onboarding) */}
               {selectedCandidate.stage === 'offered' && (
                 <div className="flex border-b border-gray-100 text-xs font-bold gap-2">
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => setModalTab('details')}
-                    className={`px-4 py-2 border-b-2 transition-all ${
-                      modalTab === 'details' ? 'border-[#A11212] text-[#A11212]' : 'border-transparent text-gray-400'
-                    }`}
+                    className={`px-4 py-2 border-b-2 transition-all ${modalTab === 'details' ? 'border-[#A11212] text-[#A11212]' : 'border-transparent text-gray-400'
+                      }`}
                   >
                     {isAr ? 'بيانات المرشح' : 'Candidate Details'}
                   </button>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => setModalTab('onboarding')}
-                    className={`px-4 py-2 border-b-2 transition-all flex items-center gap-1.5 ${
-                      modalTab === 'onboarding' ? 'border-[#A11212] text-[#A11212]' : 'border-transparent text-gray-400'
-                    }`}
+                    className={`px-4 py-2 border-b-2 transition-all flex items-center gap-1.5 ${modalTab === 'onboarding' ? 'border-[#A11212] text-[#A11212]' : 'border-transparent text-gray-400'
+                      }`}
                   >
                     <ClipboardCheck size={14} />
                     {isAr ? 'قائمة الفحص والتهيئة (Onboarding)' : 'Onboarding Checklist'}
@@ -798,7 +791,7 @@ export default function HRRecruitment() {
                           const updated = { ...selectedCandidate, employment_type: val };
                           setSelectedCandidate(updated);
                           setCandidates(prev => prev.map(c => c.id === selectedCandidate.id ? updated : c));
-                          
+
                           // Save to Supabase
                           await supabase
                             .from('hr_recruits')
@@ -826,16 +819,15 @@ export default function HRRecruitment() {
                             const updated = { ...selectedCandidate, score: val };
                             setSelectedCandidate(updated);
                             setCandidates(prev => prev.map(c => c.id === selectedCandidate.id ? updated : c));
-                            
+
                             // Save to Supabase
                             await supabase
                               .from('hr_recruits')
                               .update({ score: val })
                               .eq('id', selectedCandidate.id);
                           }}
-                          className={`w-14 bg-white border border-gray-200 rounded-lg px-1.5 py-0.5 text-xs font-black outline-none focus:border-[#A11212] text-center ${
-                            selectedCandidate.score >= 85 ? 'text-green-700' : selectedCandidate.score >= 70 ? 'text-orange-600' : selectedCandidate.score > 0 ? 'text-red-600' : 'text-gray-400'
-                          }`}
+                          className={`w-14 bg-white border border-gray-200 rounded-lg px-1.5 py-0.5 text-xs font-black outline-none focus:border-[#A11212] text-center ${selectedCandidate.score >= 85 ? 'text-green-700' : selectedCandidate.score >= 70 ? 'text-orange-600' : selectedCandidate.score > 0 ? 'text-red-600' : 'text-gray-400'
+                            }`}
                         />
                         <span className="text-[10px] font-bold text-gray-400">%</span>
                       </div>
@@ -847,9 +839,9 @@ export default function HRRecruitment() {
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-4 rounded-xl space-y-3">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'التحقق من مهام مباشرة العمل' : 'Check Onboarding Steps'}</p>
-                    
+
                     <label className="flex items-center gap-3 cursor-pointer text-xs font-bold text-gray-700 select-none">
-                      <input 
+                      <input
                         type="checkbox"
                         checked={!!selectedCandidate.onboarding_tasks?.contract_signed}
                         onChange={() => handleToggleTask('contract_signed')}
@@ -859,7 +851,7 @@ export default function HRRecruitment() {
                     </label>
 
                     <label className="flex items-center gap-3 cursor-pointer text-xs font-bold text-gray-700 select-none">
-                      <input 
+                      <input
                         type="checkbox"
                         checked={!!selectedCandidate.onboarding_tasks?.bank_details_submitted}
                         onChange={() => handleToggleTask('bank_details_submitted')}
@@ -869,7 +861,7 @@ export default function HRRecruitment() {
                     </label>
 
                     <label className="flex items-center gap-3 cursor-pointer text-xs font-bold text-gray-700 select-none">
-                      <input 
+                      <input
                         type="checkbox"
                         checked={!!selectedCandidate.onboarding_tasks?.documents_uploaded}
                         onChange={() => handleToggleTask('documents_uploaded')}
@@ -879,7 +871,7 @@ export default function HRRecruitment() {
                     </label>
 
                     <label className="flex items-center gap-3 cursor-pointer text-xs font-bold text-gray-700 select-none">
-                      <input 
+                      <input
                         type="checkbox"
                         checked={!!selectedCandidate.onboarding_tasks?.it_assets_ready}
                         onChange={() => handleToggleTask('it_assets_ready')}
@@ -921,7 +913,7 @@ export default function HRRecruitment() {
 
               {/* Action Buttons */}
               <div className="flex gap-2 pt-2">
-                <button 
+                <button
                   onClick={() => setShowCVPreview(true)}
                   className="flex-1 bg-gray-900 text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-gray-800 transition-colors flex items-center justify-center gap-1.5"
                 >
@@ -954,7 +946,7 @@ export default function HRRecruitment() {
               </h3>
               <button onClick={() => setShowCVPreview(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={18} className="text-gray-400" /></button>
             </div>
-            
+
             {selectedCandidate.resume_url ? (
               <iframe
                 src={selectedCandidate.resume_url}
@@ -980,8 +972,8 @@ export default function HRRecruitment() {
                   <div className="space-y-2">
                     <h2 className="text-xs font-bold uppercase tracking-wider text-[#A11212] border-b border-gray-100 pb-1">Professional Summary</h2>
                     <p className="text-xs leading-relaxed text-gray-600">
-                      Dedicated and analytical professional seeking a permanent position at Maisarah Group. 
-                      Experienced in local Omani regulatory practices, compliance audits, tax filings, internal audit procedures, and client relations. 
+                      Dedicated and analytical professional seeking a permanent position at Maisarah Group.
+                      Experienced in local Omani regulatory practices, compliance audits, tax filings, internal audit procedures, and client relations.
                       Strong proficiency in bookkeeping systems, VAT reconciliation, and corporate audit automation.
                     </p>
                   </div>
@@ -1021,7 +1013,7 @@ export default function HRRecruitment() {
                 </div>
 
                 <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end">
-                  <button 
+                  <button
                     onClick={() => window.print()}
                     className="bg-gray-900 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-gray-800 transition-colors"
                   >
@@ -1214,7 +1206,7 @@ export default function HRRecruitment() {
                 {isAr ? 'تأكيد تقديم عرض العمل' : 'Confirm Job Offer'}
               </h3>
               <p className="text-xs text-gray-500 mt-2 leading-relaxed font-bold">
-                {isAr 
+                {isAr
                   ? `هل أنت متأكد من تقديم عرض عمل لـ "${candidates.find(c => c.id === pendingMove.id)?.name}"؟ هذا الإجراء سيقوم بإنشاء حساب موظف وتفعيل وبوابة مباشرة العمل وتلقائياً إرسال رسالة ترحيبية بالبيانات إلى بريده.`
                   : `Are you sure you want to offer the job to "${candidates.find(c => c.id === pendingMove.id)?.name}"? This will automatically provision their employee portal account and dispatch their welcome credentials email.`
                 }
@@ -1252,21 +1244,21 @@ export default function HRRecruitment() {
             </div>
             <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">{isAr ? 'حذف مرشح' : 'Delete Candidate'}</h3>
             <p className="text-xs text-gray-550 leading-relaxed font-bold">
-              {isAr 
+              {isAr
                 ? `هل أنت متأكد من حذف ملف المرشح ${candidateToDelete.name}؟ لا يمكن التراجع عن هذا الإجراء.`
                 : `Are you sure you want to permanently delete the recruitment profile of ${candidateToDelete.name}? This action cannot be undone.`}
             </p>
             <div className="pt-2 flex gap-3">
-              <button 
+              <button
                 type="button"
-                onClick={() => setCandidateToDelete(null)} 
+                onClick={() => setCandidateToDelete(null)}
                 className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
               >
                 {isAr ? 'إلغاء' : 'Cancel'}
               </button>
-              <button 
+              <button
                 type="button"
-                onClick={handleDeleteCandidate} 
+                onClick={handleDeleteCandidate}
                 className="flex-1 py-3 bg-[#A11212] text-white rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors cursor-pointer"
               >
                 {isAr ? 'حذف نهائي' : 'Delete Permanently'}
@@ -1280,9 +1272,8 @@ export default function HRRecruitment() {
       {notification.show && (
         <div className="fixed top-6 end-6 z-55 max-w-md w-full animate-slide-down pointer-events-auto" dir={isAr ? 'rtl' : 'ltr'}>
           <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-2xl border border-gray-100/80 flex items-start gap-3.5 ring-1 ring-black/5">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-              notification.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-[#A11212]'
-            }`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${notification.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-[#A11212]'
+              }`}>
               {notification.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
             </div>
             <div className="flex-1 min-w-0 pt-0.5">

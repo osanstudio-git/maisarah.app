@@ -236,12 +236,58 @@ const ServicesManager = () => {
 
   // ── Status update ─────────────────────────────────────────────────────────
   const updateStatus = async (id: string, newStatus: string) => {
+    const svc = services.find(s => s.id === id);
     const { error } = await supabase.from('services').update({ status: newStatus }).eq('id', id);
     if (error) {
       alert(error.message);
       return;
     }
     setServices(prev => prev.map(s => s.id === id ? { ...s, status: newStatus } : s));
+
+    // If job marked complete → notify Accountant & create auto-draft invoice
+    if (newStatus === 'completed' && svc) {
+      try {
+        // 1. Update client_jobs status if exists
+        if (svc.client_id) {
+          await supabase.from('client_jobs')
+            .update({ status: 'completed', completed_at: new Date().toISOString() })
+            .eq('client_id', svc.client_id);
+        }
+
+        // 2. Notify Accountant
+        const clientName = svc.clients?.company_name || 'Client';
+        await supabase.from('notifications').insert([{
+          role: 'accountant',
+          type: 'job_complete',
+          title: isAr ? 'مهمة مكتملة — مطلوبة فاتورة' : 'Job Completed — Invoice Needed',
+          message: isAr
+            ? `أكمل الموظف المهمة "${svc.title}" للعميل ${clientName}. يرجى إصدار الفاتورة.`
+            : `Employee completed "${svc.title}" for ${clientName}. Please generate invoice.`,
+          ref_id: svc.client_id || id,
+          ref_table: 'client_jobs',
+        }]);
+
+        // 3. Auto-draft Invoice in Supabase
+        const autoInvNum = `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+        await supabase.from('invoices').insert([{
+          invoice_number: autoInvNum,
+          client_id: svc.client_id || null,
+          amount: 150, // Default estimated base amount for service
+          vat_amount: 7.500, // 5% VAT
+          status: 'draft',
+          notes: `Auto-draft for completed service: ${svc.title}`,
+          due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+          created_by: user?.id || null,
+        }]);
+
+        alert(isAr
+          ? 'تم تحديث الحالة إلى مكتمل وإشعار قسم المحاسبة لإصدار الفاتورة! 🔔'
+          : 'Status updated to Completed! Accountant notified to generate invoice. 🔔'
+        );
+      } catch (err) {
+        console.error('Error triggering accountant notification:', err);
+      }
+    }
   };
 
   // ── Delete service ────────────────────────────────────────────────────────

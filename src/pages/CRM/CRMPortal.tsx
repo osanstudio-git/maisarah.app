@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { 
   Users, Target, Clock, PlusCircle, AlertCircle, FileText, CheckCircle2, 
   ChevronRight, XCircle, ArrowUpRight, BarChart2, ShieldCheck, Download, 
   Trash2, Edit, Award, Sparkles, Building2, UserPlus, FileCheck, Check, ArrowRight,
-  TrendingUp, RefreshCw, AlertTriangle, Calendar, Layers, Activity
+  TrendingUp, RefreshCw, AlertTriangle, Calendar, Layers, Activity, Loader2
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
+import { supabase } from '../../lib/supabaseClient';
 
 // --- Types & Interfaces ---
 interface Lead {
@@ -197,25 +198,96 @@ export default function CRMPortal() {
     else if (tabId === 'club') navigate('/crm/club');
   };
 
-  const [leads, setLeads] = useState<Lead[]>(() => {
-    const saved = localStorage.getItem('crm_leads');
-    if (saved) return JSON.parse(saved);
-    localStorage.setItem('crm_leads', JSON.stringify(INITIAL_LEADS));
-    return INITIAL_LEADS;
-  });
-  const [clients, setClients] = useState<Client[]>(() => {
-    const saved = localStorage.getItem('crm_clients');
-    if (saved) return JSON.parse(saved);
-    localStorage.setItem('crm_clients', JSON.stringify(INITIAL_CLIENTS));
-    return INITIAL_CLIENTS;
-  });
-  const [quotations, setQuotations] = useState<Quotation[]>(() => {
-    const saved = localStorage.getItem('crm_quotations');
-    if (saved) return JSON.parse(saved);
-    localStorage.setItem('crm_quotations', JSON.stringify(INITIAL_QUOTATIONS));
-    return INITIAL_QUOTATIONS;
-  });
+  // ── Supabase-backed state ─────────────────────────────────────────────────
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>(INITIAL_REMINDERS);
+  const [dbLoading, setDbLoading] = useState(true);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // ── Map Supabase row → Lead interface ────────────────────────────────────
+  const mapLead = (row: any): Lead => ({
+    id: row.id,
+    name: row.name ?? '',
+    email: row.email ?? '',
+    phone: row.phone ?? '',
+    companyName: row.company_name ?? undefined,
+    status: row.status ?? 'cold',
+    qualificationColor: row.status === 'hot' ? 'green' : row.status === 'warm' ? 'yellow' : 'red',
+    pipelineStep: row.pipeline_step ?? 'follow_up',
+    notes: row.notes ?? '',
+    created_at: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    isClubMember: row.is_club_member ?? false,
+    clubTier: row.club_tier ?? undefined,
+    activityHistory: row.activity_history ?? [],
+  });
+
+  // ── Map Supabase row → Client interface ──────────────────────────────────
+  const mapClient = (row: any): Client => ({
+    id: row.id,
+    name: row.full_name ?? row.name ?? '',
+    email: row.email ?? '',
+    phone: row.phone ?? '',
+    companyPhone: row.company_phone ?? undefined,
+    type: row.client_type ?? row.type ?? 'B2B',
+    companyName: row.company_name ?? undefined,
+    registrationNumber: row.registration_number ?? undefined,
+    servicesPackage: row.services_package ?? [],
+    overallManager: row.overall_manager ?? '',
+    delegatedServices: row.delegated_services ?? {},
+    created_at: row.created_at?.slice(0, 10) ?? '',
+    monthlyBilling: row.monthly_billing ?? 0,
+    yearlyBilling: (row.monthly_billing ?? 0) * 12,
+    activityHistory: row.activity_history ?? [],
+    contractExpiryDate: row.contract_expiry_date ?? undefined,
+    isClubMember: row.is_club_member ?? false,
+    clubTier: row.club_tier ?? undefined,
+  });
+
+  // ── Map Supabase row → Quotation interface ───────────────────────────────
+  const mapQuotation = (row: any): Quotation => ({
+    id: row.id,
+    clientName: row.client_name ?? '',
+    type: row.client_type ?? 'B2B',
+    serviceType: (row.services ?? []).join(', '),
+    budget: row.total_amount ?? 0,
+    status: row.status ?? 'pending',
+  });
+
+  // ── Fetch all data from Supabase ─────────────────────────────────────────
+  const fetchAll = useCallback(async () => {
+    setDbLoading(true);
+    try {
+      const [leadsRes, clientsRes, quotesRes] = await Promise.all([
+        supabase.from('leads').select('*').order('created_at', { ascending: false }),
+        supabase.from('clients').select('*').order('created_at', { ascending: false }),
+        supabase.from('quotations').select('*').order('created_at', { ascending: false }),
+      ]);
+      if (leadsRes.data)    setLeads(leadsRes.data.map(mapLead));
+      if (clientsRes.data)  setClients(clientsRes.data.map(mapClient));
+      if (quotesRes.data)   setQuotations(quotesRes.data.map(mapQuotation));
+    } catch (err) {
+      console.error('CRM fetchAll error:', err);
+    } finally {
+      setDbLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+
+    // Real-time subscriptions
+    const ch = supabase
+      .channel('crm_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' },      () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' },    () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => fetchAll())
+      .subscribe();
+
+    channelRef.current = ch;
+    return () => { supabase.removeChannel(ch); };
+  }, [fetchAll]);
 
   const [tips, setTips] = useState([
     { id: 'tip_1', title: 'GCC VAT Filing Guide', content: 'Ensure all input tax credits match custom clearance bills of entry for smooth filing.', date: '2026-08-01', category: 'Tax' },
@@ -247,18 +319,7 @@ export default function CRMPortal() {
   const [leadStatusFilter, setLeadStatusFilter] = useState('all');
   const [leadStepFilter, setLeadStepFilter] = useState('all');
 
-  // Sync to local storage
-  React.useEffect(() => {
-    localStorage.setItem('crm_leads', JSON.stringify(leads));
-  }, [leads]);
-
-  React.useEffect(() => {
-    localStorage.setItem('crm_clients', JSON.stringify(clients));
-  }, [clients]);
-
-  React.useEffect(() => {
-    localStorage.setItem('crm_quotations', JSON.stringify(quotations));
-  }, [quotations]);
+  // (localStorage sync removed — data is now persisted in Supabase)
 
   // Generate dynamic alerts (stale leads and expiring contracts)
   const dynamicAlerts = React.useMemo(() => {
@@ -356,11 +417,10 @@ export default function CRMPortal() {
   // --- Client History Detail View Modal ---
   const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
 
-  // --- Lead Onboarding & Submission logic ---
-  const handleOnboardSubmit = (e: React.FormEvent) => {
+  // --- Lead Onboarding & Submission logic (Supabase) ---
+  const handleOnboardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Auto-calculate final monthly price
     let calculatedBilling = onboardForm.monthlyBilling;
     if (calculatedBilling === 0) {
       calculatedBilling = onboardForm.servicePackage.reduce((sum, pkg) => sum + (SERVICE_RATES[pkg] || 0), 0);
@@ -370,119 +430,171 @@ export default function CRMPortal() {
       }
     }
 
-    const newClient: Client = {
-      id: `CL-${Math.floor(200 + Math.random() * 800)}`,
-      name: onboardForm.name,
+    const expiryDate = onboardForm.contractExpiryDate ||
+      new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const clientPayload = {
+      full_name: onboardForm.name,
       email: onboardForm.email,
       phone: onboardForm.phone,
-      companyPhone: onboardForm.companyPhone,
-      type: clientType,
-      companyName: clientType === 'B2B' ? onboardForm.companyName : undefined,
-      registrationNumber: clientType === 'B2B' ? onboardForm.registrationNumber : undefined,
-      servicesPackage: onboardForm.servicePackage,
-      overallManager: onboardForm.overallManager,
-      delegatedServices: onboardForm.servicePackage.reduce((acc, service) => {
+      company_phone: onboardForm.companyPhone || null,
+      client_type: clientType,
+      company_name: clientType === 'B2B' ? onboardForm.companyName : null,
+      registration_number: clientType === 'B2B' ? onboardForm.registrationNumber : null,
+      services_package: onboardForm.servicePackage,
+      overall_manager: onboardForm.overallManager,
+      delegated_services: onboardForm.servicePackage.reduce((acc: Record<string,string>, service: string) => {
         const emp = MOCK_EMPLOYEES.find(e => e.dept === service) || MOCK_EMPLOYEES[0];
         acc[service] = emp.name;
         return acc;
-      }, {} as Record<string, string>),
-      created_at: new Date().toISOString().split('T')[0],
-      monthlyBilling: calculatedBilling,
-      yearlyBilling: calculatedBilling * 12,
-      isClubMember: onboardForm.isClubMember,
-      clubTier: onboardForm.isClubMember ? onboardForm.clubTier : undefined,
-      activityHistory: [
-        'Client onboarded through registry form.',
-        onboardForm.initialActivity || 'Initial client record registered.'
+      }, {}),
+      monthly_billing: calculatedBilling,
+      is_club_member: onboardForm.isClubMember,
+      club_tier: onboardForm.isClubMember ? onboardForm.clubTier : null,
+      activity_history: [
+        'Client onboarded through CRM registry form.',
+        onboardForm.initialActivity || 'Initial client record registered.',
       ],
-      contractExpiryDate: onboardForm.contractExpiryDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      contract_expiry_date: expiryDate,
+      source: clientType === 'B2B' ? 'b2b' : 'direct',
     };
 
-    // Auto Quotation Insertion logic
+    const { data: newClientRow, error } = await supabase
+      .from('clients')
+      .insert([clientPayload])
+      .select()
+      .single();
+
+    if (error) {
+      alert('Error saving client: ' + error.message);
+      return;
+    }
+
+    // Auto-create quotations in Supabase
     if (onboardForm.autoQuotation && onboardForm.servicePackage.length > 0) {
-      const newQuotes: Quotation[] = onboardForm.servicePackage.map(pkg => {
+      const quoteRows = onboardForm.servicePackage.map(pkg => {
         let budget = SERVICE_RATES[pkg] || 0;
         if (onboardForm.isClubMember) {
           const discount = onboardForm.clubTier === 'platinum' ? 0.20 : onboardForm.clubTier === 'gold' ? 0.15 : 0.10;
           budget = Math.round(budget * (1 - discount));
         }
+        const vatAmt = +(budget * 0.05).toFixed(3);
         return {
-          id: `QT-${Math.floor(100 + Math.random() * 900)}`,
-          clientName: clientType === 'B2B' ? onboardForm.companyName : onboardForm.name,
-          type: clientType,
-          serviceType: pkg,
-          budget: budget,
-          status: 'pending'
+          client_id: newClientRow.id,
+          client_name: clientType === 'B2B' ? onboardForm.companyName : onboardForm.name,
+          client_type: clientType,
+          services: [pkg],
+          subtotal: budget,
+          vat_amount: vatAmt,
+          total_amount: +(budget + vatAmt).toFixed(3),
+          status: 'pending',
+          valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         };
       });
-      setQuotations(prev => [...newQuotes, ...prev]);
+      await supabase.from('quotations').insert(quoteRows);
     }
 
-    setClients([newClient, ...clients]);
+    // Notify HOD role about new client
+    await supabase.from('notifications').insert([{
+      role: 'hod',
+      type: 'new_client',
+      title: 'New Client Onboarded',
+      message: `A new client "${onboardForm.name}" has been onboarded via CRM. Services: ${onboardForm.servicePackage.join(', ')}.`,
+      ref_id: newClientRow.id,
+      ref_table: 'clients',
+    }]);
+
     setShowOnboardingModal(false);
     setOnboardForm({
-      name: '',
-      email: '',
-      phone: '',
-      companyPhone: '',
-      companyName: '',
-      registrationNumber: '',
-      servicePackage: [],
-      overallManager: MOCK_EMPLOYEES[0].name,
-      initialActivity: '',
-      monthlyBilling: 0,
-      contractExpiryDate: '',
-      isClubMember: false,
-      clubTier: 'silver',
-      autoQuotation: true
+      name: '', email: '', phone: '', companyPhone: '', companyName: '',
+      registrationNumber: '', servicePackage: [], overallManager: MOCK_EMPLOYEES[0].name,
+      initialActivity: '', monthlyBilling: 0, contractExpiryDate: '',
+      isClubMember: false, clubTier: 'silver', autoQuotation: true,
     });
+    // fetchAll() triggered via real-time subscription
   };
 
-  // --- Drag & Drop or Direct Step Shift logic for lead pipeline ---
-  const shiftLeadStep = (leadId: string, nextStep: Lead['pipelineStep']) => {
-    setLeads(prevLeads => prevLeads.map(lead => {
-      if (lead.id === leadId) {
-        // If moved to "Sort", trigger qualification popup
-        if (nextStep === 'sort') {
-          setQualifyingLead(lead);
-        }
-        const today = new Date().toISOString().split('T')[0];
-        const logEntry = `${today} - Stage shifted to: ${nextStep.replace('_', ' ')}`;
-        const updatedHistory = [...(lead.activityHistory || []), logEntry];
-        return { ...lead, pipelineStep: nextStep, activityHistory: updatedHistory };
-      }
-      return lead;
-    }));
+  // --- Shift lead pipeline step (Supabase) ---
+  const shiftLeadStep = async (leadId: string, nextStep: Lead['pipelineStep']) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+
+    if (nextStep === 'sort') setQualifyingLead(lead);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const logEntry = `${today} - Stage shifted to: ${nextStep.replace('_', ' ')}`;
+    const updatedHistory = [...(lead.activityHistory || []), logEntry];
+
+    // Optimistic UI update
+    setLeads(prev => prev.map(l =>
+      l.id === leadId ? { ...l, pipelineStep: nextStep, activityHistory: updatedHistory } : l
+    ));
+
+    // Persist to Supabase
+    await supabase.from('leads').update({
+      pipeline_step: nextStep,
+      activity_history: updatedHistory,
+    }).eq('id', leadId);
   };
 
-  // --- Lead Qualification / Assignment Confirmation ---
-  const handleConfirmQualification = () => {
+  // --- Lead Qualification / Conversion to Client (Supabase) ---
+  const handleConfirmQualification = async () => {
     if (!qualifyingLead) return;
 
-    // Convert Lead to Client
-    const newClient: Client = {
-      id: `CL-${Math.floor(200 + Math.random() * 800)}`,
-      name: qualifyingLead.name,
-      email: qualifyingLead.email,
-      phone: qualifyingLead.phone,
-      type: qualifyingLead.companyName ? 'B2B' : 'B2C',
-      companyName: qualifyingLead.companyName,
-      servicesPackage: ['Audit'],
-      overallManager: selectedAssignee,
-      delegatedServices: { 'Audit': selectedAssignee },
-      created_at: new Date().toISOString().split('T')[0],
-      monthlyBilling: 750,
-      yearlyBilling: 9000,
-      activityHistory: [
-        'Converted from pipeline lead.',
-        qualifyingLead.notes || 'Lead qualified and converted.'
-      ],
-      contractExpiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    };
+    const expiryDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    setClients([newClient, ...clients]);
-    setLeads(prevLeads => prevLeads.filter(l => l.id !== qualifyingLead.id));
+    // 1. Insert client into Supabase
+    const { data: newClientRow, error: clientErr } = await supabase
+      .from('clients')
+      .insert([{
+        full_name: qualifyingLead.name,
+        email: qualifyingLead.email,
+        phone: qualifyingLead.phone,
+        client_type: qualifyingLead.companyName ? 'B2B' : 'B2C',
+        company_name: qualifyingLead.companyName || null,
+        services_package: ['Audit'],
+        overall_manager: selectedAssignee,
+        delegated_services: { 'Audit': selectedAssignee },
+        monthly_billing: 750,
+        activity_history: [
+          'Converted from CRM pipeline lead.',
+          qualifyingLead.notes || 'Lead qualified and onboarded.',
+        ],
+        contract_expiry_date: expiryDate,
+        lead_id: qualifyingLead.id,
+        source: qualifyingLead.companyName ? 'b2b' : 'direct',
+      }])
+      .select()
+      .single();
+
+    if (clientErr) {
+      alert('Error converting lead: ' + clientErr.message);
+      return;
+    }
+
+    // 2. Mark lead as converted
+    await supabase.from('leads').update({
+      status: 'converted',
+      pipeline_step: 'sort',
+      activity_history: [
+        ...(qualifyingLead.activityHistory || []),
+        `${new Date().toISOString().slice(0, 10)} - Lead converted to client by CRM.`,
+      ],
+    }).eq('id', qualifyingLead.id);
+
+    // 3. Notify HOD
+    await supabase.from('notifications').insert([{
+      role: 'hod',
+      type: 'new_client',
+      title: 'Lead Converted to Client',
+      message: `Lead "${qualifyingLead.name}" has been qualified and converted to a client. Assigned to: ${selectedAssignee}.`,
+      ref_id: newClientRow.id,
+      ref_table: 'clients',
+    }]);
+
+    setLeads(prev => prev.filter(l => l.id !== qualifyingLead.id));
     setQualifyingLead(null);
+    // Real-time will refresh clients list
   };
 
   // --- Update Combo Work Settings ---
@@ -502,17 +614,31 @@ export default function CRMPortal() {
     alert('Combo account assignments updated successfully!');
   };
 
-  // --- Approve Engagement Letter & Generate Invoice ---
-  const handleApproveQuotation = (quotation: Quotation) => {
-    setQuotations(prevQuotations => prevQuotations.map(q => {
-      if (q.id === quotation.id) {
-        return { ...q, status: 'invoiced' };
-      }
-      return q;
-    }));
+  // --- Approve Quotation (Supabase) ---
+  const handleApproveQuotation = async (quotation: Quotation) => {
+    const { error } = await supabase
+      .from('quotations')
+      .update({ status: 'approved' })
+      .eq('id', quotation.id);
 
-    // Trigger mock notification of Invoice creation
-    alert(`Quotation Approved! Draft Invoice CRM-${quotation.id} created successfully for OMR ${quotation.budget}.`);
+    if (error) {
+      alert('Error approving quotation: ' + error.message);
+      return;
+    }
+
+    // Notify accountant role that a quotation is ready for invoicing
+    await supabase.from('notifications').insert([{
+      role: 'accountant',
+      type: 'invoice_ready',
+      title: 'Quotation Approved — Ready to Invoice',
+      message: `Quotation for "${quotation.clientName}" (${quotation.serviceType}) approved. Amount: OMR ${quotation.budget.toFixed(3)}. Please create the invoice.`,
+      ref_id: quotation.id,
+      ref_table: 'quotations',
+    }]);
+
+    // Optimistic update
+    setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, status: 'invoiced' } : q));
+    alert(`✅ Quotation Approved! Accountant notified to create invoice for OMR ${quotation.budget.toFixed(3)}.`);
   };
 
   // --- Trigger Lead Export ---
@@ -680,6 +806,17 @@ export default function CRMPortal() {
     
     return matchesSearch && matchesStep && matchesStatus;
   });
+
+  if (dbLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <Loader2 size={36} className="animate-spin text-[#A11212] mx-auto" />
+          <p className="text-sm font-bold text-gray-500">Loading CRM data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300" dir={isAr ? 'rtl' : 'ltr'}>

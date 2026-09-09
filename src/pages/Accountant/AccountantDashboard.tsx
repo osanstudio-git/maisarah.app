@@ -12,7 +12,11 @@ import {
   PlusCircle, 
   BarChart2, 
   AlertCircle,
-  ArrowLeft
+  ArrowLeft,
+  Bell,
+  CheckCheck,
+  X,
+  Receipt
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -253,29 +257,45 @@ const AccountantDashboard = () => {
         totalCount: 23, paidRatio: 78,
       });
     } finally {
-      if (!isSilent) setLoading(false);
+  // Accountant Notifications
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('role', 'accountant')
+        .order('created_at', { ascending: false });
+      setNotifications(data || []);
+    } catch (err) {
+      console.error('Error fetching accountant notifications:', err);
     }
   }, []);
 
+  const markAllNotifsRead = async () => {
+    await supabase.from('notifications').update({ is_read: true }).eq('role', 'accountant');
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  };
+
   useEffect(() => {
     fetchMetrics();
+    fetchNotifications();
 
-    // ── Supabase Realtime Subscription ───────────────────────────────────────
+    // ── Supabase Realtime Subscriptions ───────────────────────────────────────
     const channel = supabase
       .channel('accountant-dashboard-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'invoices' },
-        () => {
-          fetchMetrics(true);
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, () => fetchMetrics(true))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => fetchNotifications())
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchMetrics]);
+  }, [fetchMetrics, fetchNotifications]);
+
+  const unreadNotifCount = notifications.filter(n => !n.is_read).length;
 
   if (loading) {
     return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark"></div></div>;
@@ -283,6 +303,85 @@ const AccountantDashboard = () => {
 
   return (
     <div className="space-y-6 pb-10 max-w-[1600px] mx-auto">
+
+      {/* ── Top Bar with Real-time Notification Bell ────────────────── */}
+      <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+        <div>
+          <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+            <Receipt className="text-brand-dark" size={22} />
+            {isAr ? 'لوحة تحكم المحاسبة والمالية' : 'Accounting & Finance Workspace'}
+          </h3>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {isAr ? 'إدارة الفواتير والتحصيلات وسندات القبض مباشرة عبر Supabase' : 'Real-time invoice issuing, payment collection & receipts via Supabase'}
+          </p>
+        </div>
+
+        <button
+          onClick={() => setShowNotifPanel(!showNotifPanel)}
+          className="relative p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 hover:text-brand-dark hover:border-brand-dark/30 transition"
+        >
+          <Bell size={20} />
+          {unreadNotifCount > 0 && (
+            <span className="absolute -top-1 -end-1 bg-red-600 text-white text-[10px] font-bold rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center animate-pulse">
+              {unreadNotifCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ── Notifications Drawer ───────────────────────────────────── */}
+      {showNotifPanel && (
+        <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex justify-between items-center border-b border-amber-200/60 pb-2">
+            <h4 className="font-bold text-amber-900 text-sm flex items-center gap-2">
+              <Bell size={16} className="text-amber-700" />
+              {isAr ? 'إشعارات قسم المحاسبة' : 'Accountant Notifications'}
+              <span className="bg-amber-200 text-amber-900 text-xs px-2 py-0.5 rounded-full font-bold">
+                {notifications.length}
+              </span>
+            </h4>
+            <div className="flex items-center gap-2">
+              {unreadNotifCount > 0 && (
+                <button
+                  onClick={markAllNotifsRead}
+                  className="text-xs text-amber-800 hover:underline font-semibold flex items-center gap-1"
+                >
+                  <CheckCheck size={14} /> {isAr ? 'تحديد الكل كمقروء' : 'Mark all read'}
+                </button>
+              )}
+              <button onClick={() => setShowNotifPanel(false)} className="p-1 text-amber-700 hover:bg-amber-100 rounded-lg">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {notifications.length === 0 ? (
+            <p className="text-xs text-amber-700/80 py-2">{isAr ? 'لا توجد إشعارات جديدة' : 'No notifications yet.'}</p>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {notifications.map(n => (
+                <div
+                  key={n.id}
+                  className={`p-3 rounded-xl border text-xs flex justify-between items-start gap-3 ${
+                    n.is_read ? 'bg-white/60 border-amber-100 text-gray-600' : 'bg-white border-amber-300 font-medium text-gray-800 shadow-sm'
+                  }`}
+                >
+                  <div>
+                    <span className="font-bold text-brand-dark block text-xs">{n.title}</span>
+                    <p className="mt-0.5">{n.message}</p>
+                    <span className="text-[10px] text-gray-400 mt-1 block">
+                      {new Date(n.created_at).toLocaleString(isAr ? 'ar-OM' : 'en-GB')}
+                    </span>
+                  </div>
+                  {!n.is_read && (
+                    <span className="w-2 h-2 rounded-full bg-red-600 flex-shrink-0 mt-1" />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── 1. Real Invoice KPI Row ───────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
