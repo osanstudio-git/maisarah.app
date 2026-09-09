@@ -5,7 +5,8 @@ import {
   Users, Target, Clock, PlusCircle, AlertCircle, FileText, CheckCircle2, 
   ChevronRight, XCircle, ArrowUpRight, BarChart2, ShieldCheck, Download, 
   Trash2, Edit, Award, Sparkles, Building2, UserPlus, FileCheck, Check, ArrowRight,
-  TrendingUp, RefreshCw, AlertTriangle, Calendar, Layers, Activity, Loader2
+  TrendingUp, RefreshCw, AlertTriangle, Calendar, Layers, Activity, Loader2,
+  PhoneCall, MessageSquare, Send, DollarSign, X, ExternalLink, Filter
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -16,12 +17,15 @@ import { supabase } from '../../lib/supabaseClient';
 interface Lead {
   id: string;
   name: string;
+  representativeName?: string;
   email: string;
   phone: string;
   companyName?: string;
-  status: 'cold' | 'warm' | 'hot' | 'converted';
+  source?: 'b2b' | 'referral' | 'social_media' | 'direct' | 'website' | 'other';
+  status: 'interested' | 'called' | 'whatsapp_connected' | 'quoted' | 'not_interested' | 'converted' | 'cold' | 'warm' | 'hot';
   qualificationColor: 'red' | 'yellow' | 'green';
   pipelineStep: 'follow_up' | 'add_data' | 'connect' | 'update' | 'sort';
+  followUpDate?: string;
   notes: string;
   created_at: string;
   isClubMember?: boolean;
@@ -52,11 +56,21 @@ interface Client {
 
 interface Quotation {
   id: string;
+  quoteNumber?: string;
+  leadId?: string | null;
   clientName: string;
+  representativeName?: string;
+  email?: string;
+  phone?: string;
+  companyName?: string;
   type: 'B2B' | 'B2C';
   serviceType: string;
+  servicesPackage?: string[];
+  subtotal?: number;
+  vatAmount?: number;
   budget: number;
-  status: 'pending' | 'approved' | 'invoiced';
+  status: 'draft' | 'sent' | 'approved' | 'declined' | 'pending' | 'invoiced';
+  created_at?: string;
 }
 
 interface Reminder {
@@ -210,12 +224,15 @@ export default function CRMPortal() {
   const mapLead = (row: any): Lead => ({
     id: row.id,
     name: row.name ?? '',
+    representativeName: row.representative_name ?? row.name ?? '',
     email: row.email ?? '',
     phone: row.phone ?? '',
     companyName: row.company_name ?? undefined,
-    status: row.status ?? 'cold',
-    qualificationColor: row.status === 'hot' ? 'green' : row.status === 'warm' ? 'yellow' : 'red',
+    source: row.source ?? 'b2b',
+    status: row.status ?? 'interested',
+    qualificationColor: (row.status === 'converted' || row.status === 'quoted') ? 'green' : (row.status === 'called' || row.status === 'whatsapp_connected') ? 'yellow' : 'red',
     pipelineStep: row.pipeline_step ?? 'follow_up',
+    followUpDate: row.follow_up_date ?? undefined,
     notes: row.notes ?? '',
     created_at: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
     isClubMember: row.is_club_member ?? false,
@@ -248,11 +265,21 @@ export default function CRMPortal() {
   // ── Map Supabase row → Quotation interface ───────────────────────────────
   const mapQuotation = (row: any): Quotation => ({
     id: row.id,
+    quoteNumber: row.quote_number ?? `QT-2026-${row.id.slice(0, 4)}`,
+    leadId: row.lead_id ?? null,
     clientName: row.client_name ?? '',
+    representativeName: row.representative_name ?? row.client_name ?? '',
+    email: row.email ?? '',
+    phone: row.phone ?? '',
+    companyName: row.company_name ?? undefined,
     type: row.client_type ?? 'B2B',
-    serviceType: (row.services ?? []).join(', '),
+    serviceType: Array.isArray(row.services) ? row.services.join(', ') : (row.service_type ?? 'Bookkeeping & Tax'),
+    servicesPackage: Array.isArray(row.services) ? row.services : ['Tax & VAT'],
+    subtotal: row.subtotal ?? row.total_amount ?? 0,
+    vatAmount: row.vat_amount ?? 0,
     budget: row.total_amount ?? 0,
     status: row.status ?? 'pending',
+    created_at: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
   });
 
   // ── Fetch all data from Supabase ─────────────────────────────────────────
@@ -416,6 +443,277 @@ export default function CRMPortal() {
 
   // --- Client History Detail View Modal ---
   const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
+
+  // ── Mini-CRM Log & Interaction Modal ──────────────────────────────────────
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [selectedLeadForLog, setSelectedLeadForLog] = useState<Lead | null>(null);
+  const [logForm, setLogForm] = useState({
+    type: 'call' as 'call' | 'whatsapp' | 'meeting' | 'note',
+    status: 'interested' as Lead['status'],
+    notes: '',
+    followUpDate: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
+  });
+
+  // ── Quotation Builder Modal (Auto pre-filled from Lead) ───────────────────
+  const [showQuotationModal, setShowQuotationModal] = useState(false);
+  const [quoteForm, setQuoteForm] = useState({
+    leadId: '' as string | null,
+    clientName: '',
+    representativeName: '',
+    companyName: '',
+    email: '',
+    phone: '',
+    clientType: 'B2B' as 'B2B' | 'B2C',
+    services: ['Tax & VAT'] as string[],
+    baseAmount: '350',
+    includeVat: true,
+    notes: '',
+  });
+
+  // ── Direct Client Onboarding Modal ───────────────────────────────────────
+  const [showDirectClientModal, setShowDirectClientModal] = useState(false);
+  const [directClientForm, setDirectClientForm] = useState({
+    name: '',
+    companyName: '',
+    registrationNumber: '',
+    email: '',
+    phone: '',
+    clientType: 'B2B' as 'B2B' | 'B2C',
+    services: ['Tax & VAT'] as string[],
+    billingAmount: '450',
+    manager: MOCK_EMPLOYEES[0].name,
+  });
+
+  // ── Handlers for New Mini-CRM Features ───────────────────────────────────
+  const openLogModal = (lead: Lead) => {
+    setSelectedLeadForLog(lead);
+    setLogForm({
+      type: 'call',
+      status: lead.status || 'interested',
+      notes: '',
+      followUpDate: lead.followUpDate || new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
+    });
+    setIsLogModalOpen(true);
+  };
+
+  const handleSaveLogSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLeadForLog) return;
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const logEntry = `${today} ${timeStr} [${logForm.type.toUpperCase()}]: ${logForm.notes}`;
+      const updatedHistory = [...(selectedLeadForLog.activityHistory || []), logEntry];
+
+      const { error } = await supabase.from('leads').update({
+        status: logForm.status,
+        follow_up_date: logForm.followUpDate,
+        activity_history: updatedHistory,
+      }).eq('id', selectedLeadForLog.id);
+
+      if (error) throw error;
+
+      alert(isAr ? 'تم تسجيل التفاعل وتحديث حالة العميل المحتمل بنجاح!' : 'Interaction logged & lead status updated successfully!');
+      setIsLogModalOpen(false);
+      fetchAll();
+    } catch (err: any) {
+      alert(err.message || 'Error saving interaction log');
+    }
+  };
+
+  const openQuotationModalForLead = (lead?: Lead) => {
+    if (lead) {
+      setQuoteForm({
+        leadId: lead.id,
+        clientName: lead.companyName ? `${lead.name} (${lead.companyName})` : lead.name,
+        representativeName: lead.name,
+        companyName: lead.companyName || '',
+        email: lead.email,
+        phone: lead.phone,
+        clientType: lead.companyName ? 'B2B' : 'B2C',
+        services: ['Tax & VAT'],
+        baseAmount: '350',
+        includeVat: true,
+        notes: lead.notes || '',
+      });
+    } else {
+      setQuoteForm({
+        leadId: null,
+        clientName: '',
+        representativeName: '',
+        companyName: '',
+        email: '',
+        phone: '',
+        clientType: 'B2B',
+        services: ['Tax & VAT'],
+        baseAmount: '350',
+        includeVat: true,
+        notes: '',
+      });
+    }
+    setShowQuotationModal(true);
+  };
+
+  const handleSaveQuotationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const baseAmt = parseFloat(quoteForm.baseAmount) || 0;
+      const vatAmt = quoteForm.includeVat ? +(baseAmt * 0.05).toFixed(3) : 0;
+      const totalAmt = +(baseAmt + vatAmt).toFixed(3);
+      const quoteNum = `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const { error } = await supabase.from('quotations').insert([{
+        quote_number: quoteNum,
+        lead_id: quoteForm.leadId || null,
+        client_name: quoteForm.clientName,
+        representative_name: quoteForm.representativeName || quoteForm.clientName,
+        company_name: quoteForm.companyName || null,
+        email: quoteForm.email,
+        phone: quoteForm.phone,
+        client_type: quoteForm.clientType,
+        services: quoteForm.services,
+        subtotal: baseAmt,
+        vat_amount: vatAmt,
+        total_amount: totalAmt,
+        status: 'sent',
+        valid_until: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+      }]);
+
+      if (error) throw error;
+
+      if (quoteForm.leadId) {
+        await supabase.from('leads').update({
+          status: 'quoted',
+          pipeline_step: 'update',
+          activity_history: [
+            ...(leads.find(l => l.id === quoteForm.leadId)?.activityHistory || []),
+            `${new Date().toISOString().split('T')[0]} - Quotation #${quoteNum} generated for OMR ${totalAmt}.`,
+          ],
+        }).eq('id', quoteForm.leadId);
+      }
+
+      alert(isAr ? `تم حفظ وتسليم عرض السعر برقم ${quoteNum} بنجاح!` : `Quotation #${quoteNum} saved & delivered successfully!`);
+      setShowQuotationModal(false);
+      fetchAll();
+    } catch (err: any) {
+      alert(err.message || 'Error saving quotation');
+    }
+  };
+
+  const handleClientAcceptsQuote = async (quotation: Quotation) => {
+    try {
+      await supabase.from('quotations').update({ status: 'approved' }).eq('id', quotation.id);
+
+      if (quotation.leadId) {
+        await supabase.from('leads').update({ status: 'converted', pipeline_step: 'sort' }).eq('id', quotation.leadId);
+      }
+
+      const { data: newClient, error: clientErr } = await supabase.from('clients').insert([{
+        full_name: quotation.clientName,
+        email: quotation.email || 'client@maisarah.om',
+        phone: quotation.phone || '+968 9000 0000',
+        client_type: quotation.type,
+        company_name: quotation.companyName || null,
+        services_package: quotation.servicesPackage || ['Tax & VAT'],
+        monthly_billing: quotation.budget,
+        activity_history: [`Client accepted quotation #${quotation.quoteNumber || quotation.id}`],
+        source: quotation.type === 'B2B' ? 'b2b' : 'direct',
+      }]).select().single();
+
+      if (clientErr) throw clientErr;
+
+      const serviceName = quotation.serviceType || 'Bookkeeping & Tax';
+      await supabase.from('client_jobs').insert([{
+        client_id: newClient.id,
+        quotation_id: quotation.id,
+        service_type: serviceName,
+        billing_type: 'one_time',
+        status: 'pending',
+        amount: quotation.subtotal || quotation.budget,
+        vat_amount: quotation.vatAmount || 0,
+        description: `New Job Task from Accepted Quote #${quotation.quoteNumber || quotation.id}. Client: ${quotation.clientName}`,
+        deadline: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      }]);
+
+      await supabase.from('notifications').insert([{
+        role: 'hod',
+        type: 'new_client',
+        title: 'New Client Job Task — Quote Accepted!',
+        message: `Client "${quotation.clientName}" accepted quote (${serviceName}). Please assign to employee.`,
+        ref_id: newClient.id,
+        ref_table: 'clients',
+      }]);
+
+      await supabase.from('notifications').insert([{
+        role: 'accountant',
+        type: 'invoice_ready',
+        title: 'Quotation Approved — Ready to Invoice',
+        message: `Quotation for "${quotation.clientName}" approved. Amount: OMR ${quotation.budget.toFixed(3)}.`,
+        ref_id: quotation.id,
+        ref_table: 'quotations',
+      }]);
+
+      alert(isAr
+        ? `تم قبول عرض السعر رقم ${quotation.quoteNumber || quotation.id}! تم إضافة العميل وإرسال المهمة لرئيس القسم بنجاح! 🎉`
+        : `🎉 Client Accepted Quote #${quotation.quoteNumber || quotation.id}! Client onboarded & Job Task sent to HOD!`
+      );
+      fetchAll();
+    } catch (err: any) {
+      alert(err.message || 'Error processing quote acceptance');
+    }
+  };
+
+  const handleDirectClientSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const billing = parseFloat(directClientForm.billingAmount) || 300;
+      const expiryDate = new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0];
+
+      const { data: newClient, error: clientErr } = await supabase.from('clients').insert([{
+        full_name: directClientForm.name,
+        company_name: directClientForm.clientType === 'B2B' ? directClientForm.companyName : null,
+        registration_number: directClientForm.clientType === 'B2B' ? directClientForm.registrationNumber : null,
+        email: directClientForm.email,
+        phone: directClientForm.phone,
+        client_type: directClientForm.clientType,
+        services_package: directClientForm.services,
+        overall_manager: directClientForm.manager,
+        monthly_billing: billing,
+        contract_expiry_date: expiryDate,
+        activity_history: ['Direct client onboarding added via CRM.'],
+        source: 'direct',
+      }]).select().single();
+
+      if (clientErr) throw clientErr;
+
+      await supabase.from('client_jobs').insert([{
+        client_id: newClient.id,
+        service_type: directClientForm.services.join(', '),
+        billing_type: 'one_time',
+        status: 'pending',
+        amount: billing,
+        vat_amount: +(billing * 0.05).toFixed(3),
+        description: `Direct Client Job Task for ${directClientForm.companyName || directClientForm.name}`,
+        deadline: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      }]);
+
+      await supabase.from('notifications').insert([{
+        role: 'hod',
+        type: 'new_client',
+        title: 'New Direct Client Onboarded',
+        message: `Direct Client "${directClientForm.companyName || directClientForm.name}" added. Services: ${directClientForm.services.join(', ')}.`,
+        ref_id: newClient.id,
+        ref_table: 'clients',
+      }]);
+
+      alert(isAr ? 'تم إضافة العميل المباشر وإشعار رئيس القسم بنجاح!' : 'Direct client onboarded & HOD notified!');
+      setShowDirectClientModal(false);
+      setDirectClientForm({ name: '', companyName: '', registrationNumber: '', email: '', phone: '', clientType: 'B2B', services: ['Tax & VAT'], billingAmount: '450', manager: MOCK_EMPLOYEES[0].name });
+      fetchAll();
+    } catch (err: any) {
+      alert(err.message || 'Error adding direct client');
+    }
+  };
 
   // --- Lead Onboarding & Submission logic (Supabase) ---
   const handleOnboardSubmit = async (e: React.FormEvent) => {
@@ -1048,7 +1346,10 @@ export default function CRMPortal() {
                       lead={lead} 
                       onMove={(step) => shiftLeadStep(lead.id, step)}
                       onViewDossier={() => setSelectedLeadForHistory(lead)}
-                      onScheduleReminder={() => handleScheduleLeadReminder(lead.name)}
+                      onLogCall={() => openLogModal(lead)}
+                      onCreateQuote={() => openQuotationModalForLead(lead)}
+                      onWhatsApp={() => { setWhatsAppTargetUser({ name: lead.name, phone: lead.phone }); setWhatsAppModalOpen(true); }}
+                      onConvert={() => setQualifyingLead(lead)}
                     />
                   ))}
                 </div>
@@ -1067,7 +1368,10 @@ export default function CRMPortal() {
                       lead={lead} 
                       onMove={(step) => shiftLeadStep(lead.id, step)}
                       onViewDossier={() => setSelectedLeadForHistory(lead)}
-                      onScheduleReminder={() => handleScheduleLeadReminder(lead.name)}
+                      onLogCall={() => openLogModal(lead)}
+                      onCreateQuote={() => openQuotationModalForLead(lead)}
+                      onWhatsApp={() => { setWhatsAppTargetUser({ name: lead.name, phone: lead.phone }); setWhatsAppModalOpen(true); }}
+                      onConvert={() => setQualifyingLead(lead)}
                     />
                   ))}
                 </div>
@@ -1086,7 +1390,10 @@ export default function CRMPortal() {
                       lead={lead} 
                       onMove={(step) => shiftLeadStep(lead.id, step)}
                       onViewDossier={() => setSelectedLeadForHistory(lead)}
-                      onScheduleReminder={() => handleScheduleLeadReminder(lead.name)}
+                      onLogCall={() => openLogModal(lead)}
+                      onCreateQuote={() => openQuotationModalForLead(lead)}
+                      onWhatsApp={() => { setWhatsAppTargetUser({ name: lead.name, phone: lead.phone }); setWhatsAppModalOpen(true); }}
+                      onConvert={() => setQualifyingLead(lead)}
                     />
                   ))}
                 </div>
@@ -1105,7 +1412,10 @@ export default function CRMPortal() {
                       lead={lead} 
                       onMove={(step) => shiftLeadStep(lead.id, step)}
                       onViewDossier={() => setSelectedLeadForHistory(lead)}
-                      onScheduleReminder={() => handleScheduleLeadReminder(lead.name)}
+                      onLogCall={() => openLogModal(lead)}
+                      onCreateQuote={() => openQuotationModalForLead(lead)}
+                      onWhatsApp={() => { setWhatsAppTargetUser({ name: lead.name, phone: lead.phone }); setWhatsAppModalOpen(true); }}
+                      onConvert={() => setQualifyingLead(lead)}
                     />
                   ))}
                 </div>
@@ -1124,7 +1434,10 @@ export default function CRMPortal() {
                       lead={lead} 
                       onMove={(step) => shiftLeadStep(lead.id, step)}
                       onViewDossier={() => setSelectedLeadForHistory(lead)}
-                      onScheduleReminder={() => handleScheduleLeadReminder(lead.name)}
+                      onLogCall={() => openLogModal(lead)}
+                      onCreateQuote={() => openQuotationModalForLead(lead)}
+                      onWhatsApp={() => { setWhatsAppTargetUser({ name: lead.name, phone: lead.phone }); setWhatsAppModalOpen(true); }}
+                      onConvert={() => setQualifyingLead(lead)}
                     />
                   ))}
                 </div>
@@ -1248,10 +1561,17 @@ export default function CRMPortal() {
               </div>
 
               <button
-                onClick={() => setShowOnboardingModal(true)}
-                className="bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider px-4 py-3 rounded-xl flex items-center gap-1.5 shadow-md shadow-[#A11212]/20 active:scale-95 transition-all"
+                onClick={() => setShowDirectClientModal(true)}
+                className="bg-brand-dark hover:bg-brand-dark/90 text-white text-xs font-black uppercase tracking-wider px-4 py-3 rounded-xl flex items-center gap-1.5 shadow-md shadow-brand-dark/20 active:scale-95 transition-all"
               >
-                <UserPlus size={14} /> {isAr ? 'تسجيل عميل جديد' : 'Onboard Client'}
+                <UserPlus size={14} /> {isAr ? 'إضافة عميل مباشر' : '+ Direct Client Add'}
+              </button>
+
+              <button
+                onClick={() => setShowOnboardingModal(true)}
+                className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-black uppercase tracking-wider px-4 py-3 rounded-xl flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+              >
+                <PlusCircle size={14} /> {isAr ? 'تسجيل عميل جديد' : 'Onboard Form'}
               </button>
 
               <button
@@ -1518,9 +1838,17 @@ export default function CRMPortal() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* HOD Workspace: Quotation to Invoice pipeline */}
           <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
-            <div>
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">HOD Engagement Approvals & Invoicing</h3>
-              <p className="text-xs text-gray-500 font-bold">Approve draft quotation/engagement letters and convert them directly into invoices</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">Quotations & Client Acceptance Pipeline</h3>
+                <p className="text-xs text-gray-500 font-bold">Build proposals, track acceptance, and auto-trigger HOD job assignment</p>
+              </div>
+              <button
+                onClick={() => openQuotationModalForLead()}
+                className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-purple-700/20 active:scale-95 transition-all"
+              >
+                <DollarSign size={14} /> {isAr ? 'عرض سعر جديد' : '+ Build Quotation'}
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -1529,21 +1857,30 @@ export default function CRMPortal() {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-black text-gray-900">{q.clientName}</span>
+                      <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-black uppercase">{q.quoteNumber || q.id}</span>
                       <span className="text-[9px] bg-gray-100 border text-gray-600 px-1.5 py-0.5 rounded font-black uppercase">{q.type}</span>
                     </div>
-                    <p className="text-xs text-gray-500 font-bold">{q.serviceType} · <span className="text-[#A11212]">{q.budget.toLocaleString()} OMR</span></p>
+                    <p className="text-xs text-gray-500 font-bold">{q.serviceType} · <span className="text-purple-700 font-black">{q.budget.toLocaleString()} OMR</span></p>
                   </div>
-                  <div>
-                    {q.status === 'pending' ? (
-                      <button
-                        onClick={() => handleApproveQuotation(q)}
-                        className="bg-[#A11212] hover:bg-[#800e0e] text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all"
-                      >
-                        Approve & Bill
-                      </button>
+                  <div className="flex items-center gap-2">
+                    {q.status === 'pending' || q.status === 'sent' || q.status === 'draft' ? (
+                      <>
+                        <button
+                          onClick={() => handleClientAcceptsQuote(q)}
+                          className="bg-green-700 hover:bg-green-800 text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all flex items-center gap-1 shadow-sm"
+                        >
+                          <CheckCircle2 size={12} /> Client Accepted (Onboard & HOD Task)
+                        </button>
+                        <button
+                          onClick={() => handleApproveQuotation(q)}
+                          className="bg-gray-800 hover:bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all"
+                        >
+                          Approve & Bill
+                        </button>
+                      </>
                     ) : (
                       <span className="text-[10px] bg-green-50 text-green-700 border border-green-150 px-2.5 py-1.5 rounded-xl font-black uppercase inline-flex items-center gap-1">
-                        <CheckCheckIcon size={12} /> Billed (Invoice Created)
+                        <CheckCheckIcon size={12} /> Accepted & Invoiced (HOD Notified)
                       </span>
                     )}
                   </div>
@@ -2446,6 +2783,352 @@ export default function CRMPortal() {
         </div>
       )}
 
+      {/* ── MODAL 1: Mini-CRM Log Call & Interaction Modal ───────────── */}
+      {isLogModalOpen && selectedLeadForLog && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-bold text-gray-800 text-base flex items-center gap-2">
+                  <PhoneCall size={18} className="text-amber-600" />
+                  {isAr ? 'تسجيل تفاعل / مكالمة' : 'Log Lead Interaction & Call'}
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">{selectedLeadForLog.name} ({selectedLeadForLog.phone})</p>
+              </div>
+              <button onClick={() => setIsLogModalOpen(false)} className="p-1 hover:bg-gray-100 rounded-full">
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveLogSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'نوع التفاعل' : 'Interaction Type'}</label>
+                  <select
+                    value={logForm.type}
+                    onChange={e => setLogForm(p => ({ ...p, type: e.target.value as any }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                  >
+                    <option value="call">📞 Phone Call</option>
+                    <option value="whatsapp">💬 WhatsApp Message</option>
+                    <option value="meeting">👥 In-person Meeting</option>
+                    <option value="note">📝 General Note</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'حالة اهتمام العميل' : 'Update Lead Status'}</label>
+                  <select
+                    value={logForm.status}
+                    onChange={e => setLogForm(p => ({ ...p, status: e.target.value as any }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                  >
+                    <option value="interested">🔵 Interested</option>
+                    <option value="called">🟡 Called / Discussed</option>
+                    <option value="whatsapp_connected">🟢 Connected on WhatsApp</option>
+                    <option value="quoted">🟣 Quoted Sent</option>
+                    <option value="not_interested">🔴 Not Interested</option>
+                    <option value="converted">✅ Converted to Client</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isAr ? 'تاريخ المتابعة القادمة' : 'Next Follow-up Date'}</label>
+                <input
+                  type="date"
+                  value={logForm.followUpDate}
+                  onChange={e => setLogForm(p => ({ ...p, followUpDate: e.target.value }))}
+                  className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isAr ? 'تفاصيل الحديث / ملاحظات المكالمة' : 'Discussion Notes / What Was Said *'}</label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder={isAr ? 'مثال: تمت المكالمة وطلب العميل إرسال عرض سعر لخدمات ضريبة القيمة المضافة' : 'e.g. Discussed VAT filing requirements for 2 branches. Client requested quote.'}
+                  value={logForm.notes}
+                  onChange={e => setLogForm(p => ({ ...p, notes: e.target.value }))}
+                  className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-medium"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsLogModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-xl"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-bold bg-amber-700 text-white rounded-xl hover:bg-amber-800"
+                >
+                  {isAr ? 'حفظ الملاحظة' : 'Save Log Entry'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 2: Quotation Builder Modal ────────────────────────────── */}
+      {showQuotationModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                  <DollarSign className="text-purple-600" size={20} />
+                  {isAr ? 'منشئ عروض الأسعار' : 'Interactive Quotation Builder'}
+                </h3>
+                {quoteForm.leadId && (
+                  <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">
+                    Pre-filled from Lead #{quoteForm.leadId}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setShowQuotationModal(false)} className="p-1 hover:bg-gray-100 rounded-full">
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuotationSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'اسم العميل / الشركة *' : 'Client / Company Name *'}</label>
+                  <input
+                    type="text"
+                    required
+                    value={quoteForm.clientName}
+                    onChange={e => setQuoteForm(p => ({ ...p, clientName: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'نوع العميل' : 'Client Type'}</label>
+                  <select
+                    value={quoteForm.clientType}
+                    onChange={e => setQuoteForm(p => ({ ...p, clientType: e.target.value as any }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                  >
+                    <option value="B2B">B2B (Corporate)</option>
+                    <option value="B2C">B2C (Individual)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'البريد الإلكتروني' : 'Email Address'}</label>
+                  <input
+                    type="email"
+                    value={quoteForm.email}
+                    onChange={e => setQuoteForm(p => ({ ...p, email: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'رقم الهاتف' : 'Phone Number'}</label>
+                  <input
+                    type="text"
+                    value={quoteForm.phone}
+                    onChange={e => setQuoteForm(p => ({ ...p, phone: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isAr ? 'الخدمات المطلوبة' : 'Select Services Package'}</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {['Tax & VAT', 'Audit', 'Bookkeeping', 'Business Advisory'].map(srv => (
+                    <label key={srv} className="flex items-center gap-2 bg-gray-50 border p-2 rounded-xl cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={quoteForm.services.includes(srv)}
+                        onChange={e => {
+                          if (e.target.checked) setQuoteForm(p => ({ ...p, services: [...p.services, srv] }));
+                          else setQuoteForm(p => ({ ...p, services: p.services.filter(s => s !== srv) }));
+                        }}
+                        className="rounded accent-purple-600"
+                      />
+                      <span className="font-bold text-gray-700">{srv}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'المبلغ الأساسي (OMR) *' : 'Base Amount (OMR) *'}</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    required
+                    value={quoteForm.baseAmount}
+                    onChange={e => setQuoteForm(p => ({ ...p, baseAmount: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold text-purple-700 text-sm"
+                  />
+                </div>
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={quoteForm.includeVat}
+                      onChange={e => setQuoteForm(p => ({ ...p, includeVat: e.target.checked }))}
+                      className="rounded accent-purple-600 w-4 h-4"
+                    />
+                    <span>{isAr ? 'إضافة ضريبة 5% VAT' : 'Add 5% Oman VAT'}</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="bg-purple-50 p-3 rounded-xl border border-purple-200 text-purple-900 font-bold flex justify-between items-center">
+                <span>{isAr ? 'إجمالي عرض السعر مع الضريبة:' : 'Total Quote Budget:'}</span>
+                <span className="text-base text-purple-700">
+                  OMR {(parseFloat(quoteForm.baseAmount || '0') * (quoteForm.includeVat ? 1.05 : 1.0)).toFixed(3)}
+                </span>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowQuotationModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-xl"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-bold bg-purple-700 text-white rounded-xl hover:bg-purple-800"
+                >
+                  {isAr ? 'حفظ وتسليم عرض السعر' : 'Save & Deliver Quote'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 3: Direct Client Onboarding Modal ────────────────────── */}
+      {showDirectClientModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                  <UserPlus className="text-brand-dark" size={20} />
+                  {isAr ? 'إضافة عميل مباشر (تجاوز الفرصة)' : 'Direct Client Onboarding'}
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">For walk-in, recurring, or direct contract clients</p>
+              </div>
+              <button onClick={() => setShowDirectClientModal(false)} className="p-1 hover:bg-gray-100 rounded-full">
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
+
+            <form onSubmit={handleDirectClientSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'اسم العميل / المفوض *' : 'Contact Person Name *'}</label>
+                  <input
+                    type="text"
+                    required
+                    value={directClientForm.name}
+                    onChange={e => setDirectClientForm(p => ({ ...p, name: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'اسم الشركة (B2B)' : 'Company Name (B2B)'}</label>
+                  <input
+                    type="text"
+                    value={directClientForm.companyName}
+                    onChange={e => setDirectClientForm(p => ({ ...p, companyName: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'البريد الإلكتروني *' : 'Email Address *'}</label>
+                  <input
+                    type="email"
+                    required
+                    value={directClientForm.email}
+                    onChange={e => setDirectClientForm(p => ({ ...p, email: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'رقم الهاتف *' : 'Phone Number *'}</label>
+                  <input
+                    type="text"
+                    required
+                    value={directClientForm.phone}
+                    onChange={e => setDirectClientForm(p => ({ ...p, phone: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isAr ? 'باقة الخدمات المطلوبة' : 'Services Package'}</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {['Tax & VAT', 'Audit', 'Bookkeeping', 'Business Advisory'].map(srv => (
+                    <label key={srv} className="flex items-center gap-2 bg-gray-50 border p-2 rounded-xl cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={directClientForm.services.includes(srv)}
+                        onChange={e => {
+                          if (e.target.checked) setDirectClientForm(p => ({ ...p, services: [...p.services, srv] }));
+                          else setDirectClientForm(p => ({ ...p, services: p.services.filter(s => s !== srv) }));
+                        }}
+                        className="rounded accent-brand-dark"
+                      />
+                      <span className="font-bold text-gray-700">{srv}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isAr ? 'قيمة الاتفاق الشهري (OMR)' : 'Monthly Billing Amount (OMR)'}</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  required
+                  value={directClientForm.billingAmount}
+                  onChange={e => setDirectClientForm(p => ({ ...p, billingAmount: e.target.value }))}
+                  className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold text-brand-dark"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowDirectClientModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-xl"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-bold bg-brand-dark text-white rounded-xl hover:bg-brand-dark/90"
+                >
+                  {isAr ? 'إضافة العميل وإرسال المهمة لرئيس القسم' : 'Add Client & Send HOD Task'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -2455,12 +3138,18 @@ function LeadCard({
   lead, 
   onMove, 
   onViewDossier, 
-  onScheduleReminder 
+  onLogCall,
+  onCreateQuote,
+  onWhatsApp,
+  onConvert,
 }: { 
   lead: Lead; 
   onMove: (step: Lead['pipelineStep']) => void; 
   onViewDossier: () => void;
-  onScheduleReminder: () => void;
+  onLogCall: () => void;
+  onCreateQuote: () => void;
+  onWhatsApp: () => void;
+  onConvert: () => void;
 }) {
   const stepMap: Record<Lead['pipelineStep'], Lead['pipelineStep'][]> = {
     follow_up: ['add_data'],
@@ -2472,19 +3161,31 @@ function LeadCard({
 
   const nextSteps = stepMap[lead.pipelineStep];
 
-  const colorCls = {
-    red: 'bg-red-500 border-red-200',
-    yellow: 'bg-yellow-500 border-yellow-200',
-    green: 'bg-green-500 border-green-200'
-  }[lead.qualificationColor];
+  const statusBadgeMap: Record<string, { label: string; cls: string }> = {
+    interested:         { label: 'Interested', cls: 'bg-blue-100 text-blue-700 border-blue-200' },
+    called:             { label: 'Called',     cls: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+    whatsapp_connected: { label: 'WhatsApp',   cls: 'bg-green-100 text-green-700 border-green-200' },
+    quoted:             { label: 'Quoted',     cls: 'bg-purple-100 text-purple-700 border-purple-200' },
+    not_interested:     { label: 'Declined',   cls: 'bg-red-100 text-red-700 border-red-200' },
+    converted:          { label: 'Converted',  cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  };
+  const badge = statusBadgeMap[lead.status] || { label: lead.status, cls: 'bg-gray-100 text-gray-700 border-gray-200' };
 
   return (
     <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs space-y-3 hover:border-gray-400 transition-all">
       <div className="flex justify-between items-start">
-        <span className="text-[9px] bg-gray-100 border text-gray-500 font-black px-1.5 py-0.5 rounded">
-          {lead.id}
-        </span>
-        <span className={`w-2.5 h-2.5 rounded-full border ${colorCls}`}></span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] bg-gray-100 border text-gray-500 font-black px-1.5 py-0.5 rounded">
+            {lead.id}
+          </span>
+          <span className={`text-[9px] font-black border px-1.5 py-0.5 rounded-full ${badge.cls}`}>
+            {badge.label}
+          </span>
+        </div>
+        <span className={`w-2.5 h-2.5 rounded-full border ${
+          lead.qualificationColor === 'green' ? 'bg-green-500 border-green-200' :
+          lead.qualificationColor === 'yellow' ? 'bg-yellow-500 border-yellow-200' : 'bg-red-500 border-red-200'
+        }`}></span>
       </div>
 
       <div>
@@ -2492,15 +3193,46 @@ function LeadCard({
         {lead.companyName && (
           <p className="text-[10px] text-gray-500 font-bold">{lead.companyName}</p>
         )}
+        <p className="text-[10px] text-gray-400">{lead.phone} · {lead.email}</p>
       </div>
 
-      <p className="text-[10px] text-gray-500 leading-normal bg-gray-50 p-2 rounded-lg font-medium border border-gray-150">
-        {lead.notes}
-      </p>
+      {lead.notes && (
+        <p className="text-[10px] text-gray-500 leading-normal bg-gray-50 p-2 rounded-lg font-medium border border-gray-150 truncate">
+          {lead.notes}
+        </p>
+      )}
+
+      {/* Mini-CRM Quick Actions */}
+      <div className="grid grid-cols-2 gap-1.5 pt-1">
+        <button
+          onClick={onLogCall}
+          className="flex items-center justify-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 py-1 rounded-xl text-[9px] font-bold"
+        >
+          <PhoneCall size={10} /> Log Call
+        </button>
+        <button
+          onClick={onCreateQuote}
+          className="flex items-center justify-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 py-1 rounded-xl text-[9px] font-bold"
+        >
+          <DollarSign size={10} /> Create Quote
+        </button>
+        <button
+          onClick={onWhatsApp}
+          className="flex items-center justify-center gap-1 bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 py-1 rounded-xl text-[9px] font-bold"
+        >
+          <MessageSquare size={10} /> WhatsApp
+        </button>
+        <button
+          onClick={onConvert}
+          className="flex items-center justify-center gap-1 bg-brand-dark text-white hover:bg-brand-dark/90 py-1 rounded-xl text-[9px] font-bold"
+        >
+          <UserPlus size={10} /> Convert
+        </button>
+      </div>
 
       {/* Move Actions */}
       <div className="flex items-center justify-between border-t border-gray-100 pt-2 text-[9px] font-black uppercase text-gray-400">
-        <span>Transition</span>
+        <span>Stage</span>
         <div className="flex gap-1">
           {nextSteps.map(step => (
             <button
@@ -2514,19 +3246,13 @@ function LeadCard({
         </div>
       </div>
 
-      {/* Interaction Actions */}
-      <div className="flex gap-2 pt-2 border-t border-gray-100">
+      {/* Dossier Link */}
+      <div className="pt-1">
         <button
           onClick={onViewDossier}
-          className="flex-1 bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-700 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-colors text-center"
+          className="w-full bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-700 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-colors text-center"
         >
-          Dossier
-        </button>
-        <button
-          onClick={onScheduleReminder}
-          className="flex-1 bg-red-900/5 hover:bg-red-900/10 border border-red-900/10 text-[#A11212] py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-colors text-center font-bold"
-        >
-          + Follow-up
+          View Lead History
         </button>
       </div>
     </div>
