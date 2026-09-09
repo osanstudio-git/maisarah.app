@@ -282,18 +282,29 @@ export default function CRMPortal() {
     created_at: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
   });
 
+  const [staffList, setStaffList] = useState(MOCK_EMPLOYEES);
+
   // ── Fetch all data from Supabase ─────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     setDbLoading(true);
     try {
-      const [leadsRes, clientsRes, quotesRes] = await Promise.all([
+      const [leadsRes, clientsRes, quotesRes, profilesRes] = await Promise.all([
         supabase.from('leads').select('*').order('created_at', { ascending: false }),
         supabase.from('clients').select('*').order('created_at', { ascending: false }),
         supabase.from('quotations').select('*').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, full_name, email, role'),
       ]);
       if (leadsRes.data)    setLeads(leadsRes.data.map(mapLead));
       if (clientsRes.data)  setClients(clientsRes.data.map(mapClient));
       if (quotesRes.data)   setQuotations(quotesRes.data.map(mapQuotation));
+      if (profilesRes.data && profilesRes.data.length > 0) {
+        const fetchedStaff = profilesRes.data.map(p => ({
+          id: p.id,
+          name: p.full_name || p.email,
+          dept: p.role === 'department_head' ? 'Department Head' : p.role.toUpperCase()
+        }));
+        setStaffList([...fetchedStaff, ...MOCK_EMPLOYEES]);
+      }
     } catch (err) {
       console.error('CRM fetchAll error:', err);
     } finally {
@@ -483,6 +494,45 @@ export default function CRMPortal() {
     billingAmount: '450',
     manager: MOCK_EMPLOYEES[0].name,
   });
+
+  // ── Quick Add Lead Modal (Minimal Lead Capture) ─────────────────────────
+  const [showQuickAddLeadModal, setShowQuickAddLeadModal] = useState(false);
+  const [quickLeadForm, setQuickLeadForm] = useState({
+    name: '',
+    companyName: '',
+    phone: '',
+    email: '',
+    source: 'b2b' as Lead['source'],
+    status: 'interested' as Lead['status'],
+    notes: '',
+  });
+
+  const handleQuickAddLeadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const newLead = {
+        name: quickLeadForm.name,
+        company_name: quickLeadForm.companyName || null,
+        phone: quickLeadForm.phone,
+        email: quickLeadForm.email || `${quickLeadForm.name.toLowerCase().replace(/\s+/g, '.')}@client.om`,
+        source: quickLeadForm.source,
+        status: quickLeadForm.status,
+        pipeline_step: 'follow_up',
+        notes: quickLeadForm.notes,
+        activity_history: [`${new Date().toISOString().slice(0, 10)} - Lead captured via Quick Add Lead`],
+      };
+
+      const { error } = await supabase.from('leads').insert([newLead]);
+      if (error) throw error;
+
+      setShowQuickAddLeadModal(false);
+      setQuickLeadForm({ name: '', companyName: '', phone: '', email: '', source: 'b2b', status: 'interested', notes: '' });
+      await fetchAll();
+    } catch (err) {
+      console.error('Error adding lead:', err);
+      alert('Error creating lead. Please check inputs.');
+    }
+  };
 
   // ── Handlers for New Mini-CRM Features ───────────────────────────────────
   const openLogModal = (lead: Lead) => {
@@ -1243,6 +1293,14 @@ export default function CRMPortal() {
             </div>
             
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={() => setShowQuickAddLeadModal(true)}
+                className="bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+              >
+                <PlusCircle size={15} /> {isAr ? 'إضافة فرصة جديدة' : '+ Quick Add Lead'}
+              </button>
+
               {/* Temperature Codes */}
               <div className="hidden lg:flex items-center gap-1.5 mr-2">
                 <span className="w-2.5 h-2.5 bg-red-600 rounded-full"></span>
@@ -3122,6 +3180,133 @@ export default function CRMPortal() {
                   className="px-5 py-2 text-xs font-bold bg-brand-dark text-white rounded-xl hover:bg-brand-dark/90"
                 >
                   {isAr ? 'إضافة العميل وإرسال المهمة لرئيس القسم' : 'Add Client & Send HOD Task'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 4: Quick Add Lead Modal ────────────────────────────────── */}
+      {showQuickAddLeadModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-bold text-gray-800 text-base flex items-center gap-2">
+                  <UserPlus className="text-[#A11212]" size={18} />
+                  {isAr ? 'إضافة فرصة جديدة بسرعة' : 'Quick Add Lead'}
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">Fast capture for new prospects and inquiries</p>
+              </div>
+              <button onClick={() => setShowQuickAddLeadModal(false)} className="p-1 hover:bg-gray-100 rounded-full">
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickAddLeadSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isAr ? 'الاسم الكامل للعميل *' : 'Contact Full Name *'}</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Salim Al-Busaidi"
+                  value={quickLeadForm.name}
+                  onChange={e => setQuickLeadForm(p => ({ ...p, name: e.target.value }))}
+                  className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'اسم الشركة' : 'Company Name'}</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Busaidi Logistics"
+                    value={quickLeadForm.companyName}
+                    onChange={e => setQuickLeadForm(p => ({ ...p, companyName: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'مصدر الفرصة' : 'Lead Source'}</label>
+                  <select
+                    value={quickLeadForm.source}
+                    onChange={e => setQuickLeadForm(p => ({ ...p, source: e.target.value as any }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                  >
+                    <option value="b2b">Corporate Sales / B2B</option>
+                    <option value="social_media">Social Media</option>
+                    <option value="website">Website Form</option>
+                    <option value="referral">Referral</option>
+                    <option value="direct">Direct Walk-in / Phone</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'رقم الهاتف / واتساب *' : 'Phone / WhatsApp *'}</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="+968 9XXXXXXX"
+                    value={quickLeadForm.phone}
+                    onChange={e => setQuickLeadForm(p => ({ ...p, phone: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'البريد الإلكتروني' : 'Email Address'}</label>
+                  <input
+                    type="email"
+                    placeholder="client@gmail.com"
+                    value={quickLeadForm.email}
+                    onChange={e => setQuickLeadForm(p => ({ ...p, email: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isAr ? 'حالة الاهتمام الأولية' : 'Initial Interest Status'}</label>
+                <select
+                  value={quickLeadForm.status}
+                  onChange={e => setQuickLeadForm(p => ({ ...p, status: e.target.value as any }))}
+                  className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                >
+                  <option value="interested">🔵 Interested</option>
+                  <option value="called">🟡 Called / Discussed</option>
+                  <option value="whatsapp_connected">🟢 Connected on WhatsApp</option>
+                  <option value="quoted">🟣 Quoted Sent</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isAr ? 'ملاحظات / متطلبات الخدمة' : 'Requirements / Notes'}</label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Interested in annual VAT return filing and bookkeeping."
+                  value={quickLeadForm.notes}
+                  onChange={e => setQuickLeadForm(p => ({ ...p, notes: e.target.value }))}
+                  className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-medium"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickAddLeadModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-xl"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-bold bg-[#A11212] text-white rounded-xl hover:bg-[#800e0e]"
+                >
+                  {isAr ? 'إضافة الفرصة' : 'Add Lead to Pipeline'}
                 </button>
               </div>
             </form>
