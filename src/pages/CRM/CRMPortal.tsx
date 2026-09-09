@@ -497,6 +497,7 @@ export default function CRMPortal() {
 
   // ── Quick Add Lead Modal (Minimal Lead Capture) ─────────────────────────
   const [showQuickAddLeadModal, setShowQuickAddLeadModal] = useState(false);
+  const [isSubmittingQuickLead, setIsSubmittingQuickLead] = useState(false);
   const [quickLeadForm, setQuickLeadForm] = useState({
     name: '',
     companyName: '',
@@ -509,6 +510,8 @@ export default function CRMPortal() {
 
   const handleQuickAddLeadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingQuickLead) return;
+    setIsSubmittingQuickLead(true);
     try {
       const newLead = {
         name: quickLeadForm.name,
@@ -531,6 +534,8 @@ export default function CRMPortal() {
     } catch (err) {
       console.error('Error adding lead:', err);
       alert('Error creating lead. Please check inputs.');
+    } finally {
+      setIsSubmittingQuickLead(false);
     }
   };
 
@@ -3304,9 +3309,17 @@ export default function CRMPortal() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold bg-[#A11212] text-white rounded-xl hover:bg-[#800e0e]"
+                  disabled={isSubmittingQuickLead}
+                  className="px-5 py-2 text-xs font-bold bg-[#A11212] text-white rounded-xl hover:bg-[#800e0e] disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {isAr ? 'إضافة الفرصة' : 'Add Lead to Pipeline'}
+                  {isSubmittingQuickLead ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>{isAr ? 'جاري الإضافة...' : 'Adding...'}</span>
+                    </>
+                  ) : (
+                    <span>{isAr ? 'إضافة الفرصة' : 'Add Lead to Pipeline'}</span>
+                  )}
                 </button>
               </div>
             </form>
