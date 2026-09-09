@@ -404,9 +404,28 @@ export default function CRMPortal() {
     return alertsList;
   }, [leads, clients, isAr]);
 
-  // --- Lead Qualification / Assignment States ---
+  // --- Lead Qualification / Conversion States ---
   const [qualifyingLead, setQualifyingLead] = useState<Lead | null>(null);
   const [selectedAssignee, setSelectedAssignee] = useState(MOCK_EMPLOYEES[0].name);
+  const [isSubmittingConvert, setIsSubmittingConvert] = useState(false);
+  const [convertForm, setConvertForm] = useState({
+    manager: '',
+    services: ['Audit'] as string[],
+    subType: 'Statutory Financial Audit',
+    billingAmount: '750',
+    workScopeNotes: '',
+  });
+
+  const openConvertModal = (lead: Lead) => {
+    setQualifyingLead(lead);
+    setConvertForm({
+      manager: staffList[0]?.name || MOCK_EMPLOYEES[0].name,
+      services: ['Audit'],
+      subType: 'Statutory Financial Audit',
+      billingAmount: '750',
+      workScopeNotes: lead.notes || '',
+    });
+  };
 
   // --- Onboarding Client Modal/Form States ---
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
@@ -872,7 +891,7 @@ export default function CRMPortal() {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
-    if (nextStep === 'sort') setQualifyingLead(lead);
+    if (nextStep === 'sort') openConvertModal(lead);
 
     const today = new Date().toISOString().slice(0, 10);
     const logEntry = `${today} - Stage shifted to: ${nextStep.replace('_', ' ')}`;
@@ -892,62 +911,89 @@ export default function CRMPortal() {
 
   // --- Lead Qualification / Conversion to Client (Supabase) ---
   const handleConfirmQualification = async () => {
-    if (!qualifyingLead) return;
+    if (!qualifyingLead || isSubmittingConvert) return;
+    setIsSubmittingConvert(true);
 
-    const expiryDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    try {
+      const expiryDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const billing = parseFloat(convertForm.billingAmount) || 750;
+      const managerName = convertForm.manager || staffList[0]?.name || MOCK_EMPLOYEES[0].name;
+      const selectedServices = convertForm.services.length > 0 ? convertForm.services : ['Audit'];
+      const detailedService = `${selectedServices.join(', ')} (${convertForm.subType})`;
 
-    // 1. Insert client into Supabase
-    const { data: newClientRow, error: clientErr } = await supabase
-      .from('clients')
-      .insert([{
-        full_name: qualifyingLead.name,
-        email: qualifyingLead.email,
-        phone: qualifyingLead.phone,
-        client_type: qualifyingLead.companyName ? 'B2B' : 'B2C',
-        company_name: qualifyingLead.companyName || null,
-        services_package: ['Audit'],
-        overall_manager: selectedAssignee,
-        delegated_services: { 'Audit': selectedAssignee },
-        monthly_billing: 750,
+      // 1. Insert client into Supabase
+      const { data: newClientRow, error: clientErr } = await supabase
+        .from('clients')
+        .insert([{
+          full_name: qualifyingLead.name,
+          email: qualifyingLead.email,
+          phone: qualifyingLead.phone,
+          client_type: qualifyingLead.companyName ? 'B2B' : 'B2C',
+          company_name: qualifyingLead.companyName || null,
+          services_package: selectedServices,
+          overall_manager: managerName,
+          delegated_services: selectedServices.reduce((acc, srv) => ({ ...acc, [srv]: managerName }), {}),
+          monthly_billing: billing,
+          activity_history: [
+            'Converted from CRM pipeline lead.',
+            `Service Scope: ${detailedService}`,
+            convertForm.workScopeNotes || qualifyingLead.notes || 'Lead qualified and onboarded.',
+          ],
+          contract_expiry_date: expiryDate,
+          lead_id: qualifyingLead.id,
+          source: qualifyingLead.companyName ? 'b2b' : 'direct',
+        }])
+        .select()
+        .single();
+
+      if (clientErr) throw clientErr;
+
+      // 2. Insert Job Task for HOD Workspace
+      const { error: jobErr } = await supabase.from('client_jobs').insert([{
+        client_id: newClientRow.id,
+        service_type: detailedService,
+        billing_type: 'one_time',
+        status: 'pending',
+        amount: billing,
+        vat_amount: +(billing * 0.05).toFixed(3),
+        description: convertForm.workScopeNotes || `Converted Lead Job Task: ${detailedService}`,
+        deadline: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      }]);
+      if (jobErr) console.error('Error creating client job:', jobErr);
+
+      // 3. Mark lead as converted
+      await supabase.from('leads').update({
+        status: 'converted',
+        pipeline_step: 'sort',
         activity_history: [
-          'Converted from CRM pipeline lead.',
-          qualifyingLead.notes || 'Lead qualified and onboarded.',
+          ...(qualifyingLead.activityHistory || []),
+          `${new Date().toISOString().slice(0, 10)} - Converted to client with service (${detailedService}).`,
         ],
-        contract_expiry_date: expiryDate,
-        lead_id: qualifyingLead.id,
-        source: qualifyingLead.companyName ? 'b2b' : 'direct',
-      }])
-      .select()
-      .single();
+      }).eq('id', qualifyingLead.id);
 
-    if (clientErr) {
-      alert('Error converting lead: ' + clientErr.message);
-      return;
+      // 4. Notify HOD
+      await supabase.from('notifications').insert([{
+        role: 'hod',
+        type: 'new_client',
+        title: 'Lead Converted & Job Task Created',
+        message: `Client "${qualifyingLead.name}" onboarded for ${detailedService}. Manager: ${managerName}. Job Task dispatched to HOD workspace!`,
+        ref_id: newClientRow.id,
+        ref_table: 'clients',
+      }]);
+
+      alert(isAr 
+        ? `تم تحويل الفرصة إلى عميل بنجاح وإرسال مهمة العمل لرئيس القسم!` 
+        : `🎉 Lead Converted to Client! Job Task dispatched to HOD workspace!`
+      );
+
+      setLeads(prev => prev.filter(l => l.id !== qualifyingLead.id));
+      setQualifyingLead(null);
+      await fetchAll();
+    } catch (err: any) {
+      alert(err.message || 'Error converting lead');
+    } finally {
+      setIsSubmittingConvert(false);
     }
-
-    // 2. Mark lead as converted
-    await supabase.from('leads').update({
-      status: 'converted',
-      pipeline_step: 'sort',
-      activity_history: [
-        ...(qualifyingLead.activityHistory || []),
-        `${new Date().toISOString().slice(0, 10)} - Lead converted to client by CRM.`,
-      ],
-    }).eq('id', qualifyingLead.id);
-
-    // 3. Notify HOD
-    await supabase.from('notifications').insert([{
-      role: 'hod',
-      type: 'new_client',
-      title: 'Lead Converted to Client',
-      message: `Lead "${qualifyingLead.name}" has been qualified and converted to a client. Assigned to: ${selectedAssignee}.`,
-      ref_id: newClientRow.id,
-      ref_table: 'clients',
-    }]);
-
-    setLeads(prev => prev.filter(l => l.id !== qualifyingLead.id));
-    setQualifyingLead(null);
-    // Real-time will refresh clients list
   };
 
   // --- Update Combo Work Settings ---
@@ -2487,49 +2533,147 @@ export default function CRMPortal() {
         </div>
       )}
 
-      {/* B. Lead Qualification prompt popup */}
+      {/* B. Lead Qualification & Convert to Client Modal */}
       {qualifyingLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden p-6 space-y-4">
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center text-green-700 mx-auto">
-                <CheckCircle2 size={24} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden p-6 space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center text-green-700">
+                  <CheckCircle2 size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">
+                    {isAr ? 'تحويل الفرصة إلى عميل' : 'Qualify & Convert Lead to Client'}
+                  </h3>
+                  <p className="text-[11px] text-gray-500 font-bold">
+                    {qualifyingLead.name} ({qualifyingLead.companyName || 'B2C Client'})
+                  </p>
+                </div>
               </div>
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">Qualify & Convert Lead</h3>
-              <p className="text-xs text-gray-500 font-bold">
-                Assign **{qualifyingLead.name}** ({qualifyingLead.companyName || 'B2C Account'}) to an employee to automatically convert them to an active client.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Assign Account Manager</label>
-              <select
-                value={selectedAssignee}
-                onChange={(e) => setSelectedAssignee(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212]"
-              >
-                {MOCK_EMPLOYEES.map(emp => (
-                  <option key={emp.id} value={emp.name}>{emp.name} ({emp.dept})</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setQualifyingLead(null)}
-                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmQualification}
-                className="flex-1 bg-green-700 hover:bg-green-800 text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider transition-colors"
-              >
-                Convert to Client
+              <button onClick={() => setQualifyingLead(null)} className="p-1 hover:bg-gray-100 rounded-full text-gray-400">
+                <X size={18} />
               </button>
             </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleConfirmQualification(); }} className="space-y-4 text-xs">
+              {/* Account Manager / HOD Selection */}
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  {isAr ? 'تعيين المدير المسؤول / رئيس القسم *' : 'Assign Account Manager / HOD *'}
+                </label>
+                <select
+                  value={convertForm.manager}
+                  onChange={(e) => setConvertForm(p => ({ ...p, manager: e.target.value }))}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                >
+                  {staffList.map(emp => (
+                    <option key={emp.id} value={emp.name}>
+                      {emp.name} ({emp.dept})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Service Categories */}
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  {isAr ? 'الخدمات المطلوبة *' : 'Select Required Services *'}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {['Tax & VAT', 'Audit', 'Bookkeeping', 'Business Advisory'].map(srv => (
+                    <label key={srv} className="flex items-center gap-2 bg-gray-50 border p-2 rounded-xl cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={convertForm.services.includes(srv)}
+                        onChange={e => {
+                          if (e.target.checked) setConvertForm(p => ({ ...p, services: [...p.services, srv] }));
+                          else setConvertForm(p => ({ ...p, services: p.services.filter(s => s !== srv) }));
+                        }}
+                        className="rounded accent-green-600 w-4 h-4"
+                      />
+                      <span className="font-bold text-gray-700">{srv}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Service Sub-Type / Audit Specification */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isAr ? 'نوع التدقيق / التفاصيل الفنية' : 'Service Sub-type / Audit Type'}
+                  </label>
+                  <select
+                    value={convertForm.subType}
+                    onChange={(e) => setConvertForm(p => ({ ...p, subType: e.target.value }))}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                  >
+                    <option value="Statutory Financial Audit">Statutory Financial Audit</option>
+                    <option value="Internal Audit & Controls Review">Internal Audit & Controls</option>
+                    <option value="Tax Audit & Compliance Verification">Tax Audit & Compliance</option>
+                    <option value="VAT Return Filing & Submission">VAT Return Filing</option>
+                    <option value="Corporate Tax Advisory">Corporate Tax Advisory</option>
+                    <option value="Full-Scope Client Bookkeeping">Client Bookkeeping</option>
+                    <option value="Business Advisory & Feasibility Matrix">Business Advisory & Feasibility</option>
+                    <option value="Specialized Custom Engagement">Specialized Custom Engagement</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isAr ? 'قيمة العقد المتفق عليها (OMR) *' : 'Agreed Contract Amount (OMR) *'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    required
+                    value={convertForm.billingAmount}
+                    onChange={(e) => setConvertForm(p => ({ ...p, billingAmount: e.target.value }))}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold outline-none text-green-700 focus:border-[#A11212]"
+                  />
+                </div>
+              </div>
+
+              {/* Work Scope / HOD Instructions */}
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  {isAr ? 'تفاصيل العمل ومواصفات الخدمة لرئيس القسم *' : 'Work Details & Specific HOD Scope *'}
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder={isAr ? 'أدخل تفاصيل ومواصفات العمل المطلوبة من رئيس القسم وموظفي التدقيق...' : 'e.g. Conduct statutory financial audit for FY2025 records. Client requires preliminary draft within 3 weeks.'}
+                  value={convertForm.workScopeNotes}
+                  onChange={(e) => setConvertForm(p => ({ ...p, workScopeNotes: e.target.value }))}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-medium outline-none focus:border-[#A11212]"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setQualifyingLead(null)}
+                  className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-gray-200 transition-colors"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingConvert}
+                  className="flex-1 bg-green-700 hover:bg-green-800 text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSubmittingConvert ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>{isAr ? 'جاري التحويل...' : 'Converting...'}</span>
+                    </>
+                  ) : (
+                    <span>{isAr ? 'تحويل لعميل وإرسال المهمة' : 'Convert & Dispatch HOD Task'}</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
