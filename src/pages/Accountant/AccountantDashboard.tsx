@@ -257,6 +257,10 @@ const AccountantDashboard = () => {
         totalCount: 23, paidRatio: 78,
       });
     } finally {
+      if (!isSilent) setLoading(false);
+    }
+  }, []);
+
   // Accountant Notifications
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
