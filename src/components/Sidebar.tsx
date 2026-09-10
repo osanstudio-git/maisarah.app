@@ -108,6 +108,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
       case 'crm':
         return [
           { title: isAr ? 'لوحة قيادة CRM' : 'CRM Dashboard', icon: Home, path: '/crm/dashboard' },
+          { title: isAr ? 'استوديو عروض الأسعار' : 'Quotations Studio', icon: FileText, path: '/crm/quotations' },
           { title: isAr ? 'إدارة العملاء والفرص' : 'Clients & Leads', icon: Users, path: '/crm/clients' },
           { title: isAr ? 'خط تأهيل الفرص' : 'Lead Pipeline', icon: Target, path: '/crm/leads' },
           { title: isAr ? 'إدارة العمل المركب' : 'Combo Work', icon: Layers, path: '/crm/combo' },

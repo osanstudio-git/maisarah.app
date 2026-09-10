@@ -164,6 +164,7 @@ function App() {
               <Route path="/crm/dashboard" element={<CRMPortal />} />
               <Route path="/crm/leads" element={<CRMPortal />} />
               <Route path="/crm/clients" element={<CRMPortal />} />
+              <Route path="/crm/quotations" element={<CRMPortal />} />
               <Route path="/crm/combo" element={<CRMPortal />} />
               <Route path="/crm/financials" element={<CRMPortal />} />
               <Route path="/crm/reminders" element={<CRMPortal />} />

@@ -6,7 +6,7 @@ import {
   ChevronRight, XCircle, ArrowUpRight, BarChart2, ShieldCheck, Download, 
   Trash2, Edit, Award, Sparkles, Building2, UserPlus, FileCheck, Check, ArrowRight,
   TrendingUp, RefreshCw, AlertTriangle, Calendar, Layers, Activity, Loader2,
-  PhoneCall, MessageSquare, Send, DollarSign, X, ExternalLink, Filter
+  PhoneCall, MessageSquare, Send, DollarSign, X, ExternalLink, Filter, Printer, Plus, CheckCheck
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -192,6 +192,7 @@ export default function CRMPortal() {
   const getActiveTabFromPath = () => {
     const path = location.pathname;
     if (path.includes('/crm/leads')) return 'pipeline';
+    if (path.includes('/crm/quotations')) return 'quotations';
     if (path.includes('/crm/clients')) return 'clients';
     if (path.includes('/crm/combo')) return 'combo_work';
     if (path.includes('/crm/financials')) return 'financials';
@@ -204,6 +205,7 @@ export default function CRMPortal() {
 
   const handleTabChange = (tabId: string) => {
     if (tabId === 'dashboard') navigate('/crm/dashboard');
+    else if (tabId === 'quotations') navigate('/crm/quotations');
     else if (tabId === 'pipeline') navigate('/crm/leads');
     else if (tabId === 'clients') navigate('/crm/clients');
     else if (tabId === 'combo_work') navigate('/crm/combo');
@@ -484,7 +486,7 @@ export default function CRMPortal() {
     followUpDate: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
   });
 
-  // ── Quotation Builder Modal (Auto pre-filled from Lead) ───────────────────
+  // ── Quotation Builder & Studio States ────────────────────────────────────
   const [showQuotationModal, setShowQuotationModal] = useState(false);
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
   const [isSubmittingQuotation, setIsSubmittingQuotation] = useState(false);
@@ -501,6 +503,75 @@ export default function CRMPortal() {
     includeVat: true,
     notes: '',
   });
+
+  // Dynamic Interactive Builder options (Line items, docs, timeline, etc.)
+  const [quoteLineItems, setQuoteLineItems] = useState<{ id: string; description: string; qty: number; rate: number }[]>([
+    { id: '1', description: 'Tax & VAT Advisory & Compliance Services', qty: 1, rate: 350 }
+  ]);
+  const [quoteDiscount, setQuoteDiscount] = useState<number>(0);
+  const [quoteDocsRequired, setQuoteDocsRequired] = useState<string[]>([
+    'COLOR PASSPORT COPIES OF SHAREHOLDERS',
+    'COLOR PHOTO OF THE SHARE HOLDER',
+    'EMAIL ID',
+    'CONTACT NUMBER',
+    'DOCUMENTS PROVIDING PREVIOUS EXPERIENCE IN THE SAME LINE OF BUSINESS OR EDUCATION CERTIFICATE'
+  ]);
+  const [customDocInput, setCustomDocInput] = useState('');
+
+  const [quoteTimelineSteps, setQuoteTimelineSteps] = useState<{ id: string; step: string; duration: string; selected: boolean }[]>([
+    { id: 't1', step: 'Share Transfer', duration: '4-6 Working Days', selected: true },
+    { id: 't2', step: 'CR Renewal', duration: '1 Working Day', selected: true },
+    { id: 't3', step: 'Activity License Renewal', duration: '1 Working Day', selected: true },
+    { id: 't4', step: 'KYC Verification', duration: '1-2 Working Days', selected: true },
+    { id: 't5', step: 'CR Certificate Issue', duration: '1-2 Working Days', selected: true },
+    { id: 't6', step: 'Tax Card Issue', duration: '1-2 Working Days', selected: true },
+    { id: 't7', step: 'Feasibility Study', duration: '1 Working Day', selected: true },
+    { id: 't8', step: 'Attestation Services', duration: '2-3 Working Days', selected: true },
+  ]);
+  const [customTimelineStepName, setCustomTimelineStepName] = useState('');
+  const [customTimelineStepDuration, setCustomTimelineStepDuration] = useState('1-2 Working Days');
+
+  const [quotePaymentSchedule, setQuotePaymentSchedule] = useState({
+    advanceTerms: 'Upon signing the quotation: 50%',
+    balanceTerms: 'Upon completion of Visa / Service: 50%'
+  });
+
+  const [quoteImportantNotes, setQuoteImportantNotes] = useState<string[]>([
+    'All government fees are subject to change without prior notice.',
+    'All external approval fees shall be paid by the client as per voucher issued.',
+    'Industrial activity fees will be charged based on the specific activity selected.',
+    'This quotation is issued based on general business activity. Any variation in cost will be communicated before proceeding.'
+  ]);
+
+  const [quoteShowQty, setQuoteShowQty] = useState(true);
+  const [quoteKycPhotoProof, setQuoteKycPhotoProof] = useState(false);
+  const [quotePresentationMode, setQuotePresentationMode] = useState<'detailed' | 'simple'>('detailed');
+  const [quotationSearchQuery, setQuotationSearchQuery] = useState('');
+  const [quotationStatusFilter, setQuotationStatusFilter] = useState<'all' | 'pending' | 'approved' | 'invoiced'>('all');
+
+  const convertNumberToWords = (num: number): string => {
+    if (!num || num <= 0) return 'Zero Omani Rials Only';
+    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+    const inWords = (n: number): string => {
+      if (n < 20) return a[n];
+      if (n < 100) return b[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + a[n % 10] : '');
+      if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' ' + inWords(n % 100) : '');
+      if (n < 1000000) return inWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 !== 0 ? ' ' + inWords(n % 1000) : '');
+      return n.toString();
+    };
+
+    const whole = Math.floor(num);
+    const baisa = Math.round((num - whole) * 1000);
+    let result = inWords(whole) + ' Omani Rial';
+    if (whole !== 1) result += 's';
+    if (baisa > 0) {
+      result += ' and ' + inWords(baisa) + ' Baisa';
+    }
+    result += ' Only';
+    return result;
+  };
 
   // ── Direct Client Onboarding Modal ───────────────────────────────────────
   const [showDirectClientModal, setShowDirectClientModal] = useState(false);
@@ -613,6 +684,9 @@ export default function CRMPortal() {
         includeVat: true,
         notes: lead.notes || '',
       });
+      setQuoteLineItems([
+        { id: '1', description: lead.notes ? `Scope: ${lead.notes}` : 'Tax & VAT Advisory & Compliance Services', qty: 1, rate: 350 }
+      ]);
     } else {
       setQuoteForm({
         leadId: null,
@@ -627,6 +701,9 @@ export default function CRMPortal() {
         includeVat: true,
         notes: '',
       });
+      setQuoteLineItems([
+        { id: '1', description: 'Tax & VAT Advisory & Compliance Services', qty: 1, rate: 350 }
+      ]);
     }
     setShowQuotationModal(true);
   };
@@ -648,24 +725,29 @@ export default function CRMPortal() {
       includeVat: hasVat,
       notes: '',
     });
+    setQuoteLineItems([
+      { id: '1', description: quote.serviceType || 'Financial & Tax Advisory Services', qty: 1, rate: subtotal }
+    ]);
     setShowQuotationModal(true);
   };
 
-  const handleSaveQuotationSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveQuotationSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (isSubmittingQuotation) return;
     setIsSubmittingQuotation(true);
 
     try {
-      const baseAmt = parseFloat(quoteForm.baseAmount) || 0;
+      const lineSubtotal = quoteLineItems.reduce((acc, item) => acc + (item.qty * item.rate), 0);
+      const baseAmt = Math.max(0, lineSubtotal - quoteDiscount);
       const vatAmt = quoteForm.includeVat ? +(baseAmt * 0.05).toFixed(3) : 0;
       const totalAmt = +(baseAmt + vatAmt).toFixed(3);
+      const serviceNamesList = quoteLineItems.map(i => i.description);
 
       if (editingQuoteId) {
         const { error } = await supabase.from('quotations').update({
-          client_name: quoteForm.clientName,
+          client_name: quoteForm.clientName || 'Valued Client',
           client_type: quoteForm.clientType,
-          services: quoteForm.services,
+          services: serviceNamesList.length > 0 ? serviceNamesList : quoteForm.services,
           subtotal: baseAmt,
           vat_amount: vatAmt,
           total_amount: totalAmt,
@@ -680,9 +762,9 @@ export default function CRMPortal() {
         const { error } = await supabase.from('quotations').insert([{
           quote_number: quoteNum,
           lead_id: quoteForm.leadId || null,
-          client_name: quoteForm.clientName,
+          client_name: quoteForm.clientName || 'Valued Client',
           client_type: quoteForm.clientType,
-          services: quoteForm.services,
+          services: serviceNamesList.length > 0 ? serviceNamesList : quoteForm.services,
           subtotal: baseAmt,
           vat_amount: vatAmt,
           total_amount: totalAmt,
@@ -1984,6 +2066,191 @@ export default function CRMPortal() {
         </div>
       )}
 
+      {/* 4.5. QUOTATIONS STUDIO TAB */}
+      {activeTab === 'quotations' && (
+        <div className="space-y-6">
+          {/* Header Banner & Quick Action */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-purple-100 text-purple-700 rounded-2xl">
+                <FileText size={24} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-gray-900 uppercase tracking-wide">
+                  {isAr ? 'استوديو عروض الأسعار التفاعلي' : 'Quotations Studio & Pipeline'}
+                </h3>
+                <p className="text-xs text-gray-500 font-bold">
+                  {isAr 
+                    ? 'إنشاء، تعديل، ومعاينة عروض الأسعار الرسمية لشركة ميسرة ومتابعة الاعتمادات والموافقات' 
+                    : 'Create, edit, preview & convert official proposals for Maisarah clients'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => openQuotationModalForLead()}
+              className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-black uppercase tracking-wider px-5 py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-purple-700/20 active:scale-95 transition-all"
+            >
+              <DollarSign size={16} />
+              <span>{isAr ? '+ إنشاء عرض سعر تفاعلي' : '+ Build Interactive Quotation'}</span>
+            </button>
+          </div>
+
+          {/* Key Metrics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex justify-between items-center">
+              <div>
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'إجمالي عروض الأسعار' : 'Total Quotations'}</p>
+                <p className="text-xl font-black text-gray-900 mt-1">{quotations.length}</p>
+              </div>
+              <div className="p-3 bg-purple-50 text-purple-600 rounded-xl"><FileText size={20} /></div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex justify-between items-center">
+              <div>
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'بانتظار الموافقة' : 'Pending / Sent'}</p>
+                <p className="text-xl font-black text-amber-600 mt-1">
+                  {quotations.filter(q => q.status === 'pending' || q.status === 'sent' || q.status === 'draft').length}
+                </p>
+              </div>
+              <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><Clock size={20} /></div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex justify-between items-center">
+              <div>
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'مقبولة ومصنوعة' : 'Approved & Invoiced'}</p>
+                <p className="text-xl font-black text-green-600 mt-1">
+                  {quotations.filter(q => q.status === 'approved' || q.status === 'invoiced').length}
+                </p>
+              </div>
+              <div className="p-3 bg-green-50 text-green-600 rounded-xl"><CheckCircle2 size={20} /></div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex justify-between items-center">
+              <div>
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'إجمالي قيمة العروض' : 'Total Pipeline Value'}</p>
+                <p className="text-xl font-black text-purple-700 mt-1">
+                  OMR {quotations.reduce((sum, q) => sum + (q.budget || 0), 0).toLocaleString()}
+                </p>
+              </div>
+              <div className="p-3 bg-purple-50 text-purple-700 rounded-xl"><DollarSign size={20} /></div>
+            </div>
+          </div>
+
+          {/* Search & Status Filters */}
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl w-full md:w-auto">
+              {(['all', 'pending', 'approved', 'invoiced'] as const).map(st => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setQuotationStatusFilter(st)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                    quotationStatusFilter === st
+                      ? 'bg-purple-700 text-white shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {st === 'all' ? (isAr ? 'كل العروض' : 'All Quotes') : st}
+                </button>
+              ))}
+            </div>
+
+            <div className="w-full md:w-72">
+              <input
+                type="text"
+                placeholder={isAr ? 'بحث برقم العرض، اسم العميل...' : 'Search by quote # or client name...'}
+                value={quotationSearchQuery}
+                onChange={e => setQuotationSearchQuery(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-bold outline-none focus:border-purple-600"
+              />
+            </div>
+          </div>
+
+          {/* Quotations Studio Cards List */}
+          <div className="space-y-4">
+            {quotations
+              .filter(q => quotationStatusFilter === 'all' || q.status === quotationStatusFilter || (quotationStatusFilter === 'pending' && (q.status === 'sent' || q.status === 'draft')))
+              .filter(q => 
+                (q.clientName || '').toLowerCase().includes(quotationSearchQuery.toLowerCase()) ||
+                (q.quoteNumber || q.id).toLowerCase().includes(quotationSearchQuery.toLowerCase()) ||
+                (q.serviceType || '').toLowerCase().includes(quotationSearchQuery.toLowerCase())
+              )
+              .map(q => (
+                <div key={q.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                  <div className="space-y-2 max-w-xl">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-base font-black text-gray-900">{q.clientName}</h4>
+                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-lg font-black">{q.quoteNumber || q.id}</span>
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-lg font-black uppercase">{q.type}</span>
+                      <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase border ${
+                        q.status === 'approved' || q.status === 'invoiced'
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {q.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 font-bold">{q.serviceType}</p>
+                    <div className="flex items-center gap-4 text-xs text-gray-400 font-medium">
+                      <span>Date: {q.created_at || '2026-07-20'}</span>
+                      <span>&bull;</span>
+                      <span>Subtotal: OMR {(q.subtotal || q.budget).toLocaleString()}</span>
+                      {q.vatAmount ? <span>+ 5% VAT (OMR {q.vatAmount})</span> : null}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-end mr-2">
+                      <p className="text-[9px] font-black uppercase text-gray-400">Total Budget</p>
+                      <p className="text-lg font-black text-purple-700">OMR {q.budget.toLocaleString()}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => openEditQuotationModal(q)}
+                      className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-black uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
+                    >
+                      <Edit size={14} /> {isAr ? 'فتح الاستوديو والتعديل' : 'Open Studio & Edit'}
+                    </button>
+
+                    {q.status === 'pending' || q.status === 'sent' || q.status === 'draft' ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleClientAcceptsQuote(q)}
+                          className="bg-green-700 hover:bg-green-800 text-white text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+                        >
+                          <CheckCircle2 size={14} /> Client Accepted (Onboard & HOD Task)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApproveQuotation(q)}
+                          className="bg-gray-900 hover:bg-black text-white text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all"
+                        >
+                          Approve & Bill
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs bg-green-100 text-green-800 border border-green-200 px-3.5 py-2 rounded-xl font-black uppercase inline-flex items-center gap-1.5">
+                        <CheckCircle2 size={14} /> Accepted & Invoiced
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            {quotations.length === 0 && (
+              <div className="bg-white p-12 rounded-3xl text-center border border-gray-100">
+                <FileText size={36} className="mx-auto text-gray-300 mb-3" />
+                <p className="text-sm font-bold text-gray-600">No quotations found.</p>
+                <p className="text-xs text-gray-400 mt-1">Click "+ Build Interactive Quotation" above to generate your first proposal.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 5. FINANCIAL CONTROLS TAB */}
       {activeTab === 'financials' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3131,151 +3398,726 @@ export default function CRMPortal() {
         </div>
       )}
 
-      {/* ── MODAL 2: Quotation Builder Modal ────────────────────────────── */}
+      {/* ── MODAL 2: Interactive Split-Screen Quotation Builder & Document Studio ── */}
       {showQuotationModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-              <div>
-                <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
-                  <DollarSign className="text-purple-600" size={20} />
-                  {editingQuoteId 
-                    ? (isAr ? 'تعديل عرض السعر' : 'Edit Quotation Details') 
-                    : (isAr ? 'منشئ عروض الأسعار' : 'Interactive Quotation Builder')}
-                </h3>
-                {quoteForm.leadId && !editingQuoteId && (
-                  <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">
-                    Pre-filled from Lead #{quoteForm.leadId}
-                  </span>
-                )}
-              </div>
-              <button onClick={() => setShowQuotationModal(false)} className="p-1 hover:bg-gray-100 rounded-full">
-                <X size={18} className="text-gray-400" />
-              </button>
-            </div>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+          {/* Printable CSS style override */}
+          <style>{`
+            @media print {
+              body * { visibility: hidden !important; }
+              #printable-quotation-studio, #printable-quotation-studio * { visibility: visible !important; }
+              #printable-quotation-studio {
+                position: fixed !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                margin: 0 !important;
+                padding: 20px !important;
+                box-shadow: none !important;
+                border: none !important;
+                background: white !important;
+                color: black !important;
+                z-index: 999999 !important;
+              }
+            }
+          `}</style>
 
-            <form onSubmit={handleSaveQuotationSubmit} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'اسم العميل / الشركة *' : 'Client / Company Name *'}</label>
-                  <input
-                    type="text"
-                    required
-                    value={quoteForm.clientName}
-                    onChange={e => setQuoteForm(p => ({ ...p, clientName: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
-                  />
+          <div className="bg-slate-950 rounded-3xl w-full max-w-7xl h-[94vh] shadow-2xl flex flex-col overflow-hidden border border-slate-800 animate-in fade-in zoom-in duration-200 text-white">
+            
+            {/* Studio Header Bar */}
+            <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex flex-wrap justify-between items-center gap-4 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-purple-600/20 border border-purple-500/30 text-purple-400 rounded-xl">
+                  <DollarSign size={22} />
                 </div>
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'نوع العميل' : 'Client Type'}</label>
-                  <select
-                    value={quoteForm.clientType}
-                    onChange={e => setQuoteForm(p => ({ ...p, clientType: e.target.value as any }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
-                  >
-                    <option value="B2B">B2B (Corporate)</option>
-                    <option value="B2C">B2C (Individual)</option>
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-white text-base tracking-wide">
+                      {isAr ? 'استوديو عروض الأسعار التفاعلي' : 'Interactive Quotation Builder'}
+                    </h3>
+                    {quoteForm.leadId && !editingQuoteId && (
+                      <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                        Pre-filled from Lead #{quoteForm.leadId}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    {isAr ? 'تعديل المعلمات وتوليد مستند طباعة A4 المباشر لشركة ميسرة' : 'Edit parameters to generate a live Maisarah A4 proposal document'}
+                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'البريد الإلكتروني' : 'Email Address'}</label>
-                  <input
-                    type="email"
-                    value={quoteForm.email}
-                    onChange={e => setQuoteForm(p => ({ ...p, email: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'رقم الهاتف' : 'Phone Number'}</label>
-                  <input
-                    type="text"
-                    value={quoteForm.phone}
-                    onChange={e => setQuoteForm(p => ({ ...p, phone: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">{isAr ? 'الخدمات المطلوبة' : 'Select Services Package'}</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {['Tax & VAT', 'Audit', 'Bookkeeping', 'Business Advisory'].map(srv => (
-                    <label key={srv} className="flex items-center gap-2 bg-gray-50 border p-2 rounded-xl cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={quoteForm.services.includes(srv)}
-                        onChange={e => {
-                          if (e.target.checked) setQuoteForm(p => ({ ...p, services: [...p.services, srv] }));
-                          else setQuoteForm(p => ({ ...p, services: p.services.filter(s => s !== srv) }));
-                        }}
-                        className="rounded accent-purple-600"
-                      />
-                      <span className="font-bold text-gray-700">{srv}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'المبلغ الأساسي (OMR) *' : 'Base Amount (OMR) *'}</label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    required
-                    value={quoteForm.baseAmount}
-                    onChange={e => setQuoteForm(p => ({ ...p, baseAmount: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold text-purple-700 text-sm"
-                  />
-                </div>
-                <div className="flex items-center pt-5">
-                  <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={quoteForm.includeVat}
-                      onChange={e => setQuoteForm(p => ({ ...p, includeVat: e.target.checked }))}
-                      className="rounded accent-purple-600 w-4 h-4"
-                    />
-                    <span>{isAr ? 'إضافة ضريبة 5% VAT' : 'Add 5% Oman VAT'}</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="bg-purple-50 p-3 rounded-xl border border-purple-200 text-purple-900 font-bold flex justify-between items-center">
-                <span>{isAr ? 'إجمالي عرض السعر مع الضريبة:' : 'Total Quote Budget:'}</span>
-                <span className="text-base text-purple-700">
-                  OMR {(parseFloat(quoteForm.baseAmount || '0') * (quoteForm.includeVat ? 1.05 : 1.0)).toFixed(3)}
-                </span>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              {/* Center Mode Switcher */}
+              <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
                 <button
                   type="button"
-                  onClick={() => setShowQuotationModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-xl"
+                  onClick={() => setQuotePresentationMode('detailed')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                    quotePresentationMode === 'detailed' 
+                      ? 'bg-purple-600 text-white shadow-sm' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
                 >
-                  {isAr ? 'إلغاء' : 'Cancel'}
+                  Detailed View
                 </button>
                 <button
-                  type="submit"
-                  disabled={isSubmittingQuotation}
-                  className="px-5 py-2 text-xs font-bold bg-purple-700 text-white rounded-xl hover:bg-purple-800 disabled:opacity-50 flex items-center gap-1.5"
+                  type="button"
+                  onClick={() => setQuotePresentationMode('simple')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                    quotePresentationMode === 'simple' 
+                      ? 'bg-purple-600 text-white shadow-sm' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
                 >
-                  {isSubmittingQuotation ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin" />
-                      <span>{editingQuoteId ? (isAr ? 'جاري التحديث...' : 'Updating...') : (isAr ? 'جاري الإنشاء...' : 'Creating...')}</span>
-                    </>
-                  ) : (
-                    <span>{editingQuoteId ? (isAr ? 'تحديث عرض السعر' : 'Update Quote') : (isAr ? 'إنشاء عرض السعر' : 'Create Quote')}</span>
-                  )}
+                  Simple Summary
                 </button>
               </div>
-            </form>
+
+              {/* Action Buttons Right */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-black uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5"
+                >
+                  <Printer size={15} /> Print / PDF
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSaveQuotationSubmit()}
+                  disabled={isSubmittingQuotation}
+                  className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-black uppercase tracking-wider px-4 py-2 rounded-xl transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-md shadow-purple-600/30"
+                >
+                  {isSubmittingQuotation ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <CheckCircle2 size={15} />
+                  )}
+                  <span>{editingQuoteId ? 'Update Quote' : 'Create Quote'}</span>
+                </button>
+
+                <button 
+                  onClick={() => setShowQuotationModal(false)} 
+                  className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Split Screen Body */}
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+              
+              {/* LEFT PANEL: Interactive Control Panel (50% Width) */}
+              <div className="w-full md:w-1/2 p-6 overflow-y-auto space-y-6 bg-slate-900 border-r border-slate-800 text-xs scrollbar-thin scrollbar-thumb-slate-700">
+                
+                {/* 1. Recipient Selection */}
+                <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                    <Users size={15} /> Select Recipient & Client Info
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Choose Existing Lead or Client</label>
+                      <select
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) return;
+                          const foundLead = leads.find(l => l.id === val);
+                          if (foundLead) {
+                            setQuoteForm(p => ({
+                              ...p,
+                              leadId: foundLead.id,
+                              clientName: foundLead.companyName ? `${foundLead.name} (${foundLead.companyName})` : foundLead.name,
+                              companyName: foundLead.companyName || '',
+                              email: foundLead.email,
+                              phone: foundLead.phone,
+                              clientType: foundLead.companyName ? 'B2B' : 'B2C'
+                            }));
+                            return;
+                          }
+                          const foundClient = clients.find(c => c.id === val);
+                          if (foundClient) {
+                            setQuoteForm(p => ({
+                              ...p,
+                              leadId: null,
+                              clientName: foundClient.companyName || foundClient.name,
+                              companyName: foundClient.companyName || '',
+                              email: foundClient.email,
+                              phone: foundClient.phone,
+                              clientType: foundClient.type
+                            }));
+                          }
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                      >
+                        <option value="">-- Choose Client or Lead --</option>
+                        <optgroup label="Leads Pipeline">
+                          {leads.map(l => (
+                            <option key={l.id} value={l.id}>{l.name} {l.companyName ? `(${l.companyName})` : ''}</option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Onboarded Clients">
+                          {clients.map(c => (
+                            <option key={c.id} value={c.id}>{c.companyName || c.name}</option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Client Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={quoteForm.clientName}
+                        onChange={e => setQuoteForm(p => ({ ...p, clientName: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Client Type</label>
+                      <select
+                        value={quoteForm.clientType}
+                        onChange={e => setQuoteForm(p => ({ ...p, clientType: e.target.value as any }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                      >
+                        <option value="B2B">B2B (Corporate)</option>
+                        <option value="B2C">B2C (Individual)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Email Address</label>
+                      <input
+                        type="email"
+                        value={quoteForm.email}
+                        onChange={e => setQuoteForm(p => ({ ...p, email: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-purple-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Phone Number</label>
+                      <input
+                        type="text"
+                        value={quoteForm.phone}
+                        onChange={e => setQuoteForm(p => ({ ...p, phone: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-purple-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Document Settings & Toggles */}
+                <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                    <FileCheck size={15} /> Document Settings & Toggles
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex items-center gap-2.5 bg-slate-900 border border-slate-800 p-3 rounded-xl cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={quoteShowQty}
+                        onChange={e => setQuoteShowQty(e.target.checked)}
+                        className="accent-purple-500 rounded w-4 h-4"
+                      />
+                      <div>
+                        <p className="font-bold text-slate-200">Show Quantity</p>
+                        <p className="text-[10px] text-slate-400">Display Qty column on quote</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 bg-slate-900 border border-slate-800 p-3 rounded-xl cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={quoteKycPhotoProof}
+                        onChange={e => setQuoteKycPhotoProof(e.target.checked)}
+                        className="accent-purple-500 rounded w-4 h-4"
+                      />
+                      <div>
+                        <p className="font-bold text-slate-200">KYC Photo Proof</p>
+                        <p className="text-[10px] text-slate-400">Include selfie guide on Page 2</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 3. Service Fee Line Items */}
+                <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                      <DollarSign size={15} /> Service Fee Items
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuoteLineItems(prev => [
+                          ...prev,
+                          { id: `item_${Date.now()}`, description: 'Additional Consultancy Line Item', qty: 1, rate: 100 }
+                        ]);
+                      }}
+                      className="bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-lg flex items-center gap-1"
+                    >
+                      <Plus size={12} /> Add Line Item
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {quoteLineItems.map((item, idx) => (
+                      <div key={item.id} className="flex items-center gap-2 bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                        <input
+                          type="text"
+                          value={item.description}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setQuoteLineItems(prev => prev.map(i => i.id === item.id ? { ...i, description: val } : i));
+                          }}
+                          placeholder="Line item title..."
+                          className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-purple-500"
+                        />
+
+                        {quoteShowQty && (
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.qty}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 1;
+                              setQuoteLineItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: val } : i));
+                            }}
+                            className="w-14 bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1.5 text-xs text-center outline-none"
+                          />
+                        )}
+
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="0.001"
+                            value={item.rate}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setQuoteLineItems(prev => prev.map(i => i.id === item.id ? { ...i, rate: val } : i));
+                            }}
+                            className="w-24 bg-slate-950 border border-slate-700 text-purple-300 font-bold rounded-lg px-2 py-1.5 text-xs text-end outline-none focus:border-purple-500"
+                          />
+                          <span className="text-[10px] text-slate-400 font-bold">OMR</span>
+                        </div>
+
+                        {quoteLineItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setQuoteLineItems(prev => prev.filter(i => i.id !== item.id))}
+                            className="p-1 text-red-400 hover:text-red-300 hover:bg-slate-800 rounded-lg"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Financial Adjustments: Discount & VAT */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Discount (OMR)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={quoteDiscount}
+                        onChange={e => setQuoteDiscount(parseFloat(e.target.value) || 0)}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs font-bold outline-none"
+                      />
+                    </div>
+                    <div className="flex items-center pt-4">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={quoteForm.includeVat}
+                          onChange={e => setQuoteForm(p => ({ ...p, includeVat: e.target.checked }))}
+                          className="rounded accent-purple-500 w-4 h-4"
+                        />
+                        <span>Add 5% Oman VAT</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Documents Required Checklist */}
+                <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                    <FileText size={15} /> Documents Required Checklist
+                  </h4>
+
+                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                    {quoteDocsRequired.map((doc, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-slate-900 p-2 rounded-xl border border-slate-850">
+                        <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-200 font-medium">
+                          <input
+                            type="checkbox"
+                            defaultChecked
+                            onChange={(e) => {
+                              if (!e.target.checked) {
+                                setQuoteDocsRequired(prev => prev.filter(d => d !== doc));
+                              }
+                            }}
+                            className="accent-purple-500 rounded"
+                          />
+                          <span>{doc}</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setQuoteDocsRequired(prev => prev.filter(d => d !== doc))}
+                          className="text-slate-500 hover:text-red-400 p-1"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Add custom required document..."
+                      value={customDocInput}
+                      onChange={e => setCustomDocInput(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!customDocInput.trim()) return;
+                        setQuoteDocsRequired(prev => [...prev, customDocInput.trim().toUpperCase()]);
+                        setCustomDocInput('');
+                      }}
+                      className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-black uppercase px-3 py-1.5 rounded-xl"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* 5. Processing Timeline Checklist */}
+                <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                    <Clock size={15} /> Processing Timeline Checklist
+                  </h4>
+
+                  <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                    {quoteTimelineSteps.map((ts) => (
+                      <div key={ts.id} className="flex items-center justify-between bg-slate-900 p-2 rounded-xl border border-slate-850">
+                        <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-200 font-medium">
+                          <input
+                            type="checkbox"
+                            checked={ts.selected}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setQuoteTimelineSteps(prev => prev.map(t => t.id === ts.id ? { ...t, selected: checked } : t));
+                            }}
+                            className="accent-purple-500 rounded"
+                          />
+                          <span>{ts.step}</span>
+                        </label>
+                        <span className="text-[10px] text-purple-400 font-bold bg-purple-950 px-2 py-0.5 rounded border border-purple-800">
+                          {ts.duration}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Step Name..."
+                      value={customTimelineStepName}
+                      onChange={e => setCustomTimelineStepName(e.target.value)}
+                      className="col-span-2 bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!customTimelineStepName.trim()) return;
+                        setQuoteTimelineSteps(prev => [
+                          ...prev,
+                          { id: `t_${Date.now()}`, step: customTimelineStepName.trim(), duration: customTimelineStepDuration, selected: true }
+                        ]);
+                        setCustomTimelineStepName('');
+                      }}
+                      className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-black uppercase px-2 py-1.5 rounded-xl"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* 6. Payment Schedule Terms */}
+                <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                    <ShieldCheck size={15} /> Payment Schedule Terms
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Advance Payment Terms</label>
+                      <input
+                        type="text"
+                        value={quotePaymentSchedule.advanceTerms}
+                        onChange={e => setQuotePaymentSchedule(p => ({ ...p, advanceTerms: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Balance Payment Terms</label>
+                      <input
+                        type="text"
+                        value={quotePaymentSchedule.balanceTerms}
+                        onChange={e => setQuotePaymentSchedule(p => ({ ...p, balanceTerms: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* RIGHT PANEL: Live Document Preview Studio (A4 Styled Printable Sheet) */}
+              <div className="w-full md:w-1/2 bg-slate-800 p-4 sm:p-8 overflow-y-auto flex justify-center items-start scrollbar-thin scrollbar-thumb-slate-600">
+                
+                {/* A4 Paper Document Container */}
+                <div 
+                  id="printable-quotation-studio" 
+                  className="bg-white text-slate-900 shadow-2xl rounded-sm p-6 sm:p-8 w-full max-w-[210mm] min-h-[297mm] flex flex-col justify-between text-[11px] font-sans border border-slate-200 relative select-text"
+                >
+                  
+                  {/* DOCUMENT HEADER */}
+                  <div className="space-y-4">
+                    
+                    {/* Top Branding Bar */}
+                    <div className="flex justify-between items-start border-b-2 border-cyan-800 pb-4">
+                      <div className="space-y-1">
+                        <img src="/logo.png" alt="Maisarah Logo" className="h-10 object-contain" />
+                        <h2 className="text-lg font-black text-cyan-900 tracking-tight leading-tight">
+                          OSBIC / Maisarah Auditing and Financial Consultant
+                        </h2>
+                        <p className="text-[10px] text-slate-500 font-bold">
+                          C.R No: 1475532 &bull; P.O Box No: 2723, P.C: 130, Ghala Heights, Bousher, Muscat
+                        </p>
+                      </div>
+                      <div className="text-end text-[10px] text-slate-600 font-medium space-y-0.5">
+                        <p className="font-bold text-cyan-900">OSBIC International LLC</p>
+                        <p>Contact: +968-72596534</p>
+                        <p>Email: info@mafcfinance.com</p>
+                        <p className="text-cyan-800 font-bold">https://maisarah.net/</p>
+                      </div>
+                    </div>
+
+                    {/* Quotation Title Banner */}
+                    <div className="bg-cyan-600 text-white p-3 text-center rounded-sm">
+                      <h1 className="text-base font-black uppercase tracking-wider">SERVICE QUOTATION</h1>
+                      <p className="text-[10px] text-cyan-100 font-medium uppercase tracking-widest">
+                        Oman Company Formation & Business Set Up &bull; Tax & Accounting Services
+                      </p>
+                    </div>
+
+                    {/* Metadata Header Box */}
+                    <div className="grid grid-cols-2 border border-slate-200 text-[10px]">
+                      <div className="p-2 border-r border-b border-slate-200">
+                        <span className="font-black text-cyan-900 uppercase block">CLIENT NAME</span>
+                        <span className="font-bold text-slate-800 text-xs">{quoteForm.clientName || 'VALUED CLIENT'}</span>
+                      </div>
+                      <div className="p-2 border-b border-slate-200">
+                        <span className="font-black text-cyan-900 uppercase block">CONTACT</span>
+                        <span className="font-bold text-slate-800 text-xs">{quoteForm.phone || '+968 9000 0000'}</span>
+                      </div>
+                      <div className="p-2 border-r border-slate-200">
+                        <span className="font-black text-cyan-900 uppercase block">PREPARED BY</span>
+                        <span className="font-bold text-slate-800">Maisarah Corporate Team</span>
+                      </div>
+                      <div className="p-2">
+                        <span className="font-black text-cyan-900 uppercase block">ACTIVITY</span>
+                        <span className="font-bold text-slate-800">{quoteForm.clientType === 'B2B' ? 'Corporate Business Advisory' : 'Individual Financial Services'}</span>
+                      </div>
+                    </div>
+
+                    {/* Itemized Fee Table */}
+                    <div className="space-y-2">
+                      <div className="bg-cyan-600 text-white font-black text-[10px] uppercase px-3 py-1.5 tracking-wider">
+                        PACKAGE INCLUDES & FEE BREAKDOWN
+                      </div>
+                      
+                      <table className="w-full border-collapse border border-slate-200 text-[10px]">
+                        <thead>
+                          <tr className="bg-slate-100 font-black text-slate-700 uppercase border-b border-slate-200">
+                            <th className="p-2 text-center w-10">Sl No.</th>
+                            <th className="p-2 text-start">Particulars / Service Description</th>
+                            {quoteShowQty && <th className="p-2 text-center w-16">Qty</th>}
+                            <th className="p-2 text-end w-24">Rate (OMR)</th>
+                            <th className="p-2 text-end w-24">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {quoteLineItems.map((line, idx) => (
+                            <tr key={line.id} className="hover:bg-slate-50">
+                              <td className="p-2 text-center font-bold text-slate-500">{idx + 1}</td>
+                              <td className="p-2 font-bold text-slate-800">{line.description}</td>
+                              {quoteShowQty && <td className="p-2 text-center font-medium">{line.qty}</td>}
+                              <td className="p-2 text-end font-medium">{line.rate.toFixed(3)}</td>
+                              <td className="p-2 text-end font-black text-slate-900">{(line.qty * line.rate).toFixed(3)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+
+                      {/* Totals Summary Box */}
+                      {(() => {
+                        const lineSub = quoteLineItems.reduce((acc, i) => acc + (i.qty * i.rate), 0);
+                        const baseAmt = Math.max(0, lineSub - quoteDiscount);
+                        const vatAmt = quoteForm.includeVat ? +(baseAmt * 0.05).toFixed(3) : 0;
+                        const totalBudget = +(baseAmt + vatAmt).toFixed(3);
+                        return (
+                          <div className="bg-slate-50 border border-slate-200 p-3 space-y-1 text-end">
+                            {quoteDiscount > 0 && (
+                              <p className="text-[10px] text-slate-500 font-medium">
+                                Subtotal: OMR {lineSub.toFixed(3)} &bull; Discount: -OMR {quoteDiscount.toFixed(3)}
+                              </p>
+                            )}
+                            {quoteForm.includeVat && (
+                              <p className="text-[10px] text-slate-500 font-medium">5% Oman VAT: OMR {vatAmt.toFixed(3)}</p>
+                            )}
+                            <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                              <div className="text-start">
+                                <span className="text-[9px] text-slate-400 font-bold uppercase block">Amount Chargeable (in words)</span>
+                                <span className="text-[11px] font-black text-cyan-900 italic">
+                                  {convertNumberToWords(totalBudget)}
+                                </span>
+                              </div>
+                              <div className="text-end">
+                                <span className="text-[9px] font-black text-slate-500 uppercase block">TOTAL PACKAGE VALUE</span>
+                                <span className="text-base font-black text-cyan-800">OMR {totalBudget.toFixed(3)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Documents Required Grid */}
+                    {quoteDocsRequired.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="bg-cyan-600 text-white font-black text-[10px] uppercase px-3 py-1 tracking-wider">
+                          DOCUMENTS REQUIRED
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[9.5px] text-slate-700 font-medium pl-1">
+                          {quoteDocsRequired.map((doc, idx) => (
+                            <p key={idx} className="flex items-start gap-1">
+                              <span className="font-bold text-cyan-800">{idx + 1}.</span> {doc}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Processing Timeline Table */}
+                    {quoteTimelineSteps.filter(t => t.selected).length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="bg-cyan-600 text-white font-black text-[10px] uppercase px-3 py-1 tracking-wider">
+                          PROCESSING TIMELINE
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[9.5px] border border-slate-200 p-2 bg-slate-50/50">
+                          {quoteTimelineSteps.filter(t => t.selected).map((ts) => (
+                            <div key={ts.id} className="flex justify-between items-center border-b border-slate-100 pb-0.5">
+                              <span className="font-bold text-slate-800">{ts.step}</span>
+                              <span className="font-black text-cyan-800">{ts.duration}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Payment Schedule Terms */}
+                    <div className="space-y-1.5">
+                      <div className="bg-cyan-600 text-white font-black text-[10px] uppercase px-3 py-1 tracking-wider">
+                        PAYMENT SCHEDULE
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-[10px] border border-slate-200 p-2.5">
+                        <div>
+                          <span className="font-black text-slate-700 block uppercase">ADVANCE PAYMENT</span>
+                          <span className="text-slate-600 font-medium">{quotePaymentSchedule.advanceTerms}</span>
+                        </div>
+                        <div>
+                          <span className="font-black text-slate-700 block uppercase">BALANCE PAYMENT</span>
+                          <span className="text-slate-600 font-medium">{quotePaymentSchedule.balanceTerms}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Important Notes */}
+                    <div className="space-y-1">
+                      <span className="font-black text-[10px] text-slate-700 uppercase block">IMPORTANT NOTES</span>
+                      <ul className="list-disc pl-4 text-[9px] text-slate-500 font-medium space-y-0.5">
+                        {quoteImportantNotes.map((note, idx) => (
+                          <li key={idx}>{note}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                  </div>
+
+                  {/* DOCUMENT FOOTER & BANK DETAILS */}
+                  <div className="pt-4 border-t-2 border-slate-200 space-y-3 mt-6">
+                    
+                    {/* Bank Details Box */}
+                    <div className="border border-slate-300 p-2.5 rounded-sm bg-slate-50/80 grid grid-cols-2 gap-2 text-[9.5px]">
+                      <div className="col-span-2 border-b border-slate-200 pb-1">
+                        <span className="font-black text-cyan-900 uppercase">COMPANY'S BANK DETAILS &bull; BANK MUSCAT</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-bold block">A/c Holder's Name:</span>
+                        <span className="font-black text-slate-800">Maisarah Auditing and Financial Consultant</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-bold block">Bank Name:</span>
+                        <span className="font-black text-slate-800">Bank Muscat</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-bold block">A/c No:</span>
+                        <span className="font-black text-slate-900 font-mono">0328074833720016</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-bold block">IBAN:</span>
+                        <span className="font-black text-slate-900 font-mono">OM640270328074833720016</span>
+                      </div>
+                      <div className="col-span-2 border-t border-slate-200 pt-1 flex justify-between items-center">
+                        <span className="text-slate-500 font-bold">Branch & SWIFT Code:</span>
+                        <span className="font-black text-slate-800 font-mono">Ghala Industrial & BMUSOMRXTBG</span>
+                      </div>
+                    </div>
+
+                    {/* Signatory & Computer Generated Notice */}
+                    <div className="flex justify-between items-end pt-2 text-[10px]">
+                      <div>
+                        <p className="text-[9px] text-slate-400 italic">This is a Computer Generated Quotation</p>
+                      </div>
+                      <div className="text-end space-y-8">
+                        <p className="font-black text-slate-800">for Maisarah Auditing and Financial Consultant</p>
+                        <p className="border-t border-slate-400 pt-1 font-bold text-slate-600 inline-block px-4">Authorised Signatory</p>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
           </div>
         </div>
       )}
