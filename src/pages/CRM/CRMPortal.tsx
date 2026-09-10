@@ -498,6 +498,8 @@ export default function CRMPortal() {
     email: '',
     phone: '',
     clientType: 'B2B' as 'B2B' | 'B2C',
+    preparedBy: 'Maisarah Corporate Team',
+    activity: 'Corporate Business Advisory',
     services: ['Tax & VAT'] as string[],
     baseAmount: '350',
     includeVat: true,
@@ -532,6 +534,7 @@ export default function CRMPortal() {
   const [customTimelineStepDuration, setCustomTimelineStepDuration] = useState('1-2 Working Days');
 
   const [quotePaymentSchedule, setQuotePaymentSchedule] = useState({
+    preset: '50_50' as '50_50' | 'full_advance' | 'completion' | 'custom',
     advanceTerms: 'Upon signing the quotation: 50%',
     balanceTerms: 'Upon completion of Visa / Service: 50%'
   });
@@ -679,6 +682,8 @@ export default function CRMPortal() {
         email: lead.email,
         phone: lead.phone,
         clientType: lead.companyName ? 'B2B' : 'B2C',
+        preparedBy: 'Maisarah Corporate Team',
+        activity: lead.companyName ? 'Corporate Business Advisory' : 'Individual Financial Services',
         services: ['Tax & VAT'],
         baseAmount: '350',
         includeVat: true,
@@ -696,6 +701,8 @@ export default function CRMPortal() {
         email: '',
         phone: '',
         clientType: 'B2B',
+        preparedBy: 'Maisarah Corporate Team',
+        activity: 'Corporate Business Advisory',
         services: ['Tax & VAT'],
         baseAmount: '350',
         includeVat: true,
@@ -720,6 +727,8 @@ export default function CRMPortal() {
       email: quote.email || '',
       phone: quote.phone || '',
       clientType: quote.type || 'B2B',
+      preparedBy: 'Maisarah Corporate Team',
+      activity: quote.type === 'B2B' ? 'Corporate Business Advisory' : 'Individual Financial Services',
       services: quote.servicesPackage || ['Tax & VAT'],
       baseAmount: subtotal.toString(),
       includeVat: hasVat,
@@ -3610,6 +3619,28 @@ export default function CRMPortal() {
                         className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-purple-500"
                       />
                     </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Prepared By</label>
+                      <input
+                        type="text"
+                        value={quoteForm.preparedBy}
+                        onChange={e => setQuoteForm(p => ({ ...p, preparedBy: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                        placeholder="e.g. Maisarah Corporate Team"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Activity / Business Scope</label>
+                      <input
+                        type="text"
+                        value={quoteForm.activity}
+                        onChange={e => setQuoteForm(p => ({ ...p, activity: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                        placeholder="e.g. Corporate Business Advisory"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -3862,14 +3893,51 @@ export default function CRMPortal() {
                     <ShieldCheck size={15} /> Payment Schedule Terms
                   </h4>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Payment Schedule Option</label>
+                    <select
+                      value={quotePaymentSchedule.preset}
+                      onChange={(e) => {
+                        const val = e.target.value as '50_50' | 'full_advance' | 'completion' | 'custom';
+                        if (val === '50_50') {
+                          setQuotePaymentSchedule({
+                            preset: '50_50',
+                            advanceTerms: 'Upon signing the quotation: 50%',
+                            balanceTerms: 'Upon completion of Visa / Service: 50%'
+                          });
+                        } else if (val === 'full_advance') {
+                          setQuotePaymentSchedule({
+                            preset: 'full_advance',
+                            advanceTerms: '100% Full Payment upon signing the quotation',
+                            balanceTerms: 'Nil (Fully Paid in Advance)'
+                          });
+                        } else if (val === 'completion') {
+                          setQuotePaymentSchedule({
+                            preset: 'completion',
+                            advanceTerms: 'Nil (0% Advance)',
+                            balanceTerms: '100% Full Payment upon completion of service'
+                          });
+                        } else {
+                          setQuotePaymentSchedule(p => ({ ...p, preset: 'custom' }));
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                    >
+                      <option value="50_50">50% Advance / 50% Balance</option>
+                      <option value="full_advance">100% Full Advance Payment</option>
+                      <option value="completion">100% Payment upon Completion</option>
+                      <option value="custom">Custom Terms (Free Text)</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     <div>
                       <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Advance Payment Terms</label>
                       <input
                         type="text"
                         value={quotePaymentSchedule.advanceTerms}
-                        onChange={e => setQuotePaymentSchedule(p => ({ ...p, advanceTerms: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none"
+                        onChange={e => setQuotePaymentSchedule(p => ({ ...p, preset: 'custom', advanceTerms: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:border-purple-500"
                       />
                     </div>
                     <div>
@@ -3877,8 +3945,8 @@ export default function CRMPortal() {
                       <input
                         type="text"
                         value={quotePaymentSchedule.balanceTerms}
-                        onChange={e => setQuotePaymentSchedule(p => ({ ...p, balanceTerms: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none"
+                        onChange={e => setQuotePaymentSchedule(p => ({ ...p, preset: 'custom', balanceTerms: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:border-purple-500"
                       />
                     </div>
                   </div>
@@ -3934,11 +4002,11 @@ export default function CRMPortal() {
                       </div>
                       <div className="p-2 border-r border-slate-200">
                         <span className="font-black text-brand-dark uppercase block">PREPARED BY</span>
-                        <span className="font-bold text-slate-800">Maisarah Corporate Team</span>
+                        <span className="font-bold text-slate-800">{quoteForm.preparedBy || 'Maisarah Corporate Team'}</span>
                       </div>
                       <div className="p-2">
                         <span className="font-black text-brand-dark uppercase block">ACTIVITY</span>
-                        <span className="font-bold text-slate-800">{quoteForm.clientType === 'B2B' ? 'Corporate Business Advisory' : 'Individual Financial Services'}</span>
+                        <span className="font-bold text-slate-800">{quoteForm.activity || (quoteForm.clientType === 'B2B' ? 'Corporate Business Advisory' : 'Individual Financial Services')}</span>
                       </div>
                     </div>
 
