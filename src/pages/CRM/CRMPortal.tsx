@@ -3899,28 +3899,28 @@ export default function CRMPortal() {
                   <div className="space-y-4">
                     
                     {/* Top Branding Bar */}
-                    <div className="flex justify-between items-start border-b-2 border-cyan-800 pb-4">
+                    <div className="flex justify-between items-start border-b-2 border-brand-dark pb-4">
                       <div className="space-y-1">
                         <img src="/logo.png" alt="Maisarah Logo" className="h-10 object-contain" />
-                        <h2 className="text-lg font-black text-cyan-900 tracking-tight leading-tight">
-                          OSBIC / Maisarah Auditing and Financial Consultant
+                        <h2 className="text-lg font-black text-brand-dark tracking-tight leading-tight">
+                          Maisarah Auditing and Financial Consultant
                         </h2>
                         <p className="text-[10px] text-slate-500 font-bold">
                           C.R No: 1475532 &bull; P.O Box No: 2723, P.C: 130, Ghala Heights, Bousher, Muscat
                         </p>
                       </div>
                       <div className="text-end text-[10px] text-slate-600 font-medium space-y-0.5">
-                        <p className="font-bold text-cyan-900">OSBIC International LLC</p>
-                        <p>Contact: +968-72596534</p>
-                        <p>Email: info@mafcfinance.com</p>
-                        <p className="text-cyan-800 font-bold">https://maisarah.net/</p>
+                        <p className="font-bold text-brand-dark">Maisarah Auditing & Financial Consultant</p>
+                        <p>Contact: +968 72596534</p>
+                        <p>Email: info@maisarah.net</p>
+                        <p className="text-brand-dark font-bold">https://maisarah.net/</p>
                       </div>
                     </div>
 
                     {/* Quotation Title Banner */}
-                    <div className="bg-cyan-600 text-white p-3 text-center rounded-sm">
+                    <div className="bg-brand-dark text-white p-3 text-center rounded-sm">
                       <h1 className="text-base font-black uppercase tracking-wider">SERVICE QUOTATION</h1>
-                      <p className="text-[10px] text-cyan-100 font-medium uppercase tracking-widest">
+                      <p className="text-[10px] text-red-100 font-medium uppercase tracking-widest">
                         Oman Company Formation & Business Set Up &bull; Tax & Accounting Services
                       </p>
                     </div>
@@ -3928,26 +3928,26 @@ export default function CRMPortal() {
                     {/* Metadata Header Box */}
                     <div className="grid grid-cols-2 border border-slate-200 text-[10px]">
                       <div className="p-2 border-r border-b border-slate-200">
-                        <span className="font-black text-cyan-900 uppercase block">CLIENT NAME</span>
+                        <span className="font-black text-brand-dark uppercase block">CLIENT NAME</span>
                         <span className="font-bold text-slate-800 text-xs">{quoteForm.clientName || 'VALUED CLIENT'}</span>
                       </div>
                       <div className="p-2 border-b border-slate-200">
-                        <span className="font-black text-cyan-900 uppercase block">CONTACT</span>
+                        <span className="font-black text-brand-dark uppercase block">CONTACT</span>
                         <span className="font-bold text-slate-800 text-xs">{quoteForm.phone || '+968 9000 0000'}</span>
                       </div>
                       <div className="p-2 border-r border-slate-200">
-                        <span className="font-black text-cyan-900 uppercase block">PREPARED BY</span>
+                        <span className="font-black text-brand-dark uppercase block">PREPARED BY</span>
                         <span className="font-bold text-slate-800">Maisarah Corporate Team</span>
                       </div>
                       <div className="p-2">
-                        <span className="font-black text-cyan-900 uppercase block">ACTIVITY</span>
+                        <span className="font-black text-brand-dark uppercase block">ACTIVITY</span>
                         <span className="font-bold text-slate-800">{quoteForm.clientType === 'B2B' ? 'Corporate Business Advisory' : 'Individual Financial Services'}</span>
                       </div>
                     </div>
 
                     {/* Itemized Fee Table */}
                     <div className="space-y-2">
-                      <div className="bg-cyan-600 text-white font-black text-[10px] uppercase px-3 py-1.5 tracking-wider">
+                      <div className="bg-brand-dark text-white font-black text-[10px] uppercase px-3 py-1.5 tracking-wider">
                         PACKAGE INCLUDES & FEE BREAKDOWN
                       </div>
                       
@@ -3993,13 +3993,13 @@ export default function CRMPortal() {
                             <div className="flex justify-between items-center pt-1 border-t border-slate-200">
                               <div className="text-start">
                                 <span className="text-[9px] text-slate-400 font-bold uppercase block">Amount Chargeable (in words)</span>
-                                <span className="text-[11px] font-black text-cyan-900 italic">
+                                <span className="text-[11px] font-black text-brand-dark italic">
                                   {convertNumberToWords(totalBudget)}
                                 </span>
                               </div>
                               <div className="text-end">
                                 <span className="text-[9px] font-black text-slate-500 uppercase block">TOTAL PACKAGE VALUE</span>
-                                <span className="text-base font-black text-cyan-800">OMR {totalBudget.toFixed(3)}</span>
+                                <span className="text-base font-black text-brand-dark">OMR {totalBudget.toFixed(3)}</span>
                               </div>
                             </div>
                           </div>
@@ -4010,13 +4010,13 @@ export default function CRMPortal() {
                     {/* Documents Required Grid */}
                     {quoteDocsRequired.length > 0 && (
                       <div className="space-y-1.5">
-                        <div className="bg-cyan-600 text-white font-black text-[10px] uppercase px-3 py-1 tracking-wider">
+                        <div className="bg-brand-dark text-white font-black text-[10px] uppercase px-3 py-1 tracking-wider">
                           DOCUMENTS REQUIRED
                         </div>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[9.5px] text-slate-700 font-medium pl-1">
                           {quoteDocsRequired.map((doc, idx) => (
                             <p key={idx} className="flex items-start gap-1">
-                              <span className="font-bold text-cyan-800">{idx + 1}.</span> {doc}
+                              <span className="font-bold text-brand-dark">{idx + 1}.</span> {doc}
                             </p>
                           ))}
                         </div>
@@ -4026,14 +4026,14 @@ export default function CRMPortal() {
                     {/* Processing Timeline Table */}
                     {quoteTimelineSteps.filter(t => t.selected).length > 0 && (
                       <div className="space-y-1.5">
-                        <div className="bg-cyan-600 text-white font-black text-[10px] uppercase px-3 py-1 tracking-wider">
+                        <div className="bg-brand-dark text-white font-black text-[10px] uppercase px-3 py-1 tracking-wider">
                           PROCESSING TIMELINE
                         </div>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[9.5px] border border-slate-200 p-2 bg-slate-50/50">
                           {quoteTimelineSteps.filter(t => t.selected).map((ts) => (
                             <div key={ts.id} className="flex justify-between items-center border-b border-slate-100 pb-0.5">
                               <span className="font-bold text-slate-800">{ts.step}</span>
-                              <span className="font-black text-cyan-800">{ts.duration}</span>
+                              <span className="font-black text-brand-dark">{ts.duration}</span>
                             </div>
                           ))}
                         </div>
@@ -4042,7 +4042,7 @@ export default function CRMPortal() {
 
                     {/* Payment Schedule Terms */}
                     <div className="space-y-1.5">
-                      <div className="bg-cyan-600 text-white font-black text-[10px] uppercase px-3 py-1 tracking-wider">
+                      <div className="bg-brand-dark text-white font-black text-[10px] uppercase px-3 py-1 tracking-wider">
                         PAYMENT SCHEDULE
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-[10px] border border-slate-200 p-2.5">
@@ -4075,7 +4075,7 @@ export default function CRMPortal() {
                     {/* Bank Details Box */}
                     <div className="border border-slate-300 p-2.5 rounded-sm bg-slate-50/80 grid grid-cols-2 gap-2 text-[9.5px]">
                       <div className="col-span-2 border-b border-slate-200 pb-1">
-                        <span className="font-black text-cyan-900 uppercase">COMPANY'S BANK DETAILS &bull; BANK MUSCAT</span>
+                        <span className="font-black text-brand-dark uppercase">MAISARAH BANK DETAILS &bull; BANK MUSCAT</span>
                       </div>
                       <div>
                         <span className="text-slate-500 font-bold block">A/c Holder's Name:</span>
