@@ -196,7 +196,7 @@ const EmployeeDashboard = () => {
         .eq('status', 'completed');
 
       if (user?.id) {
-        completedQuery = completedQuery.or(`employee_id.eq.${user.id},created_by.eq.${user.id}`);
+        completedQuery = completedQuery.eq('employee_id', user.id);
       }
 
       const { count: completedCount } = await completedQuery;

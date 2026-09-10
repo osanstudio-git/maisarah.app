@@ -126,7 +126,7 @@ const ServicesManager = () => {
 
       // Scope strictly to this employee's assigned tasks or creations
       if (user?.id) {
-        query = query.or(`employee_id.eq.${user.id},created_by.eq.${user.id}`);
+        query = query.eq('employee_id', user.id);
       }
 
       const [svcRes, clientRes] = await Promise.all([

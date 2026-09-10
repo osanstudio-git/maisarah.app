@@ -23,6 +23,7 @@ export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     // Redirect to a dashboard based on their actual role
     if (role === 'manager') return <Navigate to="/manager" replace />;
     if (role === 'hr') return <Navigate to="/hr/dashboard" replace />;
+    if (role === 'crm') return <Navigate to="/crm/dashboard" replace />;
     if (role === 'accountant') return <Navigate to="/accountant" replace />;
     if (role === 'employee') return <Navigate to="/employee" replace />;
     if (role === 'client') return <Navigate to="/client" replace />;
