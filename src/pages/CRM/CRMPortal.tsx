@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { 
-  Users, Target, Clock, PlusCircle, AlertCircle, FileText, CheckCircle2, 
-  ChevronRight, XCircle, ArrowUpRight, BarChart2, ShieldCheck, Download, 
+import {
+  Users, Target, Clock, PlusCircle, AlertCircle, FileText, CheckCircle2,
+  ChevronRight, XCircle, ArrowUpRight, BarChart2, ShieldCheck, Download,
   Trash2, Edit, Award, Sparkles, Building2, UserPlus, FileCheck, Check, ArrowRight,
   TrendingUp, RefreshCw, AlertTriangle, Calendar, Layers, Activity, Loader2,
   PhoneCall, MessageSquare, Send, DollarSign, X, ExternalLink, Filter, Printer, Plus, CheckCheck
 } from 'lucide-react';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -200,7 +200,7 @@ export default function CRMPortal() {
     if (path.includes('/crm/club')) return 'club';
     return 'dashboard';
   };
-  
+
   const activeTab = getActiveTabFromPath();
 
   const handleTabChange = (tabId: string) => {
@@ -296,9 +296,9 @@ export default function CRMPortal() {
         supabase.from('quotations').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('id, full_name, email, role'),
       ]);
-      if (leadsRes.data)    setLeads(leadsRes.data.map(mapLead));
-      if (clientsRes.data)  setClients(clientsRes.data.map(mapClient));
-      if (quotesRes.data)   setQuotations(quotesRes.data.map(mapQuotation));
+      if (leadsRes.data) setLeads(leadsRes.data.map(mapLead));
+      if (clientsRes.data) setClients(clientsRes.data.map(mapClient));
+      if (quotesRes.data) setQuotations(quotesRes.data.map(mapQuotation));
       if (profilesRes.data && profilesRes.data.length > 0) {
         const fetchedStaff = profilesRes.data.map(p => ({
           id: p.id,
@@ -320,8 +320,8 @@ export default function CRMPortal() {
     // Real-time subscriptions
     const ch = supabase
       .channel('crm_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' },      () => fetchAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' },    () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchAll())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => fetchAll())
       .subscribe();
 
@@ -336,7 +336,7 @@ export default function CRMPortal() {
   ]);
   const [selectedClubTierFilter, setSelectedClubTierFilter] = useState<'all' | 'silver' | 'gold' | 'platinum'>('all');
   const [clubSearch, setClubSearch] = useState('');
-  
+
   // WhatsApp States
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [whatsAppTargetUser, setWhatsAppTargetUser] = useState<{ name: string; phone: string } | null>(null);
@@ -364,7 +364,7 @@ export default function CRMPortal() {
   // Generate dynamic alerts (stale leads and expiring contracts)
   const dynamicAlerts = React.useMemo(() => {
     const alertsList: { type: 'stale_lead' | 'expiry'; title: string; desc: string }[] = [];
-    
+
     // 1. Check for stale leads (> 7 days in follow_up or connect)
     leads.forEach(lead => {
       if (lead.pipelineStep === 'follow_up' || lead.pipelineStep === 'connect') {
@@ -376,8 +376,8 @@ export default function CRMPortal() {
           alertsList.push({
             type: 'stale_lead',
             title: isAr ? 'تحذير: فرصة معلقة قديمة' : 'Warning: Stale Lead',
-            desc: isAr 
-              ? `العميل المحتمل ${lead.name} معلق في خطوة "${lead.pipelineStep === 'follow_up' ? 'المتابعة' : 'الاتصال'}" منذ ${diffDays} أيام.` 
+            desc: isAr
+              ? `العميل المحتمل ${lead.name} معلق في خطوة "${lead.pipelineStep === 'follow_up' ? 'المتابعة' : 'الاتصال'}" منذ ${diffDays} أيام.`
               : `Lead ${lead.name} has been stuck in "${lead.pipelineStep === 'follow_up' ? 'Follow-up' : 'Connect'}" step for ${diffDays} days.`,
           });
         }
@@ -395,8 +395,8 @@ export default function CRMPortal() {
           alertsList.push({
             type: 'expiry',
             title: isAr ? 'تنبيه: انتهاء عقد قريب' : 'Alert: Contract Expiring Soon',
-            desc: isAr 
-              ? `عقد ${client.companyName || client.name} ينتهي خلال ${diffDays} يوم (${client.contractExpiryDate}).` 
+            desc: isAr
+              ? `عقد ${client.companyName || client.name} ينتهي خلال ${diffDays} يوم (${client.contractExpiryDate}).`
               : `Contract for ${client.companyName || client.name} expires in ${diffDays} days (${client.contractExpiryDate}).`,
           });
         }
@@ -925,7 +925,7 @@ export default function CRMPortal() {
   // --- Lead Onboarding & Submission logic (Supabase) ---
   const handleOnboardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     let calculatedBilling = onboardForm.monthlyBilling;
     if (calculatedBilling === 0) {
       calculatedBilling = onboardForm.servicePackage.reduce((sum, pkg) => sum + (SERVICE_RATES[pkg] || 0), 0);
@@ -948,7 +948,7 @@ export default function CRMPortal() {
       registration_number: clientType === 'B2B' ? onboardForm.registrationNumber : null,
       services_package: onboardForm.servicePackage,
       overall_manager: onboardForm.overallManager,
-      delegated_services: onboardForm.servicePackage.reduce((acc: Record<string,string>, service: string) => {
+      delegated_services: onboardForm.servicePackage.reduce((acc: Record<string, string>, service: string) => {
         const emp = MOCK_EMPLOYEES.find(e => e.dept === service) || MOCK_EMPLOYEES[0];
         acc[service] = emp.name;
         return acc;
@@ -1114,8 +1114,8 @@ export default function CRMPortal() {
         ref_table: 'clients',
       }]);
 
-      alert(isAr 
-        ? `تم تحويل الفرصة إلى عميل بنجاح وإرسال مهمة العمل لرئيس القسم!` 
+      alert(isAr
+        ? `تم تحويل الفرصة إلى عميل بنجاح وإرسال مهمة العمل لرئيس القسم!`
         : `🎉 Lead Converted to Client! Job Task dispatched to HOD workspace!`
       );
 
@@ -1233,15 +1233,15 @@ export default function CRMPortal() {
     setApiProgress(0);
     setApiDispatching(true);
     setApiLogs(['Initializing Secure WhatsApp Gateway (Meta Cloud API)...']);
-    
+
     setTimeout(() => {
       setApiLogs(prev => [...prev, 'Authenticating credentials... Token verified.']);
       setApiProgress(20);
     }, 850);
 
     setTimeout(() => {
-      const recipientCount = whatsAppBroadcastMode 
-        ? clients.filter(c => c.isClubMember).length 
+      const recipientCount = whatsAppBroadcastMode
+        ? clients.filter(c => c.isClubMember).length
         : 1;
       setApiLogs(prev => [...prev, `Compiling payload. Total messages queued: ${recipientCount}`]);
       setApiProgress(40);
@@ -1262,7 +1262,7 @@ export default function CRMPortal() {
       }
     }, 2400);
 
-    const completeTime = whatsAppBroadcastMode 
+    const completeTime = whatsAppBroadcastMode
       ? 2400 + (clients.filter(c => c.isClubMember).length * 400) + 500
       : 3400;
 
@@ -1278,7 +1278,7 @@ export default function CRMPortal() {
     if (!newClientLogText.trim()) return;
     const today = new Date().toISOString().split('T')[0];
     const logEntry = `${today} - ${newClientLogText.trim()}`;
-    
+
     setClients(prev => prev.map(c => {
       if (c.id === clientId) {
         const updatedHistory = [...c.activityHistory, logEntry];
@@ -1295,7 +1295,7 @@ export default function CRMPortal() {
     if (!newLeadLogText.trim()) return;
     const today = new Date().toISOString().split('T')[0];
     const logEntry = `${today} - ${newLeadLogText.trim()}`;
-    
+
     setLeads(prev => prev.map(l => {
       if (l.id === leadId) {
         const updatedHistory = [...(l.activityHistory || []), logEntry];
@@ -1313,7 +1313,7 @@ export default function CRMPortal() {
     // Schedule follow-up for 3 days from now
     today.setDate(today.getDate() + 3);
     const dateStr = today.toISOString().split('T')[0];
-    
+
     const newRem: Reminder = {
       id: `RM-${Math.floor(400 + Math.random() * 600)}`,
       title: `Follow up callback with lead: ${leadName}`,
@@ -1327,15 +1327,15 @@ export default function CRMPortal() {
   };
 
   const filteredLeads = leads.filter(lead => {
-    const matchesSearch = 
+    const matchesSearch =
       lead.name.toLowerCase().includes(leadSearchQuery.toLowerCase()) ||
       (lead.companyName && lead.companyName.toLowerCase().includes(leadSearchQuery.toLowerCase())) ||
       lead.email.toLowerCase().includes(leadSearchQuery.toLowerCase()) ||
       lead.id.toLowerCase().includes(leadSearchQuery.toLowerCase());
-      
+
     const matchesStep = leadStepFilter === 'all' || lead.pipelineStep === leadStepFilter;
     const matchesStatus = leadStatusFilter === 'all' || lead.status === leadStatusFilter;
-    
+
     return matchesSearch && matchesStep && matchesStatus;
   });
 
@@ -1352,9 +1352,9 @@ export default function CRMPortal() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300" dir={isAr ? 'rtl' : 'ltr'}>
-      
+
       {/* --- Tab Content Areas --- */}
-      
+
       {/* 1. DASHBOARD INSIGHTS TAB */}
       {activeTab === 'dashboard' && (
         <div className="space-y-6">
@@ -1399,12 +1399,12 @@ export default function CRMPortal() {
                   <AreaChart data={RECHARTS_DATA}>
                     <defs>
                       <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#A11212" stopOpacity={0.2}/>
-                        <stop offset="95%" stopColor="#A11212" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#A11212" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#A11212" stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="colorConv" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#16a34a" stopOpacity={0.2}/>
-                        <stop offset="95%" stopColor="#16a34a" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#16a34a" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -1433,13 +1433,12 @@ export default function CRMPortal() {
                     </div>
                   ) : (
                     dynamicAlerts.map((alert, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`flex gap-3 items-start p-3 rounded-2xl border ${
-                          alert.type === 'stale_lead' 
-                            ? 'bg-red-50/40 border-red-100/50 text-[#A11212]' 
-                            : 'bg-yellow-50/40 border-yellow-100/50 text-yellow-700'
-                        }`}
+                      <div
+                        key={idx}
+                        className={`flex gap-3 items-start p-3 rounded-2xl border ${alert.type === 'stale_lead'
+                          ? 'bg-red-50/40 border-red-100/50 text-[#A11212]'
+                          : 'bg-yellow-50/40 border-yellow-100/50 text-yellow-700'
+                          }`}
                       >
                         <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
                         <div>
@@ -1475,7 +1474,7 @@ export default function CRMPortal() {
               <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">Qualification & Lead Pipeline</h3>
               <p className="text-xs text-gray-500 font-bold">Follow leads through the step-by-step qualification flow to Client status</p>
             </div>
-            
+
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
               <button
                 type="button"
@@ -1500,22 +1499,20 @@ export default function CRMPortal() {
                 <button
                   type="button"
                   onClick={() => setPipelineViewMode('kanban')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                    pipelineViewMode === 'kanban' 
-                      ? 'bg-[#A11212] text-white shadow-sm' 
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${pipelineViewMode === 'kanban'
+                    ? 'bg-[#A11212] text-white shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                    }`}
                 >
                   Kanban Board
                 </button>
                 <button
                   type="button"
                   onClick={() => setPipelineViewMode('list')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                    pipelineViewMode === 'list' 
-                      ? 'bg-[#A11212] text-white shadow-sm' 
-                      : 'text-gray-650 hover:text-gray-900'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${pipelineViewMode === 'list'
+                    ? 'bg-[#A11212] text-white shadow-sm'
+                    : 'text-gray-650 hover:text-gray-900'
+                    }`}
                 >
                   Data List
                 </button>
@@ -1574,7 +1571,7 @@ export default function CRMPortal() {
           {pipelineViewMode === 'kanban' ? (
             /* Kanban Columns View */
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 overflow-x-auto pb-4">
-              
+
               {/* Column 1: Follow Up */}
               <div className="bg-gray-100/70 p-4 rounded-3xl border border-gray-200/50 min-h-[450px] flex flex-col space-y-3">
                 <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest border-b pb-2 flex justify-between">
@@ -1583,9 +1580,9 @@ export default function CRMPortal() {
                 </h4>
                 <div className="flex-1 space-y-3 overflow-y-auto max-h-[500px]">
                   {leads.filter(l => l.pipelineStep === 'follow_up').map(lead => (
-                    <LeadCard 
-                      key={lead.id} 
-                      lead={lead} 
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
                       onMove={(step) => shiftLeadStep(lead.id, step)}
                       onViewDossier={() => setSelectedLeadForHistory(lead)}
                       onLogCall={() => openLogModal(lead)}
@@ -1605,9 +1602,9 @@ export default function CRMPortal() {
                 </h4>
                 <div className="flex-1 space-y-3 overflow-y-auto max-h-[500px]">
                   {leads.filter(l => l.pipelineStep === 'add_data').map(lead => (
-                    <LeadCard 
-                      key={lead.id} 
-                      lead={lead} 
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
                       onMove={(step) => shiftLeadStep(lead.id, step)}
                       onViewDossier={() => setSelectedLeadForHistory(lead)}
                       onLogCall={() => openLogModal(lead)}
@@ -1627,9 +1624,9 @@ export default function CRMPortal() {
                 </h4>
                 <div className="flex-1 space-y-3 overflow-y-auto max-h-[500px]">
                   {leads.filter(l => l.pipelineStep === 'connect').map(lead => (
-                    <LeadCard 
-                      key={lead.id} 
-                      lead={lead} 
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
                       onMove={(step) => shiftLeadStep(lead.id, step)}
                       onViewDossier={() => setSelectedLeadForHistory(lead)}
                       onLogCall={() => openLogModal(lead)}
@@ -1649,9 +1646,9 @@ export default function CRMPortal() {
                 </h4>
                 <div className="flex-1 space-y-3 overflow-y-auto max-h-[500px]">
                   {leads.filter(l => l.pipelineStep === 'update').map(lead => (
-                    <LeadCard 
-                      key={lead.id} 
-                      lead={lead} 
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
                       onMove={(step) => shiftLeadStep(lead.id, step)}
                       onViewDossier={() => setSelectedLeadForHistory(lead)}
                       onLogCall={() => openLogModal(lead)}
@@ -1671,9 +1668,9 @@ export default function CRMPortal() {
                 </h4>
                 <div className="flex-1 space-y-3 overflow-y-auto max-h-[500px]">
                   {leads.filter(l => l.pipelineStep === 'sort').map(lead => (
-                    <LeadCard 
-                      key={lead.id} 
-                      lead={lead} 
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
                       onMove={(step) => shiftLeadStep(lead.id, step)}
                       onViewDossier={() => setSelectedLeadForHistory(lead)}
                       onLogCall={() => openLogModal(lead)}
@@ -1856,11 +1853,10 @@ export default function CRMPortal() {
                         </div>
                       </td>
                       <td className="p-4">
-                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${
-                          client.type === 'B2B' 
-                            ? 'bg-red-50 text-red-700 border-red-100' 
-                            : 'bg-gray-100 text-gray-700 border-gray-200'
-                        }`}>
+                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${client.type === 'B2B'
+                          ? 'bg-red-50 text-red-700 border-red-100'
+                          : 'bg-gray-100 text-gray-700 border-gray-200'
+                          }`}>
                           {client.type}
                         </span>
                       </td>
@@ -2089,8 +2085,8 @@ export default function CRMPortal() {
                   {isAr ? 'استوديو عروض الأسعار التفاعلي' : 'Quotations Studio & Pipeline'}
                 </h3>
                 <p className="text-xs text-gray-500 font-bold">
-                  {isAr 
-                    ? 'إنشاء، تعديل، ومعاينة عروض الأسعار الرسمية لشركة ميسرة ومتابعة الاعتمادات والموافقات' 
+                  {isAr
+                    ? 'إنشاء، تعديل، ومعاينة عروض الأسعار الرسمية لشركة ميسرة ومتابعة الاعتمادات والموافقات'
                     : 'Create, edit, preview & convert official proposals for Maisarah clients'}
                 </p>
               </div>
@@ -2155,11 +2151,10 @@ export default function CRMPortal() {
                   key={st}
                   type="button"
                   onClick={() => setQuotationStatusFilter(st)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                    quotationStatusFilter === st
-                      ? 'bg-purple-700 text-white shadow-xs'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${quotationStatusFilter === st
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                    }`}
                 >
                   {st === 'all' ? (isAr ? 'كل العروض' : 'All Quotes') : st}
                 </button>
@@ -2181,7 +2176,7 @@ export default function CRMPortal() {
           <div className="space-y-4">
             {quotations
               .filter(q => quotationStatusFilter === 'all' || q.status === quotationStatusFilter || (quotationStatusFilter === 'pending' && (q.status === 'sent' || q.status === 'draft')))
-              .filter(q => 
+              .filter(q =>
                 (q.clientName || '').toLowerCase().includes(quotationSearchQuery.toLowerCase()) ||
                 (q.quoteNumber || q.id).toLowerCase().includes(quotationSearchQuery.toLowerCase()) ||
                 (q.serviceType || '').toLowerCase().includes(quotationSearchQuery.toLowerCase())
@@ -2193,11 +2188,10 @@ export default function CRMPortal() {
                       <h4 className="text-base font-black text-gray-900">{q.clientName}</h4>
                       <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-lg font-black">{q.quoteNumber || q.id}</span>
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-lg font-black uppercase">{q.type}</span>
-                      <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase border ${
-                        q.status === 'approved' || q.status === 'invoiced'
-                          ? 'bg-green-50 text-green-700 border-green-200'
-                          : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
+                      <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase border ${q.status === 'approved' || q.status === 'invoiced'
+                        ? 'bg-green-50 text-green-700 border-green-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
                         {q.status}
                       </span>
                     </div>
@@ -2333,11 +2327,10 @@ export default function CRMPortal() {
               <p>Under regulatory policy guidelines, corporate data spreadsheets cannot be downloaded without secondary authorization.</p>
               <p>Please toggle the **VP Export Sign-off** inside the clients tab to enable full directory downloads.</p>
             </div>
-            
+
             <div className="border-t border-gray-100 pt-4 text-center">
-              <span className={`inline-block px-3 py-1.5 rounded-full text-[10px] font-black uppercase ${
-                isVpSignedOff ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-              }`}>
+              <span className={`inline-block px-3 py-1.5 rounded-full text-[10px] font-black uppercase ${isVpSignedOff ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                }`}>
                 {isVpSignedOff ? 'Export Authorized' : 'Export Restricted'}
               </span>
             </div>
@@ -2357,19 +2350,17 @@ export default function CRMPortal() {
 
             <div className="space-y-3">
               {reminders.map(rem => (
-                <div 
-                  key={rem.id} 
+                <div
+                  key={rem.id}
                   onClick={() => toggleReminder(rem.id)}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer flex justify-between items-center ${
-                    rem.completed 
-                      ? 'bg-gray-50 border-gray-200 opacity-60' 
-                      : 'bg-white border-gray-100 hover:border-gray-300'
-                  }`}
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer flex justify-between items-center ${rem.completed
+                    ? 'bg-gray-50 border-gray-200 opacity-60'
+                    : 'bg-white border-gray-100 hover:border-gray-300'
+                    }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                      rem.completed ? 'bg-green-600 border-green-600' : 'border-gray-300'
-                    }`}>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${rem.completed ? 'bg-green-600 border-green-600' : 'border-gray-300'
+                      }`}>
                       {rem.completed && <Check size={12} className="text-white" />}
                     </div>
                     <span className={`text-xs font-bold ${rem.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
@@ -2377,11 +2368,10 @@ export default function CRMPortal() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
-                      rem.type === 'follow_up' ? 'bg-orange-50 text-orange-700' :
+                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${rem.type === 'follow_up' ? 'bg-orange-50 text-orange-700' :
                       rem.type === 'deadline' ? 'bg-red-50 text-red-750' :
-                      'bg-blue-50 text-blue-700'
-                    }`}>
+                        'bg-blue-50 text-blue-700'
+                      }`}>
                       {rem.type}
                     </span>
                     <span className="text-[10px] text-gray-400 font-bold">{rem.date}</span>
@@ -2454,8 +2444,8 @@ export default function CRMPortal() {
               </span>
               <h2 className="text-3xl font-black tracking-tight">{isAr ? 'نادي أعمال ميسرة' : 'Maisarah Business Club'}</h2>
               <p className="text-red-100/70 text-xs max-w-xl font-medium">
-                {isAr 
-                  ? 'برنامج حصري يربط بين رواد الأعمال وأصحاب الشركات لتلقي استشارات مجانية، وتحديثات ضريبية دورية، وخصومات مميزة على باقات خدماتنا.' 
+                {isAr
+                  ? 'برنامج حصري يربط بين رواد الأعمال وأصحاب الشركات لتلقي استشارات مجانية، وتحديثات ضريبية دورية، وخصومات مميزة على باقات خدماتنا.'
                   : 'An exclusive network connecting corporate clients to receive complimentary tax advisories, regulatory digests, and tier-based discounts.'}
               </p>
             </div>
@@ -2469,7 +2459,7 @@ export default function CRMPortal() {
                   <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">{isAr ? 'أعضاء النادي النشطون' : 'Active Club Members'}</h3>
                   <p className="text-xs text-gray-500 font-bold">{isAr ? 'إدارة وتصفية العملاء المشتركين بالنادي' : 'Manage and filter active club members and benefits'}</p>
                 </div>
-                
+
                 <div className="flex gap-2 w-full sm:w-auto">
                   <input
                     type="text"
@@ -2513,11 +2503,10 @@ export default function CRMPortal() {
                             <p className="text-[10px] text-gray-400 font-bold">{member.name} &bull; {member.phone}</p>
                           </td>
                           <td className="py-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                              member.clubTier === 'platinum' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' :
+                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${member.clubTier === 'platinum' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' :
                               member.clubTier === 'gold' ? 'bg-amber-50 border-amber-200 text-amber-700' :
-                              'bg-slate-50 border-slate-200 text-slate-600'
-                            }`}>
+                                'bg-slate-50 border-slate-200 text-slate-600'
+                              }`}>
                               {member.clubTier}
                             </span>
                           </td>
@@ -2568,7 +2557,7 @@ export default function CRMPortal() {
                       </div>
                       <h4 className="font-black text-sm text-gray-900">{tip.title}</h4>
                       <p className="text-xs text-gray-550 leading-relaxed font-medium">{tip.content}</p>
-                      
+
                       <div className="border-t border-gray-50 pt-3 flex justify-between items-center">
                         <span className="text-[10px] text-gray-400 font-bold">Free Club Perk</span>
                         <button
@@ -2605,24 +2594,22 @@ export default function CRMPortal() {
             </div>
 
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              
+
               {/* Type Switcher */}
               <div className="bg-gray-100 p-1.5 rounded-xl flex gap-1">
                 <button
                   type="button"
                   onClick={() => setClientType('B2B')}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${
-                    clientType === 'B2B' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
-                  }`}
+                  className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${clientType === 'B2B' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
+                    }`}
                 >
                   B2B Corporate Account
                 </button>
                 <button
                   type="button"
                   onClick={() => setClientType('B2C')}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${
-                    clientType === 'B2C' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
-                  }`}
+                  className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${clientType === 'B2C' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
+                    }`}
                 >
                   B2C Standard Customer
                 </button>
@@ -2771,8 +2758,8 @@ export default function CRMPortal() {
                           const active = e.target.checked;
                           setOnboardForm(prev => ({
                             ...prev,
-                            servicePackage: active 
-                              ? [...prev.servicePackage, dept] 
+                            servicePackage: active
+                              ? [...prev.servicePackage, dept]
                               : prev.servicePackage.filter(s => s !== dept)
                           }));
                         }}
@@ -3038,11 +3025,10 @@ export default function CRMPortal() {
               <h4 className="font-black text-sm text-gray-900">{selectedClientForHistory.companyName || selectedClientForHistory.name}</h4>
               <p className="text-[10px] text-gray-500 mt-1 font-bold">Onboarded: {selectedClientForHistory.created_at}</p>
               {selectedClientForHistory.contractExpiryDate && (
-                <p className={`text-[10px] mt-1.5 font-black ${
-                  (new Date(selectedClientForHistory.contractExpiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24) <= 30
-                    ? 'text-red-700'
-                    : 'text-green-700'
-                }`}>
+                <p className={`text-[10px] mt-1.5 font-black ${(new Date(selectedClientForHistory.contractExpiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24) <= 30
+                  ? 'text-red-700'
+                  : 'text-green-700'
+                  }`}>
                   {isAr ? 'تاريخ انتهاء العقد: ' : 'Contract Expiry Date: '} {selectedClientForHistory.contractExpiryDate}
                 </p>
               )}
@@ -3097,7 +3083,7 @@ export default function CRMPortal() {
                 <XCircle size={18} />
               </button>
             </div>
-            
+
             {/* Lead Meta Information Card */}
             <div className="p-4 bg-gray-50 rounded-2xl border border-gray-155 grid grid-cols-2 gap-3 text-xs">
               <div>
@@ -3202,13 +3188,13 @@ export default function CRMPortal() {
                   {whatsAppBroadcastMode ? 'WhatsApp Broadcast Campaign' : 'WhatsApp Contact Manager'}
                 </h3>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => {
                   setWhatsAppModalOpen(false);
                   setApiLogs([]);
                   setApiProgress(0);
-                }} 
+                }}
                 className="p-1.5 hover:bg-gray-100 rounded-lg"
               >
                 <XCircle size={18} className="text-gray-400" />
@@ -3267,10 +3253,10 @@ export default function CRMPortal() {
                     <span>Sending Progress</span>
                     <span>{Math.round(apiProgress)}%</span>
                   </div>
-                  
+
                   {/* Progress Bar */}
                   <div className="w-full bg-gray-100 rounded-full h-2">
-                    <div 
+                    <div
                       className="bg-green-600 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${apiProgress}%` }}
                     />
@@ -3433,7 +3419,7 @@ export default function CRMPortal() {
           `}</style>
 
           <div className="bg-slate-950 rounded-3xl w-full max-w-7xl h-[94vh] shadow-2xl flex flex-col overflow-hidden border border-slate-800 animate-in fade-in zoom-in duration-200 text-white">
-            
+
             {/* Studio Header Bar */}
             <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex flex-wrap justify-between items-center gap-4 flex-shrink-0">
               <div className="flex items-center gap-3">
@@ -3462,22 +3448,20 @@ export default function CRMPortal() {
                 <button
                   type="button"
                   onClick={() => setQuotePresentationMode('detailed')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                    quotePresentationMode === 'detailed' 
-                      ? 'bg-purple-600 text-white shadow-sm' 
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${quotePresentationMode === 'detailed'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                    }`}
                 >
                   Detailed View
                 </button>
                 <button
                   type="button"
                   onClick={() => setQuotePresentationMode('simple')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                    quotePresentationMode === 'simple' 
-                      ? 'bg-purple-600 text-white shadow-sm' 
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${quotePresentationMode === 'simple'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                    }`}
                 >
                   Simple Summary
                 </button>
@@ -3507,8 +3491,8 @@ export default function CRMPortal() {
                   <span>{editingQuoteId ? 'Update Quote' : 'Create Quote'}</span>
                 </button>
 
-                <button 
-                  onClick={() => setShowQuotationModal(false)} 
+                <button
+                  onClick={() => setShowQuotationModal(false)}
                   className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors"
                 >
                   <X size={20} />
@@ -3518,10 +3502,10 @@ export default function CRMPortal() {
 
             {/* Split Screen Body */}
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-              
+
               {/* LEFT PANEL: Interactive Control Panel (50% Width) */}
               <div className="w-full md:w-1/2 p-6 overflow-y-auto space-y-6 bg-slate-900 border-r border-slate-800 text-xs scrollbar-thin scrollbar-thumb-slate-700">
-                
+
                 {/* 1. Recipient Selection */}
                 <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
                   <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
@@ -3956,16 +3940,16 @@ export default function CRMPortal() {
 
               {/* RIGHT PANEL: Live Document Preview Studio (A4 Styled Printable Sheet) */}
               <div className="w-full md:w-1/2 bg-slate-800 p-4 sm:p-8 overflow-y-auto flex justify-center items-start scrollbar-thin scrollbar-thumb-slate-600">
-                
+
                 {/* A4 Paper Document Container */}
-                <div 
-                  id="printable-quotation-studio" 
+                <div
+                  id="printable-quotation-studio"
                   className="bg-white text-slate-900 shadow-2xl rounded-sm p-6 sm:p-8 w-full max-w-[210mm] min-h-[297mm] flex flex-col justify-between text-[11px] font-sans border border-slate-200 relative select-text"
                 >
-                  
+
                   {/* DOCUMENT HEADER */}
                   <div className="space-y-4">
-                    
+
                     {/* Top Branding Bar */}
                     <div className="flex justify-between items-start border-b-2 border-brand-dark pb-4">
                       <div className="space-y-1">
@@ -4015,7 +3999,7 @@ export default function CRMPortal() {
                       <div className="bg-brand-dark text-white font-black text-[10px] uppercase px-3 py-1.5 tracking-wider">
                         PACKAGE INCLUDES & FEE BREAKDOWN
                       </div>
-                      
+
                       <table className="w-full border-collapse border border-slate-200 text-[10px]">
                         <thead>
                           <tr className="bg-slate-100 font-black text-slate-700 uppercase border-b border-slate-200">
@@ -4136,7 +4120,7 @@ export default function CRMPortal() {
 
                   {/* DOCUMENT FOOTER & BANK DETAILS */}
                   <div className="pt-4 border-t-2 border-slate-200 space-y-3 mt-6">
-                    
+
                     {/* Bank Details Box */}
                     <div className="border border-slate-300 p-2.5 rounded-sm bg-slate-50/80 grid grid-cols-2 gap-2 text-[9.5px]">
                       <div className="col-span-2 border-b border-slate-200 pb-1">
@@ -4442,17 +4426,17 @@ export default function CRMPortal() {
 }
 
 // --- Inner Sub Component: Lead Card ---
-function LeadCard({ 
-  lead, 
-  onMove, 
-  onViewDossier, 
+function LeadCard({
+  lead,
+  onMove,
+  onViewDossier,
   onLogCall,
   onCreateQuote,
   onWhatsApp,
   onConvert,
-}: { 
-  lead: Lead; 
-  onMove: (step: Lead['pipelineStep']) => void; 
+}: {
+  lead: Lead;
+  onMove: (step: Lead['pipelineStep']) => void;
   onViewDossier: () => void;
   onLogCall: () => void;
   onCreateQuote: () => void;
@@ -4470,12 +4454,12 @@ function LeadCard({
   const nextSteps = stepMap[lead.pipelineStep];
 
   const statusBadgeMap: Record<string, { label: string; cls: string }> = {
-    interested:         { label: 'Interested', cls: 'bg-blue-100 text-blue-700 border-blue-200' },
-    called:             { label: 'Called',     cls: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-    whatsapp_connected: { label: 'WhatsApp',   cls: 'bg-green-100 text-green-700 border-green-200' },
-    quoted:             { label: 'Quoted',     cls: 'bg-purple-100 text-purple-700 border-purple-200' },
-    not_interested:     { label: 'Declined',   cls: 'bg-red-100 text-red-700 border-red-200' },
-    converted:          { label: 'Converted',  cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+    interested: { label: 'Interested', cls: 'bg-blue-100 text-blue-700 border-blue-200' },
+    called: { label: 'Called', cls: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+    whatsapp_connected: { label: 'WhatsApp', cls: 'bg-green-100 text-green-700 border-green-200' },
+    quoted: { label: 'Quoted', cls: 'bg-purple-100 text-purple-700 border-purple-200' },
+    not_interested: { label: 'Declined', cls: 'bg-red-100 text-red-700 border-red-200' },
+    converted: { label: 'Converted', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
   };
   const badge = statusBadgeMap[lead.status] || { label: lead.status, cls: 'bg-gray-100 text-gray-700 border-gray-200' };
 
@@ -4490,10 +4474,9 @@ function LeadCard({
             {badge.label}
           </span>
         </div>
-        <span className={`w-2.5 h-2.5 rounded-full border ${
-          lead.qualificationColor === 'green' ? 'bg-green-500 border-green-200' :
+        <span className={`w-2.5 h-2.5 rounded-full border ${lead.qualificationColor === 'green' ? 'bg-green-500 border-green-200' :
           lead.qualificationColor === 'yellow' ? 'bg-yellow-500 border-yellow-200' : 'bg-red-500 border-red-200'
-        }`}></span>
+          }`}></span>
       </div>
 
       <div>
