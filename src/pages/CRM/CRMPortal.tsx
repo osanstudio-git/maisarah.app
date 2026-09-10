@@ -486,6 +486,8 @@ export default function CRMPortal() {
 
   // ── Quotation Builder Modal (Auto pre-filled from Lead) ───────────────────
   const [showQuotationModal, setShowQuotationModal] = useState(false);
+  const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
+  const [isSubmittingQuotation, setIsSubmittingQuotation] = useState(false);
   const [quoteForm, setQuoteForm] = useState({
     leadId: '' as string | null,
     clientName: '',
@@ -596,6 +598,7 @@ export default function CRMPortal() {
   };
 
   const openQuotationModalForLead = (lead?: Lead) => {
+    setEditingQuoteId(null);
     if (lead) {
       setQuoteForm({
         leadId: lead.id,
@@ -628,49 +631,88 @@ export default function CRMPortal() {
     setShowQuotationModal(true);
   };
 
+  const openEditQuotationModal = (quote: Quotation) => {
+    setEditingQuoteId(quote.id);
+    const subtotal = quote.subtotal || quote.budget || 350;
+    const hasVat = (quote.vatAmount || 0) > 0;
+    setQuoteForm({
+      leadId: quote.leadId || null,
+      clientName: quote.clientName,
+      representativeName: quote.representativeName || quote.clientName,
+      companyName: quote.companyName || '',
+      email: quote.email || '',
+      phone: quote.phone || '',
+      clientType: quote.type || 'B2B',
+      services: quote.servicesPackage || ['Tax & VAT'],
+      baseAmount: subtotal.toString(),
+      includeVat: hasVat,
+      notes: '',
+    });
+    setShowQuotationModal(true);
+  };
+
   const handleSaveQuotationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingQuotation) return;
+    setIsSubmittingQuotation(true);
+
     try {
       const baseAmt = parseFloat(quoteForm.baseAmount) || 0;
       const vatAmt = quoteForm.includeVat ? +(baseAmt * 0.05).toFixed(3) : 0;
       const totalAmt = +(baseAmt + vatAmt).toFixed(3);
-      const quoteNum = `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      const { error } = await supabase.from('quotations').insert([{
-        quote_number: quoteNum,
-        lead_id: quoteForm.leadId || null,
-        client_name: quoteForm.clientName,
-        representative_name: quoteForm.representativeName || quoteForm.clientName,
-        company_name: quoteForm.companyName || null,
-        email: quoteForm.email,
-        phone: quoteForm.phone,
-        client_type: quoteForm.clientType,
-        services: quoteForm.services,
-        subtotal: baseAmt,
-        vat_amount: vatAmt,
-        total_amount: totalAmt,
-        status: 'sent',
-        valid_until: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-      }]);
+      if (editingQuoteId) {
+        const { error } = await supabase.from('quotations').update({
+          client_name: quoteForm.clientName,
+          client_type: quoteForm.clientType,
+          services: quoteForm.services,
+          subtotal: baseAmt,
+          vat_amount: vatAmt,
+          total_amount: totalAmt,
+        }).eq('id', editingQuoteId);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      if (quoteForm.leadId) {
-        await supabase.from('leads').update({
-          status: 'quoted',
-          pipeline_step: 'update',
-          activity_history: [
-            ...(leads.find(l => l.id === quoteForm.leadId)?.activityHistory || []),
-            `${new Date().toISOString().split('T')[0]} - Quotation #${quoteNum} generated for OMR ${totalAmt}.`,
-          ],
-        }).eq('id', quoteForm.leadId);
+        alert(isAr ? 'تم تحديث عرض السعر بنجاح!' : 'Quotation updated successfully!');
+      } else {
+        const quoteNum = `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        const { error } = await supabase.from('quotations').insert([{
+          quote_number: quoteNum,
+          lead_id: quoteForm.leadId || null,
+          client_name: quoteForm.clientName,
+          client_type: quoteForm.clientType,
+          services: quoteForm.services,
+          subtotal: baseAmt,
+          vat_amount: vatAmt,
+          total_amount: totalAmt,
+          status: 'sent',
+          valid_until: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        }]);
+
+        if (error) throw error;
+
+        if (quoteForm.leadId) {
+          await supabase.from('leads').update({
+            status: 'quoted',
+            pipeline_step: 'update',
+            activity_history: [
+              ...(leads.find(l => l.id === quoteForm.leadId)?.activityHistory || []),
+              `${new Date().toISOString().split('T')[0]} - Quotation #${quoteNum} generated for OMR ${totalAmt}.`,
+            ],
+          }).eq('id', quoteForm.leadId);
+        }
+
+        alert(isAr ? `تم إنشاء عرض السعر برقم ${quoteNum} بنجاح!` : `Quotation #${quoteNum} created successfully!`);
       }
 
-      alert(isAr ? `تم حفظ وتسليم عرض السعر برقم ${quoteNum} بنجاح!` : `Quotation #${quoteNum} saved & delivered successfully!`);
       setShowQuotationModal(false);
-      fetchAll();
+      setEditingQuoteId(null);
+      await fetchAll();
     } catch (err: any) {
       alert(err.message || 'Error saving quotation');
+    } finally {
+      setIsSubmittingQuotation(false);
     }
   };
 
@@ -1975,6 +2017,13 @@ export default function CRMPortal() {
                     {q.status === 'pending' || q.status === 'sent' || q.status === 'draft' ? (
                       <>
                         <button
+                          type="button"
+                          onClick={() => openEditQuotationModal(q)}
+                          className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-[10px] font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all flex items-center gap-1"
+                        >
+                          <Edit size={12} /> {isAr ? 'تعديل' : 'Edit Quote'}
+                        </button>
+                        <button
                           onClick={() => handleClientAcceptsQuote(q)}
                           className="bg-green-700 hover:bg-green-800 text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all flex items-center gap-1 shadow-sm"
                         >
@@ -3090,9 +3139,11 @@ export default function CRMPortal() {
               <div>
                 <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                   <DollarSign className="text-purple-600" size={20} />
-                  {isAr ? 'منشئ عروض الأسعار' : 'Interactive Quotation Builder'}
+                  {editingQuoteId 
+                    ? (isAr ? 'تعديل عرض السعر' : 'Edit Quotation Details') 
+                    : (isAr ? 'منشئ عروض الأسعار' : 'Interactive Quotation Builder')}
                 </h3>
-                {quoteForm.leadId && (
+                {quoteForm.leadId && !editingQuoteId && (
                   <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">
                     Pre-filled from Lead #{quoteForm.leadId}
                   </span>
@@ -3211,9 +3262,17 @@ export default function CRMPortal() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold bg-purple-700 text-white rounded-xl hover:bg-purple-800"
+                  disabled={isSubmittingQuotation}
+                  className="px-5 py-2 text-xs font-bold bg-purple-700 text-white rounded-xl hover:bg-purple-800 disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {isAr ? 'حفظ وتسليم عرض السعر' : 'Save & Deliver Quote'}
+                  {isSubmittingQuotation ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>{editingQuoteId ? (isAr ? 'جاري التحديث...' : 'Updating...') : (isAr ? 'جاري الإنشاء...' : 'Creating...')}</span>
+                    </>
+                  ) : (
+                    <span>{editingQuoteId ? (isAr ? 'تحديث عرض السعر' : 'Update Quote') : (isAr ? 'إنشاء عرض السعر' : 'Create Quote')}</span>
+                  )}
                 </button>
               </div>
             </form>
