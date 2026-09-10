@@ -3918,11 +3918,8 @@ export default function CRMPortal() {
                     </div>
 
                     {/* Quotation Title Banner */}
-                    <div className="bg-brand-dark text-white p-3 text-center rounded-sm">
-                      <h1 className="text-base font-black uppercase tracking-wider">SERVICE QUOTATION</h1>
-                      <p className="text-[10px] text-red-100 font-medium uppercase tracking-widest">
-                        Oman Company Formation & Business Set Up &bull; Tax & Accounting Services
-                      </p>
+                    <div className="bg-brand-dark text-white p-2.5 text-center rounded-sm">
+                      <h1 className="text-base font-black uppercase tracking-wider">QUOTATION</h1>
                     </div>
 
                     {/* Metadata Header Box */}
