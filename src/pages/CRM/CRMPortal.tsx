@@ -4503,7 +4503,7 @@ function LeadCard({
 }
 
 // Helper icons
-function CheckCheckIcon(props: React.SVGProps<SVGSVGElement>) {
+function CheckCheckIcon(props: React.SVGProps<SVGSVGElement> & { size?: number }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"

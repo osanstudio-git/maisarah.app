@@ -13,7 +13,7 @@ export const NetworkStatus: React.FC = () => {
   const [isDismissed, setIsDismissed] = useState<boolean>(false);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
 
     const handleOnline = () => {
       setIsOnline(true);
