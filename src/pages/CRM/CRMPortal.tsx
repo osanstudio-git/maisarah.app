@@ -827,22 +827,19 @@ export default function CRMPortal() {
       }
 
       const { data: newClient, error: clientErr } = await supabase.from('clients').insert([{
-        full_name: quotation.clientName,
+        company_name: quotation.companyName || quotation.clientName,
         email: quotation.email || 'client@maisarah.om',
         phone: quotation.phone || '+968 9000 0000',
-        client_type: quotation.type,
-        company_name: quotation.companyName || null,
-        services_package: quotation.servicesPackage || ['Tax & VAT'],
         monthly_billing: quotation.budget,
-        activity_history: [`Client accepted quotation #${quotation.quoteNumber || quotation.id}`],
         source: quotation.type === 'B2B' ? 'b2b' : 'direct',
-      }]).select().single();
+        lead_id: quotation.leadId || null,
+      }]).select().maybeSingle();
 
       if (clientErr) throw clientErr;
 
       const serviceName = quotation.serviceType || 'Bookkeeping & Tax';
       await supabase.from('client_jobs').insert([{
-        client_id: newClient.id,
+        client_id: newClient ? newClient.id : null,
         quotation_id: quotation.id,
         service_type: serviceName,
         billing_type: 'one_time',
@@ -858,7 +855,7 @@ export default function CRMPortal() {
         type: 'new_client',
         title: 'New Client Job Task — Quote Accepted!',
         message: `Client "${quotation.clientName}" accepted quote (${serviceName}). Please assign to employee.`,
-        ref_id: newClient.id,
+        ref_id: newClient ? newClient.id : undefined,
         ref_table: 'clients',
       }]);
 
@@ -888,24 +885,19 @@ export default function CRMPortal() {
       const expiryDate = new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0];
 
       const { data: newClient, error: clientErr } = await supabase.from('clients').insert([{
-        full_name: directClientForm.name,
-        company_name: directClientForm.clientType === 'B2B' ? directClientForm.companyName : null,
-        registration_number: directClientForm.clientType === 'B2B' ? directClientForm.registrationNumber : null,
+        company_name: directClientForm.clientType === 'B2B' ? (directClientForm.companyName || directClientForm.name) : directClientForm.name,
+        cr_number: directClientForm.clientType === 'B2B' ? directClientForm.registrationNumber : null,
         email: directClientForm.email,
         phone: directClientForm.phone,
-        client_type: directClientForm.clientType,
-        services_package: directClientForm.services,
-        overall_manager: directClientForm.manager,
         monthly_billing: billing,
         contract_expiry_date: expiryDate,
-        activity_history: ['Direct client onboarding added via CRM.'],
         source: 'direct',
-      }]).select().single();
+      }]).select().maybeSingle();
 
       if (clientErr) throw clientErr;
 
       await supabase.from('client_jobs').insert([{
-        client_id: newClient.id,
+        client_id: newClient ? newClient.id : null,
         service_type: directClientForm.services.join(', '),
         billing_type: 'one_time',
         status: 'pending',
@@ -920,7 +912,7 @@ export default function CRMPortal() {
         type: 'new_client',
         title: 'New Direct Client Onboarded',
         message: `Direct Client "${directClientForm.companyName || directClientForm.name}" added. Services: ${directClientForm.services.join(', ')}.`,
-        ref_id: newClient.id,
+        ref_id: newClient ? newClient.id : undefined,
         ref_table: 'clients',
       }]);
 
@@ -950,27 +942,13 @@ export default function CRMPortal() {
       new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const clientPayload = {
-      full_name: onboardForm.name,
+      company_name: clientType === 'B2B' ? (onboardForm.companyName || onboardForm.name) : onboardForm.name,
+      cr_number: clientType === 'B2B' ? onboardForm.registrationNumber : null,
       email: onboardForm.email,
       phone: onboardForm.phone,
-      company_phone: onboardForm.companyPhone || null,
-      client_type: clientType,
-      company_name: clientType === 'B2B' ? onboardForm.companyName : null,
-      registration_number: clientType === 'B2B' ? onboardForm.registrationNumber : null,
-      services_package: onboardForm.servicePackage,
-      overall_manager: onboardForm.overallManager,
-      delegated_services: onboardForm.servicePackage.reduce((acc: Record<string, string>, service: string) => {
-        const emp = MOCK_EMPLOYEES.find(e => e.dept === service) || MOCK_EMPLOYEES[0];
-        acc[service] = emp.name;
-        return acc;
-      }, {}),
       monthly_billing: calculatedBilling,
       is_club_member: onboardForm.isClubMember,
       club_tier: onboardForm.isClubMember ? onboardForm.clubTier : null,
-      activity_history: [
-        'Client onboarded through CRM registry form.',
-        onboardForm.initialActivity || 'Initial client record registered.',
-      ],
       contract_expiry_date: expiryDate,
       source: clientType === 'B2B' ? 'b2b' : 'direct',
     };
@@ -979,7 +957,7 @@ export default function CRMPortal() {
       .from('clients')
       .insert([clientPayload])
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       alert('Error saving client: ' + error.message);
@@ -1069,26 +1047,16 @@ export default function CRMPortal() {
       const { data: newClientRow, error: clientErr } = await supabase
         .from('clients')
         .insert([{
-          full_name: qualifyingLead.name,
+          company_name: qualifyingLead.companyName || qualifyingLead.name,
           email: qualifyingLead.email,
           phone: qualifyingLead.phone,
-          client_type: qualifyingLead.companyName ? 'B2B' : 'B2C',
-          company_name: qualifyingLead.companyName || null,
-          services_package: selectedServices,
-          overall_manager: managerName,
-          delegated_services: selectedServices.reduce((acc, srv) => ({ ...acc, [srv]: managerName }), {}),
           monthly_billing: billing,
-          activity_history: [
-            'Converted from CRM pipeline lead.',
-            `Service Scope: ${detailedService}`,
-            convertForm.workScopeNotes || qualifyingLead.notes || 'Lead qualified and onboarded.',
-          ],
           contract_expiry_date: expiryDate,
           lead_id: qualifyingLead.id,
           source: qualifyingLead.companyName ? 'b2b' : 'direct',
         }])
         .select()
-        .single();
+        .maybeSingle();
 
       if (clientErr) throw clientErr;
 
