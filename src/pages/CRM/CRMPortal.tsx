@@ -12,6 +12,10 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { supabase } from '../../lib/supabaseClient';
+import EngagementLetterModal from '../../components/crm/EngagementLetterModal';
+import BookkeepingProposalModal from '../../components/crm/BookkeepingProposalModal';
+import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
+import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
 
 // --- Types & Interfaces ---
 interface Lead {
@@ -551,6 +555,13 @@ export default function CRMPortal() {
   const [quotePresentationMode, setQuotePresentationMode] = useState<'detailed' | 'simple'>('detailed');
   const [quotationSearchQuery, setQuotationSearchQuery] = useState('');
   const [quotationStatusFilter, setQuotationStatusFilter] = useState<'all' | 'pending' | 'approved' | 'invoiced'>('all');
+
+  // ── Document Studio Modal States ──────────────────────────────────────────
+  const [engagementModalOpen, setEngagementModalOpen] = useState(false);
+  const [bookkeepingProposalModalOpen, setBookkeepingProposalModalOpen] = useState(false);
+  const [taxInvoiceModalOpen, setTaxInvoiceModalOpen] = useState(false);
+  const [paymentReceiptModalOpen, setPaymentReceiptModalOpen] = useState(false);
+  const [activeDocumentClient, setActiveDocumentClient] = useState<any>(null);
 
   const convertNumberToWords = (num: number): string => {
     if (!num || num <= 0) return 'Zero Omani Rials Only';
@@ -2240,6 +2251,90 @@ export default function CRMPortal() {
                         <CheckCircle2 size={14} /> Accepted & Invoiced
                       </span>
                     )}
+                  </div>
+
+                  {/* Document Studio Actions Bar */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-gray-100 mt-3 w-full">
+                    <span className="text-[10px] font-black uppercase text-gray-400 mr-1">Generate Official Documents:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDocumentClient({
+                          clientName: q.clientName,
+                          companyName: q.companyName || q.clientName,
+                          serviceType: q.serviceType,
+                          totalAmount: q.budget,
+                          subtotal: q.subtotal || q.budget,
+                          vatAmount: q.vatAmount || 0,
+                          quoteNumber: q.quoteNumber || q.id,
+                          email: q.email,
+                          phone: q.phone,
+                        });
+                        setEngagementModalOpen(true);
+                      }}
+                      className="bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 text-[10px] font-black px-2.5 py-1 rounded-lg transition-all flex items-center gap-1"
+                    >
+                      📜 Engagement Letter
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDocumentClient({
+                          clientName: q.clientName,
+                          companyName: q.companyName || q.clientName,
+                          serviceType: q.serviceType,
+                          totalAmount: q.budget,
+                          monthlyFee: q.subtotal || q.budget,
+                          email: q.email,
+                          phone: q.phone,
+                        });
+                        setBookkeepingProposalModalOpen(true);
+                      }}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-black px-2.5 py-1 rounded-lg transition-all flex items-center gap-1"
+                    >
+                      📊 Bookkeeping Proposal
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDocumentClient({
+                          clientName: q.clientName,
+                          companyName: q.companyName || q.clientName,
+                          serviceType: q.serviceType,
+                          totalAmount: q.budget,
+                          subtotal: q.subtotal || q.budget,
+                          vatAmount: q.vatAmount || 0,
+                          quoteNumber: q.quoteNumber || q.id,
+                          email: q.email,
+                          phone: q.phone,
+                        });
+                        setTaxInvoiceModalOpen(true);
+                      }}
+                      className="bg-green-50 hover:bg-green-100 text-green-800 border border-green-200 text-[10px] font-black px-2.5 py-1 rounded-lg transition-all flex items-center gap-1"
+                    >
+                      🧾 Tax Invoice
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDocumentClient({
+                          clientName: q.clientName,
+                          companyName: q.companyName || q.clientName,
+                          serviceType: q.serviceType,
+                          totalAmount: q.budget,
+                          quoteNumber: q.quoteNumber || q.id,
+                          email: q.email,
+                          phone: q.phone,
+                        });
+                        setPaymentReceiptModalOpen(true);
+                      }}
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 text-[10px] font-black px-2.5 py-1 rounded-lg transition-all flex items-center gap-1"
+                    >
+                      💳 Payment Receipt
+                    </button>
                   </div>
                 </div>
               ))}
@@ -4420,6 +4515,31 @@ export default function CRMPortal() {
           </div>
         </div>
       )}
+
+      {/* ── DOCUMENT STUDIO MODALS ── */}
+      <EngagementLetterModal
+        isOpen={engagementModalOpen}
+        onClose={() => setEngagementModalOpen(false)}
+        clientData={activeDocumentClient}
+      />
+
+      <BookkeepingProposalModal
+        isOpen={bookkeepingProposalModalOpen}
+        onClose={() => setBookkeepingProposalModalOpen(false)}
+        clientData={activeDocumentClient}
+      />
+
+      <TaxInvoiceModal
+        isOpen={taxInvoiceModalOpen}
+        onClose={() => setTaxInvoiceModalOpen(false)}
+        clientData={activeDocumentClient}
+      />
+
+      <PaymentReceiptModal
+        isOpen={paymentReceiptModalOpen}
+        onClose={() => setPaymentReceiptModalOpen(false)}
+        clientData={activeDocumentClient}
+      />
 
     </div>
   );
