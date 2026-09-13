@@ -1525,6 +1525,11 @@ const EmployeeManagement = () => {
                   <option value="hr">{isAr ? '📋 مدير الموارد البشرية (التوظيف وشؤون الموظفين)' : '📋 HR Manager (HR Control & Recruitment)'}</option>
                   <option value="crm">{isAr ? '🤝 علاقات العملاء (عروض الأسعار والعملاء)' : '🤝 CRM Coordinator (Leads & Quotations)'}</option>
                 </select>
+                <p className="text-[10px] font-bold text-gray-500 mt-1 flex items-center gap-1">
+                  💡 {isAr 
+                    ? 'يقوم المحاسب بالربط بين رؤوس الأقسام والموظفين لإدارة الفواتير والإيصالات والمطالبات المالية للعملاء.' 
+                    : 'The Accountant acts as the operational bridge between HODs and employees to manage client invoices, payment receipts, and billing notifications.'}
+                </p>
               </div>
 
               {/* 3. Leadership Status Toggle (Is Department Head?) */}
