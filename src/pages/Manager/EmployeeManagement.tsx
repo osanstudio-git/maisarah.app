@@ -459,8 +459,10 @@ const EmployeeManagement = () => {
     const targetDeptName = targetDeptKey === 'tax_vat' ? 'Tax & VAT' : targetDeptKey === 'audit' ? 'Audit' : targetDeptKey === 'bookkeeping' ? 'Bookkeeping' : targetDeptKey;
     const finalRole = placementData.role === 'custom' ? (placementData.customRole || 'Staff Member') : placementData.role;
     
-    // Effective access role (if isHOD is true, assign department_head role or accessRole)
-    const effectiveRole = placementData.isHOD ? 'department_head' : placementData.accessRole;
+    // Effective access role (if isHOD is true and accessRole is standard employee, assign department_head; otherwise preserve chosen portal access role)
+    const effectiveRole = (placementData.isHOD && placementData.accessRole === 'employee')
+      ? 'department_head'
+      : placementData.accessRole;
     const finalSupervisor = (placementData.isHOD || placementData.accessRole === 'department_head')
       ? 'Executive Management & Board of Directors'
       : (placementData.supervisor === 'custom' ? (placementData.customSupervisor || 'General Manager') : placementData.supervisor);
