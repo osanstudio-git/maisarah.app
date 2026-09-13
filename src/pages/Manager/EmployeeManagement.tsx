@@ -1654,10 +1654,11 @@ const EmployeeManagement = () => {
                       onChange={(e) => setPlacementData({ ...placementData, supervisor: e.target.value })}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
                     >
+                      <option value="Executive Management & Board of Directors">{isAr ? 'الإدارة التنفيذية ومجلس الإدارة' : 'Executive Board & Management'}</option>
+                      <option value="General Manager (Operations & Finance)">{isAr ? 'المدير العام (العمليات والمالية)' : 'General Manager (Operations & Finance)'}</option>
                       <option value="Khalfan Al-Abri (Head of Tax & VAT)">{isAr ? 'خلفان العبري (رئيس قسم الضرائب)' : 'Khalfan Al-Abri (Head of Tax & VAT)'}</option>
                       <option value="Nasser Al-Riyami (Head of Audit)">{isAr ? 'ناصر الريامي (رئيس قسم التدقيق)' : 'Nasser Al-Riyami (Head of Audit)'}</option>
                       <option value="Mazis Al-Balushi (Head of Bookkeeping)">{isAr ? 'مازن البلوشي (رئيس قسم مسك الدفاتر)' : 'Mazis Al-Balushi (Head of Bookkeeping)'}</option>
-                      <option value="Executive Management & Board of Directors">{isAr ? 'الإدارة التنفيذية ومجلس الإدارة' : 'Executive Board & Management'}</option>
                       <option value="custom">{isAr ? '+ تحديد اسم مشرف مخصص...' : '+ Specify Custom Supervisor Name...'}</option>
                     </select>
                     {placementData.supervisor === 'custom' && (
