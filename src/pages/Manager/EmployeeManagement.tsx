@@ -478,7 +478,7 @@ const EmployeeManagement = () => {
           data: {
             full_name: selectedPlacement.name,
             role: placementData.accessRole,
-            department_id: targetDept
+            department_id: targetDeptKey
           }
         }
       });
@@ -517,7 +517,7 @@ const EmployeeManagement = () => {
         full_name: selectedPlacement.name,
         email: selectedPlacement.email,
         role: placementData.accessRole,
-        department_id: targetDept
+        department_id: targetDeptKey
       }, { onConflict: 'id' });
 
       if (profileError) throw profileError;
@@ -529,10 +529,10 @@ const EmployeeManagement = () => {
         email: selectedPlacement.email,
         phone: selectedPlacement.phone,
         role: finalRole,
-        dept: targetDept === 'tax_vat' ? 'Tax & VAT' : targetDept === 'audit' ? 'Audit' : 'Bookkeeping',
+        dept: targetDeptName,
         employee_type: selectedPlacement.employment_type || 'Experienced',
         joined_date: placementData.startDate || new Date().toISOString().split('T')[0],
-        immediate_supervisor: placementData.supervisor || 'Fatma Al-Harthy',
+        immediate_supervisor: finalSupervisor,
         accommodation_status: 'Lives with family',
         allowances: { transport: 150, housing: 250, other: 50 },
         education: [],
@@ -577,7 +577,7 @@ const EmployeeManagement = () => {
                   <p><strong>Username/Email:</strong> ${selectedPlacement.email}</p>
                   ${!isAlreadyRegistered ? `<p><strong>Temporary Password:</strong> ${tempPassword}</p>` : ''}
                   <p><strong>Assigned Role:</strong> ${finalRole}</p>
-                  <p><strong>Assigned Department:</strong> ${targetDept === 'tax_vat' ? 'Tax & VAT' : targetDept === 'audit' ? 'Audit' : 'Bookkeeping'}</p>
+                  <p><strong>Assigned Department:</strong> ${targetDeptName}</p>
                 </div>
                 <p>${isAr ? 'يرجى تغيير كلمة المرور المؤقتة فور تسجيل الدخول لأول مرة.' : 'Please log in to complete your onboarding tasklist and change your temporary password for system security.'}</p>
                 <br/>
