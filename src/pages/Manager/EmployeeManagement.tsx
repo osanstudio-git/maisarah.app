@@ -99,7 +99,8 @@ const EmployeeManagement = () => {
     supervisor: 'Khalfan Al-Abri (Head of Tax & VAT)',
     customSupervisor: '',
     startDate: '',
-    accessRole: 'employee'
+    accessRole: 'accountant',
+    isHOD: false
   });
   const [placementError, setPlacementError] = useState<string | null>(null);
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
@@ -441,7 +442,8 @@ const EmployeeManagement = () => {
       supervisor: defaultHOD,
       customSupervisor: '',
       startDate: new Date().toISOString().split('T')[0],
-      accessRole: 'employee'
+      accessRole: 'accountant',
+      isHOD: false
     });
     setPlacementError(null);
   };
@@ -456,7 +458,10 @@ const EmployeeManagement = () => {
     const targetDeptKey = placementData.dept === 'custom' ? (placementData.customDept || 'Operations') : placementData.dept;
     const targetDeptName = targetDeptKey === 'tax_vat' ? 'Tax & VAT' : targetDeptKey === 'audit' ? 'Audit' : targetDeptKey === 'bookkeeping' ? 'Bookkeeping' : targetDeptKey;
     const finalRole = placementData.role === 'custom' ? (placementData.customRole || 'Staff Member') : placementData.role;
-    const finalSupervisor = placementData.accessRole === 'department_head'
+    
+    // Effective access role (if isHOD is true, assign department_head role or accessRole)
+    const effectiveRole = placementData.isHOD ? 'department_head' : placementData.accessRole;
+    const finalSupervisor = (placementData.isHOD || placementData.accessRole === 'department_head')
       ? 'Executive Management & Board of Directors'
       : (placementData.supervisor === 'custom' ? (placementData.customSupervisor || 'General Manager') : placementData.supervisor);
 
@@ -477,7 +482,7 @@ const EmployeeManagement = () => {
         options: {
           data: {
             full_name: selectedPlacement.name,
-            role: placementData.accessRole,
+            role: effectiveRole,
             department_id: targetDeptKey
           }
         }
@@ -516,7 +521,7 @@ const EmployeeManagement = () => {
         id: userId,
         full_name: selectedPlacement.name,
         email: selectedPlacement.email,
-        role: placementData.accessRole,
+        role: effectiveRole,
         department_id: targetDeptKey
       }, { onConflict: 'id' });
 
@@ -1463,6 +1468,7 @@ const EmployeeManagement = () => {
                 </div>
               </div>
 
+              {/* 1. Designated Job Position */}
               <div>
                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'المسمى الوظيفي الفعلي' : 'Designated Job Position'}</label>
                 <select
@@ -1472,6 +1478,8 @@ const EmployeeManagement = () => {
                 >
                   <option value={selectedPlacement.role}>{selectedPlacement.role} (Suggested)</option>
                   <option value="Accountant">Accountant</option>
+                  <option value="Head of Accounts">Head of Accounts</option>
+                  <option value="Senior Accountant">Senior Accountant</option>
                   <option value="Senior Auditor">Senior Auditor</option>
                   <option value="Tax Consultant">Tax Consultant</option>
                   <option value="Bookkeeper">Bookkeeper</option>
@@ -1493,36 +1501,77 @@ const EmployeeManagement = () => {
                 )}
               </div>
 
+              {/* 2. System Portal Access Role */}
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'مستوى الصلاحية في النظام' : 'System Access Level & Role Type'}</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'صلاحيات الدخول للنظام (Portal Access)' : 'System Portal Access Permission'}</label>
                 <select
                   value={placementData.accessRole}
                   onChange={(e) => {
                     const newRole = e.target.value;
-                    let suggestedTitle = placementData.role;
-                    if (newRole === 'department_head') {
-                      if (placementData.dept === 'tax_vat') suggestedTitle = 'Head of Tax & VAT';
-                      else if (placementData.dept === 'audit') suggestedTitle = 'Head of Audit';
-                      else if (placementData.dept === 'bookkeeping') suggestedTitle = 'Head of Bookkeeping';
-                      else suggestedTitle = `Head of ${placementData.dept}`;
-                    }
+                    const isHead = newRole === 'department_head' || placementData.isHOD;
                     setPlacementData({
                       ...placementData,
                       accessRole: newRole,
-                      role: suggestedTitle,
-                      supervisor: newRole === 'department_head' ? 'Executive Management & Board of Directors' : placementData.supervisor
+                      supervisor: isHead ? 'Executive Management & Board of Directors' : placementData.supervisor
                     });
                   }}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
                 >
-                  <option value="employee">{isAr ? 'موظف قياسي (Standard Employee - Reports to HOD)' : '👤 Standard Employee (Reports to a Department Head)'}</option>
-                  <option value="department_head">{isAr ? 'رئيس قسم (Department Head / HOD - Reports to Executive Board)' : '👑 Department Head / HOD (Leads Department & Reports to Executive Board)'}</option>
-                  <option value="accountant">{isAr ? 'محاسب (Accountant)' : '💼 Accountant'}</option>
-                  <option value="hr">{isAr ? 'مدير الموارد البشرية (HR Manager)' : '📋 HR Manager'}</option>
-                  <option value="crm">{isAr ? 'علاقات العملاء (CRM Coordinator)' : '🤝 CRM Coordinator'}</option>
+                  <option value="accountant">{isAr ? '💼 محاسب (صلاحيات المحاسبة والفواتير والإيصالات)' : '💼 Accountant (Accounting, Invoicing & Receipts Portal)'}</option>
+                  <option value="department_head">{isAr ? '👑 رئيس قسم (إدارة القسم وتوزيع المهام)' : '👑 Department Head / HOD (HOD Portal & Task Distribution)'}</option>
+                  <option value="employee">{isAr ? '👤 موظف قياسي (بوابة الموظف والمستندات)' : '👤 Standard Employee (Staff Portal & My Tasks)'}</option>
+                  <option value="hr">{isAr ? '📋 مدير الموارد البشرية (التوظيف وشؤون الموظفين)' : '📋 HR Manager (HR Control & Recruitment)'}</option>
+                  <option value="crm">{isAr ? '🤝 علاقات العملاء (عروض الأسعار والعملاء)' : '🤝 CRM Coordinator (Leads & Quotations)'}</option>
                 </select>
               </div>
 
+              {/* 3. Leadership Status Toggle (Is Department Head?) */}
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{isAr ? 'المستوى القيادي بالقسم' : 'Leadership Status (Is Head of Department?)'}</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPlacementData({
+                      ...placementData,
+                      isHOD: false,
+                      supervisor: placementData.supervisor === 'Executive Management & Board of Directors' ? 'Khalfan Al-Abri (Head of Tax & VAT)' : placementData.supervisor
+                    })}
+                    className={`p-3.5 rounded-2xl border text-start transition-all cursor-pointer ${!placementData.isHOD && placementData.accessRole !== 'department_head'
+                      ? 'bg-gray-900 text-white border-gray-900 shadow-md ring-2 ring-gray-900/10'
+                      : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                      }`}
+                  >
+                    <p className="text-xs font-black flex items-center gap-1.5">
+                      👤 {isAr ? 'عضو فريق بالقسم' : 'Team Member'}
+                    </p>
+                    <p className={`text-[10px] mt-1 font-medium ${!placementData.isHOD && placementData.accessRole !== 'department_head' ? 'text-gray-300' : 'text-gray-500'}`}>
+                      {isAr ? 'يرفع التقارير لرئيس القسم المحدد' : 'Reports under a Department Head (HOD)'}
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPlacementData({
+                      ...placementData,
+                      isHOD: true,
+                      supervisor: 'Executive Management & Board of Directors'
+                    })}
+                    className={`p-3.5 rounded-2xl border text-start transition-all cursor-pointer ${placementData.isHOD || placementData.accessRole === 'department_head'
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-md ring-2 ring-amber-600/20'
+                      : 'bg-amber-50/50 hover:bg-amber-100/50 text-amber-900 border-amber-200'
+                      }`}
+                  >
+                    <p className="text-xs font-black flex items-center gap-1.5">
+                      👑 {isAr ? 'رئيس القسم (HOD)' : 'Head of Department'}
+                    </p>
+                    <p className={`text-[10px] mt-1 font-medium ${placementData.isHOD || placementData.accessRole === 'department_head' ? 'text-amber-100' : 'text-amber-700'}`}>
+                      {isAr ? 'يقود القسم ويرفع التقارير للإدارة التنفيذية' : 'Leads department & reports to Executive Board'}
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4. Designated Department & Employment Start Date */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'القسم المعين' : 'Designated Department'}</label>
@@ -1531,30 +1580,22 @@ const EmployeeManagement = () => {
                     onChange={(e) => {
                       const newDept = e.target.value;
                       let defaultHOD = 'Nasser Al-Riyami (Head of Audit)';
-                      let autoTitle = placementData.role;
-                      if (newDept === 'tax_vat') {
-                        defaultHOD = 'Khalfan Al-Abri (Head of Tax & VAT)';
-                        if (placementData.accessRole === 'department_head') autoTitle = 'Head of Tax & VAT';
-                      } else if (newDept === 'bookkeeping') {
-                        defaultHOD = 'Mazis Al-Balushi (Head of Bookkeeping)';
-                        if (placementData.accessRole === 'department_head') autoTitle = 'Head of Bookkeeping';
-                      } else if (newDept === 'audit') {
-                        if (placementData.accessRole === 'department_head') autoTitle = 'Head of Audit';
-                      }
+                      if (newDept === 'tax_vat') defaultHOD = 'Khalfan Al-Abri (Head of Tax & VAT)';
+                      else if (newDept === 'bookkeeping') defaultHOD = 'Mazis Al-Balushi (Head of Bookkeeping)';
+
                       setPlacementData({
                         ...placementData,
                         dept: newDept,
-                        role: autoTitle,
-                        supervisor: placementData.accessRole === 'department_head' ? 'Executive Management & Board of Directors' : defaultHOD
+                        supervisor: (placementData.isHOD || placementData.accessRole === 'department_head') ? 'Executive Management & Board of Directors' : defaultHOD
                       });
                     }}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
                   >
-                    <option value="tax_vat">{isAr ? 'الضرائب وضريبة القيمة المضافة (Tax & VAT)' : 'Tax & VAT Department'}</option>
-                    <option value="audit">{isAr ? 'التدقيق (Audit)' : 'Audit Department'}</option>
-                    <option value="bookkeeping">{isAr ? 'إمساك الدفاتر (Bookkeeping)' : 'Bookkeeping Department'}</option>
-                    <option value="advisory">{isAr ? 'الاستشارات المالية (Advisory)' : 'Financial Advisory Department'}</option>
-                    <option value="hr_ops">{isAr ? 'الموارد البشرية والعمليات (HR & Ops)' : 'HR & Operations Department'}</option>
+                    <option value="tax_vat">{isAr ? 'قسم الضرائب والـ VAT' : 'Tax & VAT Department'}</option>
+                    <option value="audit">{isAr ? 'قسم التدقيق المالي' : 'Audit Department'}</option>
+                    <option value="bookkeeping">{isAr ? 'قسم المحاسبة ومسك الدفاتر' : 'Bookkeeping & Accounts Department'}</option>
+                    <option value="advisory">{isAr ? 'قسم الاستشارات المالية' : 'Financial Advisory Department'}</option>
+                    <option value="hr_ops">{isAr ? 'قسم الموارد البشرية' : 'HR & Operations Department'}</option>
                     <option value="custom">{isAr ? '+ إنشاء قسم جديد...' : '+ Create New Department...'}</option>
                   </select>
                   {placementData.dept === 'custom' && (
@@ -1580,13 +1621,14 @@ const EmployeeManagement = () => {
                 </div>
               </div>
 
+              {/* 5. Reporting Authority / Immediate Supervisor */}
               <div>
                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                  {placementData.accessRole === 'department_head'
+                  {placementData.isHOD || placementData.accessRole === 'department_head'
                     ? (isAr ? 'جهة التبعية والتقارير' : 'Reporting Authority')
                     : (isAr ? 'المشرف المباشر / رئيس القسم' : 'Immediate Supervisor (HOD)')}
                 </label>
-                {placementData.accessRole === 'department_head' ? (
+                {placementData.isHOD || placementData.accessRole === 'department_head' ? (
                   <div className="space-y-1.5">
                     <input
                       type="text"
@@ -1595,7 +1637,7 @@ const EmployeeManagement = () => {
                       className="w-full bg-amber-50/50 border border-amber-200 rounded-xl px-4 py-3 text-xs font-black text-amber-900 cursor-not-allowed"
                     />
                     <p className="text-[10px] font-bold text-amber-700 flex items-center gap-1">
-                      👑 {isAr ? 'مستوى رئيس قسم: يرفع التقارير مباشرة للإدارة التنفيذية ومجلس الإدارة.' : 'Department Head (HOD) Level: Reports directly to Executive Board & Management.'}
+                      👑 {isAr ? 'مستوى رئيس قسم: يقود القسم ويرفع التقارير مباشرة للإدارة التنفيذية ومجلس الإدارة.' : `Head of Department: Leads ${placementData.dept === 'custom' ? (placementData.customDept || 'Department') : placementData.dept.toUpperCase()} and reports directly to Executive Board.`}
                     </p>
                   </div>
                 ) : (
