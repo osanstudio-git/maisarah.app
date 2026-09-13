@@ -88,7 +88,36 @@ export default function HRRecruitment() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setCandidates(data || []);
+
+      if (!data || data.length === 0) {
+        const initialRecruits = [
+          {
+            name: 'Riyas',
+            role: 'Accountant',
+            dept: 'Tax & VAT',
+            stage: 'offered',
+            score: 80,
+            email: 'riyas.maisarah@gmail.com',
+            phone: '+968 9800 1234',
+            employment_type: 'Experienced',
+            placement_status: 'pending_placement',
+            onboarding_tasks: {
+              contract_signed: true,
+              bank_details_submitted: true,
+              documents_uploaded: true,
+              it_assets_ready: true
+            }
+          }
+        ];
+        const { data: seeded } = await supabase
+          .from('hr_recruits')
+          .insert(initialRecruits)
+          .select();
+
+        setCandidates(seeded && seeded.length > 0 ? seeded : (initialRecruits as any));
+      } else {
+        setCandidates(data);
+      }
     } catch (err: any) {
       console.error('Error fetching candidates:', err);
     } finally {
@@ -366,7 +395,15 @@ export default function HRRecruitment() {
       [taskKey as keyof typeof currentTasks]: !currentTasks[taskKey as keyof typeof currentTasks]
     };
 
-    const updatedCandidate = { ...selectedCandidate, onboarding_tasks: updatedTasks };
+    const total = 4;
+    const completed = Object.values(updatedTasks).filter(Boolean).length;
+    const isComplete = completed === total;
+
+    const updatedCandidate = {
+      ...selectedCandidate,
+      onboarding_tasks: updatedTasks,
+      placement_status: isComplete ? 'pending_placement' : selectedCandidate.placement_status
+    };
     setSelectedCandidate(updatedCandidate);
 
     // Update main list reference locally
@@ -375,7 +412,10 @@ export default function HRRecruitment() {
     try {
       const { error } = await supabase
         .from('hr_recruits')
-        .update({ onboarding_tasks: updatedTasks })
+        .update({
+          onboarding_tasks: updatedTasks,
+          ...(isComplete ? { placement_status: 'pending_placement' } : {})
+        })
         .eq('id', selectedCandidate.id);
 
       if (error) throw error;
@@ -897,6 +937,36 @@ export default function HRRecruitment() {
                         <div className="w-full bg-gray-150 h-2 rounded-full overflow-hidden">
                           <div className="bg-green-600 h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }}></div>
                         </div>
+
+                        {pct === 100 && (
+                          <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl flex items-center justify-between gap-2 mt-3">
+                            <div className="flex items-center gap-2 text-[11px] font-black text-emerald-800">
+                              <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
+                              <span>{isAr ? 'اكتمل التهيئة 100% - جاهز للتعيين بواسطة المدير' : 'Onboarding 100% Complete — Ready for Manager Placement!'}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await supabase
+                                  .from('hr_recruits')
+                                  .update({ placement_status: 'pending_placement' })
+                                  .eq('id', selectedCandidate.id);
+
+                                setNotification({
+                                  show: true,
+                                  title: isAr ? 'تم إرسال المرشح للمدير' : 'Candidate Sent to Manager',
+                                  message: isAr
+                                    ? `تم إرسال المرشح ${selectedCandidate.name} إلى بوابة المدير لتوزيع المهام وتحديد القسم.`
+                                    : `Candidate ${selectedCandidate.name} sent to Manager Portal (HR & Workforce -> Employee Placements).`,
+                                  type: 'success'
+                                });
+                              }}
+                              className="bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider transition-all flex-shrink-0 cursor-pointer"
+                            >
+                              {isAr ? 'إشعار المدير' : 'Notify Manager'}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
@@ -1270,7 +1340,7 @@ export default function HRRecruitment() {
 
       {/* ── Sleek Floating Toast Notification ─────────────────────────── */}
       {notification.show && (
-        <div className="fixed top-6 end-6 z-55 max-w-md w-full animate-slide-down pointer-events-auto" dir={isAr ? 'rtl' : 'ltr'}>
+        <div className="fixed top-20 end-6 z-[9999] max-w-md w-full animate-slide-down pointer-events-auto" dir={isAr ? 'rtl' : 'ltr'}>
           <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-2xl border border-gray-100/80 flex items-start gap-3.5 ring-1 ring-black/5">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${notification.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-[#A11212]'
               }`}>

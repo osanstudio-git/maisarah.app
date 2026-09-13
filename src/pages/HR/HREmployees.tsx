@@ -2618,7 +2618,7 @@ export default function HREmployees() {
 
       {/* ── Sleek Floating Toast Notification ─────────────────────────── */}
       {notification.show && (
-        <div className="fixed top-6 end-6 z-55 max-w-md w-full animate-slide-down pointer-events-auto" dir={isAr ? 'rtl' : 'ltr'}>
+        <div className="fixed top-20 end-6 z-[9999] max-w-md w-full animate-slide-down pointer-events-auto" dir={isAr ? 'rtl' : 'ltr'}>
           <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-2xl border border-gray-100/80 flex items-start gap-3.5 ring-1 ring-black/5">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
               notification.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-[#A11212]'
