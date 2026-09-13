@@ -5,6 +5,12 @@ import { createClient } from '@supabase/supabase-js';
 import {
   UserPlus, Search, ChevronRight, FileText, X, AlertCircle, CheckCircle2, ClipboardCheck, Eye, Trash2, AlertTriangle
 } from 'lucide-react';
+import {
+  syncRecruitsFromSupabase,
+  upsertLocalRecruit,
+  updateRecruitStatus,
+  getLocalRecruits
+} from '../../utils/recruitmentSync';
 
 interface Candidate {
   id: string;
@@ -82,44 +88,11 @@ export default function HRRecruitment() {
   const fetchCandidates = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('hr_recruits')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
-        const initialRecruits = [
-          {
-            name: 'Riyas',
-            role: 'Accountant',
-            dept: 'Tax & VAT',
-            stage: 'offered',
-            score: 80,
-            email: 'riyas.maisarah@gmail.com',
-            phone: '+968 9800 1234',
-            employment_type: 'Experienced',
-            placement_status: 'pending_placement',
-            onboarding_tasks: {
-              contract_signed: true,
-              bank_details_submitted: true,
-              documents_uploaded: true,
-              it_assets_ready: true
-            }
-          }
-        ];
-        const { data: seeded } = await supabase
-          .from('hr_recruits')
-          .insert(initialRecruits)
-          .select();
-
-        setCandidates(seeded && seeded.length > 0 ? seeded : (initialRecruits as any));
-      } else {
-        setCandidates(data);
-      }
+      const data = await syncRecruitsFromSupabase();
+      setCandidates(data as Candidate[]);
     } catch (err: any) {
       console.error('Error fetching candidates:', err);
+      setCandidates(getLocalRecruits() as Candidate[]);
     } finally {
       setLoading(false);
     }
@@ -947,10 +920,7 @@ export default function HRRecruitment() {
                             <button
                               type="button"
                               onClick={async () => {
-                                await supabase
-                                  .from('hr_recruits')
-                                  .update({ placement_status: 'pending_placement' })
-                                  .eq('id', selectedCandidate.id);
+                                await updateRecruitStatus(selectedCandidate.id, { placement_status: 'pending_placement' });
 
                                 setNotification({
                                   show: true,

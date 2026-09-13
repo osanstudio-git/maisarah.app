@@ -3,6 +3,11 @@ import { supabase } from '../../lib/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
 import { useTranslation } from 'react-i18next';
 import {
+  syncRecruitsFromSupabase,
+  getLocalRecruits,
+  updateRecruitStatus
+} from '../../utils/recruitmentSync';
+import {
   Users,
   UserPlus,
   X,
@@ -175,17 +180,16 @@ const EmployeeManagement = () => {
   const fetchPlacements = useCallback(async () => {
     setLoadingPlacements(true);
     try {
-      const { data, error } = await supabase
-        .from('hr_recruits')
-        .select('*')
-        .eq('stage', 'offered')
-        .neq('placement_status', 'placed')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setPendingPlacements(data || []);
+      let data = await syncRecruitsFromSupabase();
+      if (!data || data.length === 0) {
+        data = getLocalRecruits();
+      }
+      const filtered = data.filter((c: any) => c.stage === 'offered' && c.placement_status !== 'placed');
+      setPendingPlacements(filtered);
     } catch (err) {
       console.error('Error fetching pending placements:', err);
+      const local = getLocalRecruits();
+      setPendingPlacements(local.filter((c: any) => c.stage === 'offered' && c.placement_status !== 'placed'));
     } finally {
       setLoadingPlacements(false);
     }
@@ -193,6 +197,10 @@ const EmployeeManagement = () => {
 
   useEffect(() => {
     fetchPlacements();
+
+    const handleSyncEvent = () => fetchPlacements();
+    window.addEventListener('maisarah_recruits_updated', handleSyncEvent);
+    return () => window.removeEventListener('maisarah_recruits_updated', handleSyncEvent);
   }, [fetchPlacements]);
 
   useEffect(() => {
@@ -532,16 +540,11 @@ const EmployeeManagement = () => {
       if (employeeUpsertError) throw employeeUpsertError;
 
       // 4. Update hr_recruits to mark status as 'placed'
-      const { error: recruitError } = await supabase
-        .from('hr_recruits')
-        .update({
-          placement_status: 'placed',
-          role: finalRole,
-          dept: targetDept === 'tax_vat' ? 'Tax & VAT' : targetDept === 'audit' ? 'Audit' : 'Bookkeeping'
-        })
-        .eq('id', selectedPlacement.id);
-
-      if (recruitError) throw recruitError;
+      await updateRecruitStatus(selectedPlacement.id, {
+        placement_status: 'placed',
+        role: finalRole,
+        dept: targetDept === 'tax_vat' ? 'Tax & VAT' : targetDept === 'audit' ? 'Audit' : 'Bookkeeping'
+      });
 
       // 5. Dispatch portal credentials email (Email B) securely via Resend
       try {
