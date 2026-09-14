@@ -122,11 +122,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     try {
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileErr } = await supabase
         .from('profiles')
-        .select('role, secondary_roles')
+        .select('*')
         .eq('id', currentUser.id)
         .maybeSingle();
+
+      if (profileErr) {
+        console.warn('Profiles query notice:', profileErr.message);
+      }
         
       if (profileData?.role) {
         // If local role not manually set yet, set profile role

@@ -592,7 +592,6 @@ const EmployeeManagement = () => {
           full_name: selectedPlacement.name,
           email: selectedPlacement.email,
           role: effectiveRole,
-          secondary_roles: placementData.secondaryRoles || ['employee', 'accountant'],
           department_id: targetDeptKey
         }, { onConflict: 'id' });
         if (profileError) console.warn('Profiles upsert warning:', profileError.message);
