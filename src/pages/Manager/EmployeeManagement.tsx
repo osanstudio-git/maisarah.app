@@ -1793,9 +1793,28 @@ const EmployeeManagement = () => {
                     >
                       <option value="Executive Management & Board of Directors">{isAr ? 'الإدارة التنفيذية ومجلس الإدارة' : 'Executive Board & Management'}</option>
                       <option value="General Manager (Operations & Finance)">{isAr ? 'المدير العام (العمليات والمالية)' : 'General Manager (Operations & Finance)'}</option>
-                      <option value="Khalfan Al-Abri (Head of Tax & VAT)">{isAr ? 'خلفان العبري (رئيس قسم الضرائب)' : 'Khalfan Al-Abri (Head of Tax & VAT)'}</option>
-                      <option value="Nasser Al-Riyami (Head of Audit)">{isAr ? 'ناصر الريامي (رئيس قسم التدقيق)' : 'Nasser Al-Riyami (Head of Audit)'}</option>
-                      <option value="Mazis Al-Balushi (Head of Bookkeeping)">{isAr ? 'مازن البلوشي (رئيس قسم مسك الدفاتر)' : 'Mazis Al-Balushi (Head of Bookkeeping)'}</option>
+                      
+                      {/* Real Dynamic Employees & HODs from DB */}
+                      {employees.length > 0 && (
+                        <optgroup label={isAr ? 'الموظفون المعتمدون بالمؤسسة' : 'Real Active Company Personnel'}>
+                          {employees.map(emp => {
+                            const val = `${emp.name_en} (${emp.job_title})`;
+                            return (
+                              <option key={emp.id} value={val}>
+                                {isAr ? `${emp.name_ar || emp.name_en} (${emp.job_title})` : val}
+                              </option>
+                            );
+                          })}
+                        </optgroup>
+                      )}
+
+                      {/* Default HOD Presets */}
+                      <optgroup label={isAr ? 'رؤساء الأقسام المعينون' : 'Designated Department Heads'}>
+                        <option value="Khalfan Al-Abri (Head of Tax & VAT)">{isAr ? 'خلفان العبري (رئيس قسم الضرائب)' : 'Khalfan Al-Abri (Head of Tax & VAT)'}</option>
+                        <option value="Nasser Al-Riyami (Head of Audit)">{isAr ? 'ناصر الريامي (رئيس قسم التدقيق)' : 'Nasser Al-Riyami (Head of Audit)'}</option>
+                        <option value="Mazis Al-Balushi (Head of Bookkeeping)">{isAr ? 'مازن البلوشي (رئيس قسم مسك الدفاتر)' : 'Mazis Al-Balushi (Head of Bookkeeping)'}</option>
+                      </optgroup>
+
                       <option value="custom">{isAr ? '+ تحديد اسم مشرف مخصص...' : '+ Specify Custom Supervisor Name...'}</option>
                     </select>
                     {placementData.supervisor === 'custom' && (
