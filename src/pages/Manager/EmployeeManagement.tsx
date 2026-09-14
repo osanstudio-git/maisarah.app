@@ -1722,9 +1722,16 @@ const EmployeeManagement = () => {
                     value={placementData.dept}
                     onChange={(e) => {
                       const newDept = e.target.value;
-                      let defaultHOD = 'Nasser Al-Riyami (Head of Audit)';
-                      if (newDept === 'tax_vat') defaultHOD = 'Khalfan Al-Abri (Head of Tax & VAT)';
-                      else if (newDept === 'bookkeeping') defaultHOD = 'Mazis Al-Balushi (Head of Bookkeeping)';
+                      // Dynamic lookup for real active HOD in this department
+                      const matchingHOD = employees.find(emp => {
+                        const isHead = emp.role === 'department_head' || emp.job_title?.toLowerCase().includes('head');
+                        const empDept = String(emp.department_id || '').toLowerCase();
+                        return isHead && (empDept.includes(newDept) || newDept.includes(empDept));
+                      });
+
+                      const defaultHOD = matchingHOD 
+                        ? `${matchingHOD.name_en} (${matchingHOD.job_title})`
+                        : 'General Manager (Operations & Finance)';
 
                       setPlacementData({
                         ...placementData,
@@ -1793,9 +1800,9 @@ const EmployeeManagement = () => {
                       <option value="Executive Management & Board of Directors">{isAr ? 'الإدارة التنفيذية ومجلس الإدارة' : 'Executive Board & Management'}</option>
                       <option value="General Manager (Operations & Finance)">{isAr ? 'المدير العام (العمليات والمالية)' : 'General Manager (Operations & Finance)'}</option>
                       
-                      {/* Real Dynamic Employees & HODs from DB */}
+                      {/* Real Dynamic Personnel from DB */}
                       {employees.length > 0 && (
-                        <optgroup label={isAr ? 'الموظفون المعتمدون بالمؤسسة' : 'Real Active Company Personnel'}>
+                        <optgroup label={isAr ? 'الموظفون المعتمدون بالمؤسسة (من قاعدة البيانات)' : 'Real Active Company Personnel (From Database)'}>
                           {employees.map(emp => {
                             const val = `${emp.name_en} (${emp.job_title})`;
                             return (
@@ -1806,13 +1813,6 @@ const EmployeeManagement = () => {
                           })}
                         </optgroup>
                       )}
-
-                      {/* Default HOD Presets */}
-                      <optgroup label={isAr ? 'رؤساء الأقسام المعينون' : 'Designated Department Heads'}>
-                        <option value="Khalfan Al-Abri (Head of Tax & VAT)">{isAr ? 'خلفان العبري (رئيس قسم الضرائب)' : 'Khalfan Al-Abri (Head of Tax & VAT)'}</option>
-                        <option value="Nasser Al-Riyami (Head of Audit)">{isAr ? 'ناصر الريامي (رئيس قسم التدقيق)' : 'Nasser Al-Riyami (Head of Audit)'}</option>
-                        <option value="Mazis Al-Balushi (Head of Bookkeeping)">{isAr ? 'مازن البلوشي (رئيس قسم مسك الدفاتر)' : 'Mazis Al-Balushi (Head of Bookkeeping)'}</option>
-                      </optgroup>
 
                       <option value="custom">{isAr ? '+ تحديد اسم مشرف مخصص...' : '+ Specify Custom Supervisor Name...'}</option>
                     </select>
