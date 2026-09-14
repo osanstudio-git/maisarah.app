@@ -6,16 +6,20 @@ type AuthContextType = {
   session: Session | null;
   user: User | null;
   role: string | null;
+  secondaryRoles: string[];
   loading: boolean;
   signOut: () => Promise<void>;
+  switchPortal: (targetRole: string) => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
   role: null,
+  secondaryRoles: [],
   loading: true,
   signOut: async () => {},
+  switchPortal: () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -24,6 +28,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   
   // Initialize role from localStorage if available to prevent UI flashes
   const [role, setRole] = useState<string | null>(() => localStorage.getItem('app_user_role'));
+  const [secondaryRoles, setSecondaryRoles] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('app_user_secondary_roles') || '[]');
+    } catch {
+      return [];
+    }
+  });
   
   // If we already have a cached role, we don't strictly need to block the UI, 
   // BUT we MUST wait for the local session to initialize to prevent premature redirects to /login.
@@ -58,16 +69,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         if (immediateRole) {
           setRole(immediateRole);
-          // Stop loading immediately so the user sees the UI instantly!
           setLoading(false); 
         }
         
         // Fetch fresh role in the background to verify
         await fetchRole(initialSession.user, !immediateRole);
       } else {
-        // No session, stop loading and let ProtectedRoute redirect to login
         localStorage.removeItem('app_user_role');
+        localStorage.removeItem('app_user_secondary_roles');
         setRole(null);
+        setSecondaryRoles([]);
         setLoading(false);
       }
 
@@ -79,14 +90,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(session?.user || null);
 
         if (session?.user) {
-          // If sign in occurs, fetch role
           if (event === 'SIGNED_IN' || !role) {
             await fetchRole(session.user, true);
           }
         } else {
-          // Signed out
           localStorage.removeItem('app_user_role');
+          localStorage.removeItem('app_user_secondary_roles');
           setRole(null);
+          setSecondaryRoles([]);
           setLoading(false);
         }
       });
@@ -111,18 +122,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     try {
-      // Priority 1: Profiles table
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, secondary_roles')
         .eq('id', currentUser.id)
         .maybeSingle();
         
       if (profileData?.role) {
-        setRole(profileData.role);
-        localStorage.setItem('app_user_role', profileData.role);
+        // If local role not manually set yet, set profile role
+        if (!localStorage.getItem('app_user_role')) {
+          setRole(profileData.role);
+          localStorage.setItem('app_user_role', profileData.role);
+        }
+        const sec = Array.isArray(profileData.secondary_roles) ? profileData.secondary_roles : [];
+        setSecondaryRoles(sec);
+        localStorage.setItem('app_user_secondary_roles', JSON.stringify(sec));
       } else {
-        // Priority 2: Fallback to metadata
         const fallbackRole = currentUser.user_metadata?.role || null;
         setRole(fallbackRole);
         if (fallbackRole) {
@@ -139,6 +154,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const switchPortal = (targetRole: string) => {
+    localStorage.setItem('app_user_role', targetRole);
+    setRole(targetRole);
+    const portalRoutes: Record<string, string> = {
+      accountant: '/accountant',
+      employee: '/employee',
+      department_head: '/hod/dashboard',
+      hr: '/hr/dashboard',
+      crm: '/crm/dashboard',
+      manager: '/manager',
+      client: '/client'
+    };
+    const targetPath = portalRoutes[targetRole] || '/';
+    window.location.href = targetPath;
+  };
+
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
@@ -146,15 +177,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error("Error signing out from Supabase:", error);
     } finally {
       localStorage.removeItem('app_user_role');
+      localStorage.removeItem('app_user_secondary_roles');
       setSession(null);
       setUser(null);
       setRole(null);
+      setSecondaryRoles([]);
       window.location.href = '/login';
     }
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, role, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, role, secondaryRoles, loading, signOut, switchPortal }}>
       {children}
     </AuthContext.Provider>
   );

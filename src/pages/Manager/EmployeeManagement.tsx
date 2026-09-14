@@ -100,6 +100,7 @@ const EmployeeManagement = () => {
     customSupervisor: '',
     startDate: '',
     accessRole: 'accountant',
+    secondaryRoles: ['employee', 'accountant'],
     isHOD: false
   });
   const [placementError, setPlacementError] = useState<string | null>(null);
@@ -499,6 +500,7 @@ const EmployeeManagement = () => {
       customSupervisor: '',
       startDate: new Date().toISOString().split('T')[0],
       accessRole: 'accountant',
+      secondaryRoles: ['accountant', 'employee'],
       isHOD: false
     });
     setPlacementError(null);
@@ -590,6 +592,7 @@ const EmployeeManagement = () => {
           full_name: selectedPlacement.name,
           email: selectedPlacement.email,
           role: effectiveRole,
+          secondary_roles: placementData.secondaryRoles || ['employee', 'accountant'],
           department_id: targetDeptKey
         }, { onConflict: 'id' });
         if (profileError) console.warn('Profiles upsert warning:', profileError.message);
@@ -1614,6 +1617,56 @@ const EmployeeManagement = () => {
                     ? 'يقوم المحاسب بالربط بين رؤوس الأقسام والموظفين لإدارة الفواتير والإيصالات والمطالبات المالية للعملاء.' 
                     : 'The Accountant acts as the operational bridge between HODs and employees to manage client invoices, payment receipts, and billing notifications.'}
                 </p>
+
+                {/* Secondary Cross-Portal Access Checkboxes */}
+                <div className="mt-3 bg-gray-50/90 p-3.5 rounded-2xl border border-gray-200/80 space-y-2">
+                  <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                    {isAr ? 'صلاحيات البوابات الإضافية (تبديل البوابات بأساب واحد)' : 'Cross-Portal Secondary Access (Single Identity Multi-Portal)'}
+                  </label>
+                  <div className="flex flex-wrap gap-2 pt-0.5">
+                    {[
+                      { id: 'accountant', labelEn: '💼 Accountant Portal', labelAr: '💼 بوابة المحاسب' },
+                      { id: 'employee', labelEn: '👤 Staff Workspace', labelAr: '👤 مساحة الموظف' },
+                      { id: 'department_head', labelEn: '👑 HOD Leadership', labelAr: '👑 رئيس قسم' },
+                      { id: 'crm', labelEn: '🤝 CRM Portal', labelAr: '🤝 علاقات العملاء' },
+                      { id: 'hr', labelEn: '📋 HR Manager', labelAr: '📋 الموارد البشرية' }
+                    ].map(sec => {
+                      const isPrimary = placementData.accessRole === sec.id;
+                      const isChecked = isPrimary || placementData.secondaryRoles?.includes(sec.id);
+                      return (
+                        <label
+                          key={sec.id}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                            isPrimary
+                              ? 'bg-brand-dark/10 border-brand-dark text-brand-dark opacity-90 cursor-not-allowed'
+                              : isChecked
+                              ? 'bg-red-50 border-red-200 text-[#A11212]'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={isPrimary}
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const current = new Set(placementData.secondaryRoles || []);
+                              if (e.target.checked) current.add(sec.id);
+                              else current.delete(sec.id);
+                              setPlacementData({ ...placementData, secondaryRoles: Array.from(current) });
+                            }}
+                            className="w-3.5 h-3.5 accent-[#A11212] rounded cursor-pointer"
+                          />
+                          <span>{isAr ? sec.labelAr : sec.labelEn}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-gray-500 font-medium pt-0.5">
+                    ✨ {isAr 
+                      ? 'يمكن للموظف التنقل بين البوابات المحددة عبر زر "تبديل البوابة" أعلى الشاشة.' 
+                      : 'The employee can switch between selected portals via the "Switch Portal" dropdown in top bar.'}
+                  </p>
+                </div>
               </div>
 
               {/* 3. Leadership Status Toggle (Is Department Head?) */}
