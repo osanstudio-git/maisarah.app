@@ -1593,11 +1593,12 @@ const EmployeeManagement = () => {
                   value={placementData.accessRole}
                   onChange={(e) => {
                     const newRole = e.target.value;
-                    const isHead = newRole === 'department_head' || placementData.isHOD;
+                    const isHead = newRole === 'department_head';
                     setPlacementData({
                       ...placementData,
                       accessRole: newRole,
-                      supervisor: isHead ? 'Executive Management & Board of Directors' : placementData.supervisor
+                      isHOD: isHead,
+                      supervisor: isHead ? 'Executive Management & Board of Directors' : (placementData.supervisor === 'Executive Management & Board of Directors' ? 'General Manager (Operations & Finance)' : placementData.supervisor)
                     });
                   }}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
