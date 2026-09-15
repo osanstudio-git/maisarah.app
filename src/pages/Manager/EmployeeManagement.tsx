@@ -534,51 +534,50 @@ const EmployeeManagement = () => {
 
       let userId: string | null = null;
       let isAlreadyRegistered = false;
+      const cleanEmail = selectedPlacement.email.trim().toLowerCase();
 
-      // 1. Sign up the user in Supabase Auth securely
-      const { data: authData, error: authError } = await tempClient.auth.signUp({
-        email: selectedPlacement.email,
-        password: tempPassword,
-        options: {
-          data: {
-            full_name: selectedPlacement.name,
-            role: effectiveRole,
-            department_id: targetDeptKey
+      // Pre-check if user profile or employee record already exists
+      const [{ data: existingProfile }, { data: existingEmp }] = await Promise.all([
+        supabase.from('profiles').select('id').eq('email', cleanEmail).maybeSingle(),
+        supabase.from('hr_employees').select('id').eq('email', cleanEmail).maybeSingle()
+      ]);
+
+      if (existingProfile?.id || existingEmp?.id) {
+        userId = existingProfile?.id || existingEmp?.id || null;
+        isAlreadyRegistered = true;
+      }
+
+      // 1. Only call Supabase Auth signUp if user does NOT already exist in DB
+      if (!userId) {
+        const { data: authData, error: authError } = await tempClient.auth.signUp({
+          email: selectedPlacement.email,
+          password: tempPassword,
+          options: {
+            data: {
+              full_name: selectedPlacement.name,
+              role: effectiveRole,
+              department_id: targetDeptKey
+            }
           }
-        }
-      });
+        });
 
-      if (authError) {
-        const isExisting =
-          authError.status === 422 ||
-          authError.status === 400 ||
-          authError.message?.toLowerCase().includes('already registered') ||
-          authError.message?.toLowerCase().includes('already exists') ||
-          authError.message?.toLowerCase().includes('user');
+        if (authError) {
+          const isExisting =
+            authError.status === 422 ||
+            authError.status === 400 ||
+            authError.message?.toLowerCase().includes('already registered') ||
+            authError.message?.toLowerCase().includes('already exists') ||
+            authError.message?.toLowerCase().includes('user');
 
-        if (isExisting) {
-          isAlreadyRegistered = true;
-          const { data: existingProfile } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('email', selectedPlacement.email.trim().toLowerCase())
-            .maybeSingle();
-
-          if (existingProfile?.id) {
-            userId = existingProfile.id;
+          if (isExisting) {
+            isAlreadyRegistered = true;
+            userId = selectedPlacement.id || crypto.randomUUID();
           } else {
-            const { data: existingEmp } = await supabase
-              .from('hr_employees')
-              .select('id')
-              .eq('email', selectedPlacement.email.trim().toLowerCase())
-              .maybeSingle();
-            userId = existingEmp?.id || selectedPlacement.id || crypto.randomUUID();
+            throw authError;
           }
         } else {
-          throw authError;
+          userId = authData.user?.id || null;
         }
-      } else {
-        userId = authData.user?.id || null;
       }
 
       if (!userId) {
