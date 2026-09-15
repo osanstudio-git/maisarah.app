@@ -22,7 +22,10 @@ import {
   UserCheck,
   Building2,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  Key,
+  Copy,
+  Check
 } from 'lucide-react';
 import { getAllDepartments, getDepartmentById } from '../../config/departments';
 import { logActivity } from '../../lib/activityLogger';
@@ -104,6 +107,26 @@ const EmployeeManagement = () => {
     isHOD: false
   });
   const [placementError, setPlacementError] = useState<string | null>(null);
+  const [credentialsModal, setCredentialsModal] = useState<{
+    show: boolean;
+    name: string;
+    email: string;
+    password: string;
+    role: string;
+    dept: string;
+    supervisor: string;
+  } | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopyText = (text: string, fieldName: string) => {
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2500);
+    } catch (e) {
+      console.warn('Clipboard write error:', e);
+    }
+  };
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [dossierTab, setDossierTab] = useState<'general' | 'job' | 'financials' | 'performance'>('general');
   const [isSavingDossier, setIsSavingDossier] = useState(false);
@@ -542,8 +565,13 @@ const EmployeeManagement = () => {
         supabase.from('hr_employees').select('id').eq('email', cleanEmail).maybeSingle()
       ]);
 
-      if (existingProfile?.id || existingEmp?.id) {
-        userId = existingProfile?.id || existingEmp?.id || null;
+      const isValidUUID = (str: string | null) => str ? /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str) : false;
+
+      if (existingProfile?.id && isValidUUID(existingProfile.id)) {
+        userId = existingProfile.id;
+        isAlreadyRegistered = true;
+      } else if (existingEmp?.id && isValidUUID(existingEmp.id)) {
+        userId = existingEmp.id;
         isAlreadyRegistered = true;
       }
 
@@ -571,7 +599,6 @@ const EmployeeManagement = () => {
 
           if (isExisting) {
             isAlreadyRegistered = true;
-            userId = selectedPlacement.id || crypto.randomUUID();
           } else {
             throw authError;
           }
@@ -580,8 +607,8 @@ const EmployeeManagement = () => {
         }
       }
 
-      if (!userId) {
-        userId = selectedPlacement.id || crypto.randomUUID();
+      if (!userId || !isValidUUID(userId)) {
+        userId = crypto.randomUUID();
       }
 
       // 2. Insert/Upsert profile record (safely catch RLS/FK warnings)
@@ -687,6 +714,17 @@ const EmployeeManagement = () => {
           ? `تم تفعيل حساب الموظف لـ ${selectedPlacement.name} بنجاح وإرسال البريد الإلكتروني (Email B).`
           : `Placement details confirmed! Registered employee account for ${selectedPlacement.name} and dispatched login credentials to ${selectedPlacement.email}.`,
         type: 'success'
+      });
+
+      // Show Manager Credentials Modal with Copy Options
+      setCredentialsModal({
+        show: true,
+        name: selectedPlacement.name,
+        email: selectedPlacement.email,
+        password: tempPassword,
+        role: finalRole,
+        dept: targetDeptName,
+        supervisor: finalSupervisor
       });
 
       setPendingPlacements(prev => prev.filter(p => p.id !== selectedPlacement.id));
@@ -1855,6 +1893,136 @@ const EmployeeManagement = () => {
         </div>
       )}
 
+      {/* ── Placement Credentials & Portal Registration Success Modal ────── */}
+      {credentialsModal && credentialsModal.show && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-md" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-scale-up border border-gray-100">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-800 p-6 text-white text-center relative">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-3 border border-white/30 shadow-inner">
+                <CheckCircle2 size={32} className="text-white" />
+              </div>
+              <h3 className="text-lg font-black tracking-tight">
+                {isAr ? '🎉 تم اعتماد التعيين وتفعيل حساب الموظف!' : '🎉 Employee Placement Finalized & Registered!'}
+              </h3>
+              <p className="text-xs text-emerald-100 font-medium mt-1">
+                {isAr 
+                  ? `تم تسجيل حساب الموظف لـ ${credentialsModal.name} بنجاح وإرسال تفاصيل الدخول إلى بريده الإلكتروني.` 
+                  : `Corporate portal access granted for ${credentialsModal.name}. Credentials generated and dispatched via email.`}
+              </p>
+            </div>
+
+            {/* Body Content */}
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              {/* Employee & Assignment Summary Card */}
+              <div className="bg-gray-50/90 p-4 rounded-2xl border border-gray-200/80 grid grid-cols-2 gap-3 text-xs font-bold text-gray-700">
+                <div>
+                  <span className="text-[10px] text-gray-400 block uppercase font-black">{isAr ? 'الاسم الكامل:' : 'Full Name:'}</span>
+                  <span className="text-gray-900 font-extrabold">{credentialsModal.name}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-gray-400 block uppercase font-black">{isAr ? 'المسمى الوظيفي:' : 'Designated Position:'}</span>
+                  <span className="text-gray-900 font-extrabold">{credentialsModal.role}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-gray-400 block uppercase font-black">{isAr ? 'القسم المعين:' : 'Designated Department:'}</span>
+                  <span className="text-gray-900 font-extrabold">{credentialsModal.dept}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-gray-400 block uppercase font-black">{isAr ? 'المشرف المباشر:' : 'Reporting Supervisor:'}</span>
+                  <span className="text-gray-900 font-extrabold">{credentialsModal.supervisor}</span>
+                </div>
+              </div>
+
+              {/* Credentials Box */}
+              <div className="space-y-3 bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-black text-amber-900 flex items-center gap-1.5 uppercase tracking-wider">
+                    <Key size={16} className="text-amber-600" />
+                    {isAr ? 'بيانات الدخول للبوابة (جاهزة للنسخ والمشاركة)' : 'Generated Login Credentials'}
+                  </p>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                    📧 {isAr ? 'تم إرسالها بالبريد' : 'Dispatched via Email'}
+                  </span>
+                </div>
+
+                {/* 1. Portal URL */}
+                <div className="bg-white p-3 rounded-xl border border-amber-200/60 flex items-center justify-between text-xs font-bold shadow-2xs">
+                  <div className="truncate me-2 min-w-0 flex-1">
+                    <span className="text-[9px] font-black text-gray-400 block uppercase">{isAr ? 'رابط تسجيل الدخول للبوابة:' : 'Login Portal Link:'}</span>
+                    <span className="text-gray-900 truncate block font-mono text-[11px]">{window.location.origin}/login</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(`${window.location.origin}/login`, 'url')}
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 flex-shrink-0 cursor-pointer"
+                  >
+                    {copiedField === 'url' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                    <span>{copiedField === 'url' ? (isAr ? 'تم النسخ!' : 'Copied!') : (isAr ? 'نسخ الرابط' : 'Copy URL')}</span>
+                  </button>
+                </div>
+
+                {/* 2. Username / Email */}
+                <div className="bg-white p-3 rounded-xl border border-amber-200/60 flex items-center justify-between text-xs font-bold shadow-2xs">
+                  <div className="truncate me-2 min-w-0 flex-1">
+                    <span className="text-[9px] font-black text-gray-400 block uppercase">{isAr ? 'البريد الإلكتروني / اسم المستخدم:' : 'Username / Email:'}</span>
+                    <span className="text-gray-900 truncate block font-mono text-xs">{credentialsModal.email}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(credentialsModal.email, 'email')}
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 flex-shrink-0 cursor-pointer"
+                  >
+                    {copiedField === 'email' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                    <span>{copiedField === 'email' ? (isAr ? 'تم النسخ!' : 'Copied!') : (isAr ? 'نسخ البريد' : 'Copy Email')}</span>
+                  </button>
+                </div>
+
+                {/* 3. Temporary Password */}
+                <div className="bg-white p-3 rounded-xl border border-amber-200/60 flex items-center justify-between text-xs font-bold shadow-2xs">
+                  <div className="me-2 min-w-0 flex-1">
+                    <span className="text-[9px] font-black text-gray-400 block uppercase">{isAr ? 'كلمة المرور المؤقتة:' : 'Temporary Password:'}</span>
+                    <span className="font-mono text-base font-black text-[#A11212] tracking-widest">{credentialsModal.password}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(credentialsModal.password, 'password')}
+                    className="px-3.5 py-2 bg-[#A11212] hover:bg-red-800 text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1.5 flex-shrink-0 cursor-pointer shadow-xs"
+                  >
+                    {copiedField === 'password' ? <Check size={14} className="text-white" /> : <Copy size={14} />}
+                    <span>{copiedField === 'password' ? (isAr ? 'تم النسخ!' : 'Copied!') : (isAr ? 'نسخ كلمة المرور' : 'Copy Password')}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Copy All Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  const fullText = `Maisarah Employee Portal Credentials:\n-----------------------------------------\nEmployee Name: ${credentialsModal.name}\nPortal URL: ${window.location.origin}/login\nEmail/Username: ${credentialsModal.email}\nTemporary Password: ${credentialsModal.password}\nPosition: ${credentialsModal.role}\nDepartment: ${credentialsModal.dept}\nSupervisor: ${credentialsModal.supervisor}`;
+                  handleCopyText(fullText, 'all');
+                }}
+                className="w-full py-3 bg-gray-900 hover:bg-black text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md"
+              >
+                {copiedField === 'all' ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+                <span>{copiedField === 'all' ? (isAr ? 'تم نسخ جميع البيانات بنجاح! 📋' : 'All Credentials Copied to Clipboard! 📋') : (isAr ? 'نسخ جميع بيانات الدخول بالكامل' : 'Copy All Credentials to Clipboard')}</span>
+              </button>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCredentialsModal(null)}
+                className="w-full py-3 bg-[#A11212] text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-red-800 transition-colors cursor-pointer shadow-md"
+              >
+                {isAr ? 'إغلاق وإنهاء التعيين' : 'Done / Complete Placement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Sleek Floating Toast Notification ─────────────────────────── */}
       {notification.show && (
         <div className="fixed top-20 end-6 z-[9999] max-w-md w-full animate-slide-down pointer-events-auto" dir={isAr ? 'rtl' : 'ltr'}>
@@ -2376,6 +2544,166 @@ const EmployeeManagement = () => {
                   </button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Credentials Issued Success Modal (For Manager Copying & Review) */}
+      {/* ------------------------------------------------------------------ */}
+      {credentialsModal?.show && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-emerald-100 animate-scale-up">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-700 p-6 text-white relative">
+              <button
+                onClick={() => setCredentialsModal(null)}
+                className="absolute top-4 right-4 text-white/80 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
+              >
+                <X size={20} />
+              </button>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white font-bold">
+                  <CheckCircle2 size={24} className="text-emerald-200" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-200 bg-emerald-800/40 px-2.5 py-0.5 rounded-full border border-emerald-400/30">
+                    {isAr ? 'تم التسجيل وتفعيل الحساب' : 'Placement & Registration Complete'}
+                  </span>
+                  <h3 className="text-xl font-black mt-0.5">
+                    {isAr ? 'تم إنشاء بيانات الدخول بنجاح!' : 'Employee Credentials Generated'}
+                  </h3>
+                </div>
+              </div>
+              <p className="text-xs text-emerald-100/90 font-medium leading-relaxed mt-2">
+                {isAr
+                  ? `تم تفعيل حساب الموظف ${credentialsModal.name} وإرسال إشعار الترحيب عبر البريد الإلكتروني. يمكنك نسخ البيانات أدناه لتزويد الموظف بها مباشرة.`
+                  : `Registered portal access for ${credentialsModal.name} and dispatched login setup to their email. You can copy the credentials below for direct handover.`}
+              </p>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-6 space-y-4">
+              {/* Employee Summary Card */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 flex items-center justify-between">
+                <div>
+                  <h4 className="font-black text-slate-900 text-base">{credentialsModal.name}</h4>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 font-bold">
+                    <span className="flex items-center gap-1"><Building2 size={13} className="text-slate-400" /> {credentialsModal.dept}</span>
+                    <span className="flex items-center gap-1"><ShieldCheck size={13} className="text-slate-400" /> {credentialsModal.role}</span>
+                  </div>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 font-black text-sm flex items-center justify-center">
+                  {credentialsModal.name.charAt(0)}
+                </div>
+              </div>
+
+              {/* Credential Fields with Copy Buttons */}
+              <div className="space-y-3">
+                {/* 1. Portal URL */}
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex items-center justify-between">
+                  <div className="overflow-hidden mr-2">
+                    <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block">{isAr ? 'رابط البوابة' : 'Portal Login URL'}</span>
+                    <span className="text-xs font-bold text-slate-800 truncate block">{window.location.origin}/login</span>
+                  </div>
+                  <button
+                    onClick={() => handleCopyText(`${window.location.origin}/login`, 'url')}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-slate-900 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0"
+                  >
+                    {copiedField === 'url' ? (
+                      <>
+                        <Check size={13} className="text-emerald-600" />
+                        <span className="text-emerald-700 font-black">{isAr ? 'تم النسخ' : 'Copied!'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={13} className="text-slate-500" />
+                        <span>{isAr ? 'نسخ الرابط' : 'Copy URL'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* 2. Registered Email */}
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex items-center justify-between">
+                  <div className="overflow-hidden mr-2">
+                    <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block">{isAr ? 'البريد الإلكتروني / اسم المستخدم' : 'Email / Username'}</span>
+                    <span className="text-xs font-black text-slate-900 truncate block select-all">{credentialsModal.email}</span>
+                  </div>
+                  <button
+                    onClick={() => handleCopyText(credentialsModal.email, 'email')}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-slate-900 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0"
+                  >
+                    {copiedField === 'email' ? (
+                      <>
+                        <Check size={13} className="text-emerald-600" />
+                        <span className="text-emerald-700 font-black">{isAr ? 'تم النسخ' : 'Copied!'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={13} className="text-slate-500" />
+                        <span>{isAr ? 'نسخ الإيميل' : 'Copy Email'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* 3. Password */}
+                <div className="bg-emerald-50/60 p-3 rounded-2xl border border-emerald-200 flex items-center justify-between">
+                  <div className="overflow-hidden mr-2">
+                    <span className="text-[10px] uppercase font-black tracking-wider text-emerald-700 block">{isAr ? 'كلمة المرور المؤقتة' : 'Temporary Password'}</span>
+                    <span className="text-sm font-black text-emerald-950 font-mono tracking-wide block select-all">{credentialsModal.password || '●●●●●●●●'}</span>
+                  </div>
+                  <button
+                    onClick={() => handleCopyText(credentialsModal.password, 'password')}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0"
+                  >
+                    {copiedField === 'password' ? (
+                      <>
+                        <Check size={13} className="text-white" />
+                        <span className="font-black">{isAr ? 'تم النسخ' : 'Copied!'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Key size={13} className="text-emerald-100" />
+                        <span>{isAr ? 'نسخ كلمة المرور' : 'Copy Password'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Master Copy All Button */}
+              <button
+                onClick={() => {
+                  const fullText = `Employee Credentials - Maisarah Portal\n-----------------------------------\nEmployee: ${credentialsModal.name}\nDepartment: ${credentialsModal.dept}\nRole: ${credentialsModal.role}\n\nLogin URL: ${window.location.origin}/login\nEmail: ${credentialsModal.email}\nTemporary Password: ${credentialsModal.password}`;
+                  handleCopyText(fullText, 'all');
+                }}
+                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer mt-2"
+              >
+                {copiedField === 'all' ? (
+                  <>
+                    <Check size={15} className="text-emerald-400" />
+                    <span className="text-emerald-400">{isAr ? 'تم نسخ جميع البيانات في الحافظة!' : 'All Credentials Copied to Clipboard!'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={15} className="text-slate-300" />
+                    <span>{isAr ? '📋 نسخ كافة البيانات دفعة واحدة' : '📋 Copy All Credentials to Clipboard'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setCredentialsModal(null)}
+                className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors cursor-pointer shadow-sm"
+              >
+                {isAr ? 'إغلاق وإكمال' : 'Done / Close'}
+              </button>
             </div>
           </div>
         </div>

@@ -110,9 +110,12 @@ export async function updateRecruitStatus(id: string, updates: Partial<RecruitCa
     upsertLocalRecruit(updatedCandidate);
   }
 
-  try {
-    await supabase.from('hr_recruits').update(updates).eq('id', id);
-  } catch (e) {
-    console.warn('Supabase recruit update failed (cached locally):', e);
+  const isValidUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
+  if (isValidUUID) {
+    try {
+      await supabase.from('hr_recruits').update(updates).eq('id', id);
+    } catch (e) {
+      console.warn('Supabase recruit update failed (cached locally):', e);
+    }
   }
 }
