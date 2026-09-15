@@ -646,42 +646,40 @@ const EmployeeManagement = () => {
         dept: targetDeptName
       });
 
-      // 5. Dispatch portal credentials email (Email B) securely via Resend
-      try {
-        await supabase.functions.invoke('send-email', {
-          body: {
-            to: selectedPlacement.email,
-            subject: isAr
-              ? 'مرحباً بك في مجموعة ميسرة - حساب الموظف الخاص بك جاهز!'
-              : 'Welcome to Maisarah - Your Employee Portal is Active!',
-            html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; color: #333;">
-                <h2 style="color: #A11212; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; text-align: center;">Welcome to Maisarah Group!</h2>
-                <p>Dear ${selectedPlacement.name},</p>
-                <p>
-                  ${isAr
-                ? 'يسعدنا إبلاغك بأنه قد تم اعتماد تفاصيل تعيينك وتفعيل حساب الموظف الخاص بك بنجاح. يمكنك الآن تسجيل الدخول لتحديث ملفك والبدء بقائمة مهام التهيئة.'
-                : 'We are pleased to inform you that your department placement setup has been finalized and your corporate portal access is now active.'}
-                </p>
-                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb;">
-                  <h3 style="margin-top: 0; color: #555;">Your Access Credentials:</h3>
-                  <p><strong>Portal URL:</strong> <a href="${window.location.origin}/login">${window.location.origin}/login</a></p>
-                  <p><strong>Username/Email:</strong> ${selectedPlacement.email}</p>
-                  ${!isAlreadyRegistered ? `<p><strong>Temporary Password:</strong> ${tempPassword}</p>` : ''}
-                  <p><strong>Assigned Role:</strong> ${finalRole}</p>
-                  <p><strong>Assigned Department:</strong> ${targetDeptName}</p>
-                </div>
-                <p>${isAr ? 'يرجى تغيير كلمة المرور المؤقتة فور تسجيل الدخول لأول مرة.' : 'Please log in to complete your onboarding tasklist and change your temporary password for system security.'}</p>
-                <br/>
-                <p>${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
-                <p>${isAr ? 'إدارة العمليات والتنفيذ - ميسرة' : 'Maisarah Operations & Placement Management'}</p>
+      // 5. Dispatch portal credentials email (Email B) non-blocking for instant UI response
+      supabase.functions.invoke('send-email', {
+        body: {
+          to: selectedPlacement.email,
+          subject: isAr
+            ? 'مرحباً بك في مجموعة ميسرة - حساب الموظف الخاص بك جاهز!'
+            : 'Welcome to Maisarah - Your Employee Portal is Active!',
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; color: #333;">
+              <h2 style="color: #A11212; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; text-align: center;">Welcome to Maisarah Group!</h2>
+              <p>Dear ${selectedPlacement.name},</p>
+              <p>
+                ${isAr
+              ? 'يسعدنا إبلاغك بأنه قد تم اعتماد تفاصيل تعيينك وتفعيل حساب الموظف الخاص بك بنجاح. يمكنك الآن تسجيل الدخول لتحديث ملفك والبدء بقائمة مهام التهيئة.'
+              : 'We are pleased to inform you that your department placement setup has been finalized and your corporate portal access is now active.'}
+              </p>
+              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb;">
+                <h3 style="margin-top: 0; color: #555;">Your Access Credentials:</h3>
+                <p><strong>Portal URL:</strong> <a href="${window.location.origin}/login">${window.location.origin}/login</a></p>
+                <p><strong>Username/Email:</strong> ${selectedPlacement.email}</p>
+                ${!isAlreadyRegistered ? `<p><strong>Temporary Password:</strong> ${tempPassword}</p>` : ''}
+                <p><strong>Assigned Role:</strong> ${finalRole}</p>
+                <p><strong>Assigned Department:</strong> ${targetDeptName}</p>
               </div>
-            `
-          }
-        });
-      } catch (emailErr) {
-        console.warn('Portal credentials email dispatch failed:', emailErr);
-      }
+              <p>${isAr ? 'يرجى تغيير كلمة المرور المؤقتة فور تسجيل الدخول لأول مرة.' : 'Please log in to complete your onboarding tasklist and change your temporary password for system security.'}</p>
+              <br/>
+              <p>${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
+              <p>${isAr ? 'إدارة العمليات والتنفيذ - ميسرة' : 'Maisarah Operations & Placement Management'}</p>
+            </div>
+          `
+        }
+      }).catch(emailErr => {
+        console.warn('Portal credentials email dispatch notice:', emailErr);
+      });
 
       setNotification({
         show: true,
