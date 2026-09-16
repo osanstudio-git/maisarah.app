@@ -1248,6 +1248,24 @@ const EmployeeManagement = () => {
                               </td>
                               <td className="px-6 py-4 text-end space-x-2 space-x-reverse">
                                 <button 
+                                  onClick={() => {
+                                    const newTempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
+                                    setCredentialsModal({
+                                      show: true,
+                                      name: emp.name_en || emp.name_ar,
+                                      email: emp.email,
+                                      password: newTempPassword,
+                                      role: emp.job_title || emp.role,
+                                      dept: emp.department_id || 'Bookkeeping',
+                                      supervisor: emp.immediateSupervisor || 'Department Head'
+                                    });
+                                  }} 
+                                  title={isAr ? 'عرض / إعادة إصدار بيانات الدخول' : 'View / Issue Login Credentials'}
+                                  className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Key size={16} />
+                                </button>
+                                <button 
                                   onClick={() => openEditModal(emp)} 
                                   title={isAr ? 'تعديل الصلاحية والقسم' : 'Edit Role & Department'}
                                   className="p-2 text-gray-400 hover:text-[#A11212] hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
@@ -2528,13 +2546,33 @@ const EmployeeManagement = () => {
               ) : (
                 <>
                   {dossierTab !== 'performance' ? (
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="px-5 py-2.5 bg-brand-dark hover:bg-gray-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <Pencil size={12} />
-                      {isAr ? 'تعديل البيانات' : 'Edit Profile'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setIsEditing(true)}
+                        className="px-5 py-2.5 bg-brand-dark hover:bg-gray-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Pencil size={12} />
+                        {isAr ? 'تعديل البيانات' : 'Edit Profile'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const newTempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
+                          setCredentialsModal({
+                            show: true,
+                            name: viewingEmployee.name_en || viewingEmployee.name_ar,
+                            email: viewingEmployee.email,
+                            password: newTempPassword,
+                            role: viewingEmployee.job_title || viewingEmployee.role,
+                            dept: viewingEmployee.department_id || 'Bookkeeping',
+                            supervisor: viewingEmployee.immediateSupervisor || 'Department Head'
+                          });
+                        }}
+                        className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                      >
+                        <Key size={13} />
+                        {isAr ? 'عرض / إصدار كلمة المرور' : 'View / Reset Password'}
+                      </button>
+                    </div>
                   ) : <div />}
                   <button
                     onClick={() => setViewingEmployee(null)}
