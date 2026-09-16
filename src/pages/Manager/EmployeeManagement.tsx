@@ -690,11 +690,11 @@ const EmployeeManagement = () => {
               </p>
               <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb;">
                 <h3 style="margin-top: 0; color: #555;">Your Access Credentials:</h3>
-                <p><strong>Portal URL:</strong> <a href="${window.location.origin}/login">${window.location.origin}/login</a></p>
-                <p><strong>Username/Email:</strong> ${selectedPlacement.email}</p>
-                ${!isAlreadyRegistered ? `<p><strong>Temporary Password:</strong> ${tempPassword}</p>` : ''}
-                <p><strong>Assigned Role:</strong> ${finalRole}</p>
-                <p><strong>Assigned Department:</strong> ${targetDeptName}</p>
+                <p style="margin: 6px 0;"><strong>Portal URL:</strong> <a href="${window.location.origin}/login" style="color: #A11212; font-weight: bold;">${window.location.origin}/login</a></p>
+                <p style="margin: 6px 0;"><strong>Username/Email:</strong> ${selectedPlacement.email}</p>
+                <p style="margin: 6px 0;"><strong>Temporary Password:</strong> <span style="font-family: monospace; background-color: #f3f4f6; padding: 3px 8px; border-radius: 4px; font-weight: bold; color: #111827; border: 1px solid #e5e7eb;">${tempPassword}</span></p>
+                <p style="margin: 6px 0;"><strong>Assigned Role:</strong> ${finalRole}</p>
+                <p style="margin: 6px 0;"><strong>Assigned Department:</strong> ${targetDeptName}</p>
               </div>
               <p>${isAr ? 'يرجى تغيير كلمة المرور المؤقتة فور تسجيل الدخول لأول مرة.' : 'Please log in to complete your onboarding tasklist and change your temporary password for system security.'}</p>
               <br/>
