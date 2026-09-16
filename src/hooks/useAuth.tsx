@@ -90,7 +90,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(session?.user || null);
 
         if (session?.user) {
-          if (event === 'SIGNED_IN' || !role) {
+          if (event === 'SIGNED_IN') {
+            // Fresh login: clear any stale cached role from prior user/tests so primary profile role takes precedence
+            localStorage.removeItem('app_user_role');
+            localStorage.removeItem('app_user_secondary_roles');
+            await fetchRole(session.user, true);
+          } else if (!role) {
             await fetchRole(session.user, true);
           }
         } else {
@@ -117,7 +122,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (isFetchingRole.current) return;
     isFetchingRole.current = true;
 
-    if (shouldSetLoading && !localStorage.getItem('app_user_role')) {
+    if (shouldSetLoading && !role) {
       setLoading(true);
     }
 
@@ -133,14 +138,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
         
       if (profileData?.role) {
-        // If local role not manually set yet, set profile role
-        if (!localStorage.getItem('app_user_role')) {
-          setRole(profileData.role);
-          localStorage.setItem('app_user_role', profileData.role);
-        }
         const sec = Array.isArray(profileData.secondary_roles) ? profileData.secondary_roles : [];
         setSecondaryRoles(sec);
         localStorage.setItem('app_user_secondary_roles', JSON.stringify(sec));
+
+        // Validate cached role against authorized roles for this user
+        const cachedRole = localStorage.getItem('app_user_role');
+        const isAuthorized = cachedRole && (
+          cachedRole === profileData.role || 
+          sec.includes(cachedRole) || 
+          profileData.role === 'manager'
+        );
+
+        const activeRole = isAuthorized ? cachedRole : profileData.role;
+        setRole(activeRole);
+        localStorage.setItem('app_user_role', activeRole);
       } else {
         const fallbackRole = currentUser.user_metadata?.role || null;
         setRole(fallbackRole);

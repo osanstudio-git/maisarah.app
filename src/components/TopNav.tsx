@@ -24,17 +24,12 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
     manager: { en: 'Executive Manager Panel', ar: 'لوحة المدير التنفيذي', icon: '⭐' }
   };
 
-  // Allow switching if user is manager, or has secondary roles, or is standard staff/accountant
+  // Allow switching only if user is manager or has explicitly configured secondary roles
   const availablePortals = React.useMemo(() => {
     if (role === 'manager') return ['manager', 'accountant', 'employee', 'department_head', 'hr', 'crm'];
     const list = new Set<string>();
     if (role) list.add(role);
     (secondaryRoles || []).forEach(r => list.add(r));
-    // Default dual accessibility for operational staff & accountants
-    if (role === 'accountant' || role === 'employee') {
-      list.add('accountant');
-      list.add('employee');
-    }
     return Array.from(list);
   }, [role, secondaryRoles]);
 

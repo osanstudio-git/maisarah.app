@@ -613,12 +613,14 @@ const EmployeeManagement = () => {
 
       // 2. Insert/Upsert profile record (safely catch RLS/FK warnings)
       try {
+        const assignedSecondary = (placementData.secondaryRoles || []).filter((r: string) => r !== effectiveRole);
         const { error: profileError } = await supabase.from('profiles').upsert({
           id: userId,
           full_name: selectedPlacement.name,
           email: selectedPlacement.email,
           role: effectiveRole,
-          department_id: targetDeptKey
+          department_id: targetDeptKey,
+          secondary_roles: assignedSecondary
         }, { onConflict: 'id' });
         if (profileError) console.warn('Profiles upsert warning:', profileError.message);
       } catch (pErr) {
