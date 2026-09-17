@@ -9,6 +9,7 @@ import {
   Download, UploadCloud, Plus, Edit, Trash2, CheckCircle2, X, PlusCircle, LayoutGrid, ListFilter, SlidersHorizontal, UserX, AlertCircle, ShieldAlert,
   Copy, Check, Share2, Send, Lock, Mail, Key, Loader2, Sparkles
 } from 'lucide-react';
+import { getLocalRecruits } from '../../utils/recruitmentSync';
 
 interface Employee {
   id: string;
@@ -352,6 +353,94 @@ export default function HREmployees() {
               transfers: h.transfers || []
             });
           }
+        }
+
+        // Merge locally placed employees from Manager workforce
+        try {
+          const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+          localPlaced.forEach(lp => {
+            if (lp.email && !liveEmployees.some(e => e.email && e.email.toLowerCase() === lp.email.toLowerCase())) {
+              liveEmployees.push({
+                id: lp.id || crypto.randomUUID(),
+                name: lp.full_name || 'Staff Member',
+                role: lp.role || 'Staff Member',
+                dept: lp.dept || 'Audit',
+                email: lp.email || '',
+                phone: lp.phone || '',
+                companyPhone: lp.company_phone || '+968 2456 0000',
+                civilId: lp.civil_id || '109876543',
+                passportNo: lp.passport_no || 'OM1234567',
+                residencyNo: lp.residency_no || 'PR9876543',
+                nationality: lp.nationality || 'Omani',
+                dob: lp.dob || '1995-01-01',
+                gender: lp.gender || 'Male',
+                maritalStatus: lp.marital_status || 'Single',
+                joinedDate: lp.joined_date || new Date().toISOString().split('T')[0],
+                immediateSupervisor: lp.immediate_supervisor || 'General Manager',
+                basicSalary: Number(lp.basic_salary || 1000),
+                type: (lp.employee_type || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
+                accommodationStatus: lp.accommodation_status || 'Lives with family',
+                accommodationDetails: lp.accommodation_details || '',
+                allowances: lp.allowances || { transport: 150, housing: 250, other: 50 },
+                education: lp.education || [],
+                experience: lp.experience || [],
+                family: lp.family || [],
+                emergencyContact: lp.emergency_contact || { name: 'Emergency Contact', relation: 'Family', phone: lp.phone || '' },
+                documents: lp.documents || [],
+                promotions: lp.promotions || [],
+                disciplinaries: lp.disciplinaries || [],
+                bonuses: lp.bonuses || [],
+                transfers: lp.transfers || []
+              });
+            }
+          });
+        } catch (e) {
+          console.warn('Error merging placed employees in HR:', e);
+        }
+
+        // Merge offered / placed recruits from recruitment pipeline
+        try {
+          const recruits = getLocalRecruits();
+          recruits.forEach(r => {
+            if ((r.stage === 'offered' || r.placement_status === 'placed' || r.placement_status === 'pending_placement') && r.email) {
+              if (!liveEmployees.some(e => e.email && e.email.toLowerCase() === r.email.toLowerCase())) {
+                liveEmployees.push({
+                  id: r.id || crypto.randomUUID(),
+                  name: r.name || 'New Hire',
+                  role: r.role || 'Staff Member',
+                  dept: r.dept || 'Audit',
+                  email: r.email,
+                  phone: r.phone || '',
+                  companyPhone: '+968 2456 0000',
+                  civilId: '109876543',
+                  passportNo: 'OM1234567',
+                  residencyNo: 'PR9876543',
+                  nationality: 'Omani',
+                  dob: '1995-01-01',
+                  gender: 'Male',
+                  maritalStatus: 'Single',
+                  joinedDate: new Date().toISOString().split('T')[0],
+                  immediateSupervisor: 'General Manager',
+                  basicSalary: 1000,
+                  type: (r.employment_type || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
+                  accommodationStatus: 'Lives with family',
+                  accommodationDetails: '',
+                  allowances: { transport: 150, housing: 250, other: 50 },
+                  education: [],
+                  experience: [],
+                  family: [],
+                  emergencyContact: { name: 'Emergency Contact', relation: 'Family', phone: r.phone || '' },
+                  documents: r.resume_url ? [{ name: r.resume_name || 'Resume / CV', type: 'resume', expiry: 'N/A', status: 'active' }] : [],
+                  promotions: [],
+                  disciplinaries: [],
+                  bonuses: [],
+                  transfers: []
+                });
+              }
+            }
+          });
+        } catch (rErr) {
+          console.warn('Error reading recruits in HR:', rErr);
         }
 
         setEmployees(liveEmployees);
