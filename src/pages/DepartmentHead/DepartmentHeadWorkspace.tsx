@@ -50,6 +50,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { getDepartmentById, getAllDepartments } from '../../config/departments';
+import { getLocalRecruits } from '../../utils/recruitmentSync';
 
 interface EmployeeProfile {
   id: string;
@@ -358,6 +359,70 @@ const DepartmentHeadWorkspace = () => {
           });
         }
       });
+
+      // Merge locally placed employees from Manager / HR workforce
+      try {
+        const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+        localPlaced.forEach((lp: any) => {
+          const key = (lp.email || lp.id || '').toLowerCase();
+          if (key) {
+            const existing = combinedMap.get(key);
+            const dept = normalizeDept(lp.dept || lp.department_id || lp.department || 'audit');
+            if (existing) {
+              combinedMap.set(key, {
+                ...existing,
+                full_name: lp.full_name || lp.name || existing.full_name,
+                role: lp.role || existing.role,
+                department_id: dept || existing.department_id,
+                email: lp.email || existing.email,
+                phone: lp.phone || existing.phone
+              });
+            } else {
+              combinedMap.set(key, {
+                id: lp.id || crypto.randomUUID(),
+                full_name: lp.full_name || lp.name || 'Staff Member',
+                role: lp.role || 'employee',
+                department_id: dept,
+                email: lp.email,
+                phone: lp.phone
+              });
+            }
+          }
+        });
+      } catch (e) {
+        console.warn('Error merging placed employees in HOD:', e);
+      }
+
+      // Merge offered / placed recruits from recruitment pipeline
+      try {
+        const recruits = getLocalRecruits();
+        recruits.forEach((r: any) => {
+          if (r.email && (r.stage === 'offered' || r.placement_status === 'placed' || r.placement_status === 'pending_placement' || r.dept)) {
+            const key = (r.email || r.id || '').toLowerCase();
+            const existing = combinedMap.get(key);
+            const dept = normalizeDept(r.dept || 'audit');
+            if (existing) {
+              combinedMap.set(key, {
+                ...existing,
+                full_name: existing.full_name || r.name,
+                department_id: dept || existing.department_id,
+                phone: r.phone || existing.phone
+              });
+            } else {
+              combinedMap.set(key, {
+                id: r.id || crypto.randomUUID(),
+                full_name: r.name || 'Staff Member',
+                role: r.role || 'employee',
+                department_id: dept,
+                email: r.email,
+                phone: r.phone
+              });
+            }
+          }
+        });
+      } catch (e) {
+        console.warn('Error merging recruits in HOD:', e);
+      }
 
       const allProfiles: EmployeeProfile[] = Array.from(combinedMap.values());
 
