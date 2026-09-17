@@ -131,11 +131,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     try {
+      // Refresh live user metadata directly from server
+      const { data: freshUserRes } = await supabase.auth.getUser();
+      const liveUser = freshUserRes?.user || currentUser;
+
       // 4-second timeout safety for profiles query so UI never hangs indefinitely
       const fetchProfilePromise = supabase
         .from('profiles')
         .select('*')
-        .eq('id', currentUser.id)
+        .eq('id', liveUser.id)
         .maybeSingle();
 
       const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
@@ -151,7 +155,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         console.warn('Profiles query notice:', profileErr.message);
       }
       
-      const metaSec = Array.isArray(currentUser.user_metadata?.secondary_roles) ? currentUser.user_metadata.secondary_roles : [];
+      const metaSec = Array.isArray(liveUser.user_metadata?.secondary_roles) ? liveUser.user_metadata.secondary_roles : [];
       const profileSec = (profileData && Array.isArray(profileData.secondary_roles) && profileData.secondary_roles.length > 0)
         ? profileData.secondary_roles
         : metaSec;
