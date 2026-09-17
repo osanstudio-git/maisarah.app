@@ -32,10 +32,17 @@ export default function HROnboarding() {
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
 
-  const [newHires, setNewHires] = useState<Recruit[]>([]);
-  const [selectedHireId, setSelectedHireId] = useState<string | null>(null);
+  const [newHires, setNewHires] = useState<Recruit[]>(() => {
+    const all = getLocalRecruits();
+    return (all.filter((c: any) => c.stage === 'offered' || c.stage === 'interview_done') as Recruit[]);
+  });
+  const [selectedHireId, setSelectedHireId] = useState<string | null>(() => {
+    const all = getLocalRecruits();
+    const offered = all.filter((c: any) => c.stage === 'offered' || c.stage === 'interview_done');
+    return offered.length > 0 ? offered[0].id : null;
+  });
   const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [newHireData, setNewHireData] = useState({

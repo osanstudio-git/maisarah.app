@@ -37,8 +37,8 @@ export default function HRRecruitment() {
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
 
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [candidates, setCandidates] = useState<Candidate[]>(() => getLocalRecruits() as Candidate[]);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest'); // newest, oldest, score

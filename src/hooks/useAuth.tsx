@@ -36,9 +36,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   });
   
-  // If we already have a cached role, we don't strictly need to block the UI, 
-  // BUT we MUST wait for the local session to initialize to prevent premature redirects to /login.
-  const [loading, setLoading] = useState(true);
+  // If we already have a cached role, start loading as false for instant 0ms render
+  const [loading, setLoading] = useState<boolean>(() => !localStorage.getItem('app_user_role'));
   
   // Track if we are already fetching the role to avoid race conditions
   const isFetchingRole = useRef(false);
@@ -65,15 +64,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Optimistically use cached role or metadata to speed up UI loading
         const cachedRole = localStorage.getItem('app_user_role');
         const metaRole = initialSession.user.user_metadata?.role;
-        const immediateRole = metaRole || cachedRole;
+        const immediateRole = cachedRole || metaRole;
 
         if (immediateRole) {
           setRole(immediateRole);
           setLoading(false); 
         }
         
-        // Fetch fresh role in the background to verify
-        await fetchRole(initialSession.user, !immediateRole);
+        // Fetch fresh role in the background to verify without blocking UI
+        fetchRole(initialSession.user, !immediateRole);
       } else {
         localStorage.removeItem('app_user_role');
         localStorage.removeItem('app_user_secondary_roles');
@@ -91,10 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         if (session?.user) {
           if (event === 'SIGNED_IN') {
-            // Fresh login: clear any stale cached role from prior user/tests so primary profile role takes precedence
-            localStorage.removeItem('app_user_role');
-            localStorage.removeItem('app_user_secondary_roles');
-            await fetchRole(session.user, true);
+            await fetchRole(session.user, false);
           } else if (!role) {
             await fetchRole(session.user, true);
           }
@@ -127,11 +123,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     try {
-      const { data: profileData, error: profileErr } = await supabase
+      // 4-second timeout safety for profiles query so UI never hangs indefinitely
+      const fetchProfilePromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', currentUser.id)
         .maybeSingle();
+
+      const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 4000)
+      );
+
+      const { data: profileData, error: profileErr } = await Promise.race([
+        fetchProfilePromise,
+        timeoutPromise
+      ]) as any;
 
       if (profileErr) {
         console.warn('Profiles query notice:', profileErr.message);
@@ -154,7 +160,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setRole(activeRole);
         localStorage.setItem('app_user_role', activeRole);
       } else {
-        const fallbackRole = currentUser.user_metadata?.role || null;
+        const fallbackRole = currentUser.user_metadata?.role || localStorage.getItem('app_user_role') || null;
         setRole(fallbackRole);
         if (fallbackRole) {
           localStorage.setItem('app_user_role', fallbackRole);
@@ -163,7 +169,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       }
     } catch (err) {
-      console.error("Error fetching user role:", err);
+      console.warn("Notice during user role fetch:", err);
+      const fallbackRole = currentUser.user_metadata?.role || localStorage.getItem('app_user_role') || null;
+      if (fallbackRole) {
+        setRole(fallbackRole);
+      }
     } finally {
       isFetchingRole.current = false;
       setLoading(false);

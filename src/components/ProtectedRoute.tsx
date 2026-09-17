@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
   const { session, role, loading } = useAuth();
 
-  if (loading) {
+  if (loading && !role) {
     return <div className="min-h-screen flex justify-center items-center bg-gray-50"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-dark"></div></div>;
   }
 
