@@ -364,8 +364,8 @@ const EmployeeManagement = () => {
         const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
         localPlaced.forEach(lp => {
           if (lp.email && !mapped.some(m => m.email.toLowerCase() === lp.email.toLowerCase())) {
-            let rawDept = lp.dept || 'bookkeeping';
-            let normalizedDept = 'bookkeeping';
+            let rawDept = lp.dept || 'audit';
+            let normalizedDept = 'audit';
             const lowerDept = String(rawDept).toLowerCase().trim();
             if (lowerDept.includes('tax') || lowerDept.includes('vat')) normalizedDept = 'tax_vat';
             else if (lowerDept.includes('book') || lowerDept.includes('ledger') || lowerDept.includes('account')) normalizedDept = 'bookkeeping';
@@ -373,14 +373,16 @@ const EmployeeManagement = () => {
             else if (lowerDept.includes('success') || lowerDept.includes('client') || lowerDept.includes('operat')) normalizedDept = 'client_success';
             else if (lowerDept.includes('audit')) normalizedDept = 'audit';
 
+            const resolvedAccessRole = lp.accessRole || (lp.role?.toLowerCase()?.includes('head') || lp.role?.toLowerCase()?.includes('hod') ? 'department_head' : lp.role?.toLowerCase() === 'accountant' ? 'accountant' : lp.role?.toLowerCase() === 'crm' ? 'crm' : lp.role?.toLowerCase() === 'hr' ? 'hr' : 'employee');
+
             mapped.push({
               id: lp.id || crypto.randomUUID(),
-              name_en: lp.full_name || 'Riyas',
-              name_ar: lp.full_name || 'Riyas',
+              name_en: lp.full_name || 'Staff Member',
+              name_ar: lp.full_name || 'موظف',
               email: lp.email,
               phone: lp.phone || '',
-              role: (lp.role?.toLowerCase()?.includes('head') || lp.role?.toLowerCase()?.includes('hod')) ? 'department_head' : 'accountant',
-              job_title: lp.role || 'Accountant',
+              role: resolvedAccessRole,
+              job_title: lp.job_title || lp.role || (resolvedAccessRole === 'department_head' ? 'Department Head (HOD)' : resolvedAccessRole === 'accountant' ? 'Accountant' : 'Audit Associate'),
               status: 'active',
               tasksCompleted: 12,
               activeJobs: 4,
@@ -632,6 +634,7 @@ const EmployeeManagement = () => {
         email: selectedPlacement.email,
         phone: selectedPlacement.phone || '+968 9000 0000',
         role: finalRole,
+        accessRole: effectiveRole,
         dept: targetDeptName,
         employee_type: selectedPlacement.employment_type || 'Experienced',
         joined_date: placementData.startDate || new Date().toISOString().split('T')[0],
@@ -744,25 +747,42 @@ const EmployeeManagement = () => {
 
     try {
       if (editingEmployee) {
-        // Edit Mode
-        // 1. Update security access profiles table
+        const cleanEmail = (formData.email || editingEmployee.email || '').trim().toLowerCase();
+        
+        // 1. Sync Supabase Auth user metadata & profile via manage-auth
+        try {
+          await supabase.functions.invoke('manage-auth', {
+            body: {
+              email: cleanEmail,
+              full_name: formData.fullName,
+              role: formData.role,
+              department_id: formData.department_id
+            }
+          });
+        } catch (authEdgeErr) {
+          console.warn('manage-auth invoke notice during edit:', authEdgeErr);
+        }
+
+        // 2. Update security access profiles table
         const profileUpdate: any = {
           full_name: formData.fullName,
           phone: formData.phone,
           role: formData.role,
           department_id: formData.department_id
         };
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update(profileUpdate)
-          .eq('id', editingEmployee.id);
-
-        if (profileError) {
-          console.error("Profile update error:", profileError);
-          throw profileError;
+        try {
+          await supabase
+            .from('profiles')
+            .upsert({
+              id: editingEmployee.id,
+              email: cleanEmail,
+              ...profileUpdate
+            }, { onConflict: 'id' });
+        } catch (pErr) {
+          console.warn('Profiles upsert during edit notice:', pErr);
         }
 
-        // 2. Upsert/Update core employee records table (hr_employees)
+        // 3. Upsert/Update core employee records table (hr_employees)
         const deptNames: Record<string, string> = {
           audit: 'Audit',
           tax_vat: 'Tax & VAT',
@@ -771,24 +791,73 @@ const EmployeeManagement = () => {
           client_success: 'Client Success'
         };
 
+        const targetJobTitle = formData.role === 'department_head' 
+          ? 'Department Head (HOD)' 
+          : formData.role === 'accountant' 
+          ? 'Accountant' 
+          : formData.role === 'crm' 
+          ? 'CRM Coordinator' 
+          : formData.role === 'hr' 
+          ? 'HR Manager' 
+          : 'Audit Associate';
+
         const hrEmployeeData = {
           id: editingEmployee.id,
           full_name: formData.fullName,
-          email: formData.email,
+          email: cleanEmail,
           phone: formData.phone,
           dept: deptNames[formData.department_id] || 'Audit',
-          role: formData.role === 'department_head' ? 'Department Head (HOD)' : (editingEmployee.job_title || 'Employee')
+          role: targetJobTitle
         };
 
-        const { error: hrError } = await supabase
-          .from('hr_employees')
-          .upsert(hrEmployeeData, { onConflict: 'id' });
-
-        if (hrError) {
-          console.warn('Could not upsert hr_employees, but profile updated:', hrError);
+        try {
+          await supabase
+            .from('hr_employees')
+            .upsert(hrEmployeeData, { onConflict: 'id' });
+        } catch (hrErr) {
+          console.warn('hr_employees upsert notice:', hrErr);
         }
 
-        // 3. Log activity
+        // 4. Update local storage placed employees & recruits cache
+        try {
+          const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+          const updatedPlaced = localPlaced.map(lp => {
+            if (lp.email && lp.email.toLowerCase() === cleanEmail) {
+              return {
+                ...lp,
+                full_name: formData.fullName,
+                phone: formData.phone,
+                dept: deptNames[formData.department_id] || formData.department_id,
+                role: targetJobTitle,
+                accessRole: formData.role
+              };
+            }
+            return lp;
+          });
+          localStorage.setItem('maisarah_placed_employees', JSON.stringify(updatedPlaced));
+        } catch (e) {
+          console.warn('Error updating local placed employees:', e);
+        }
+
+        try {
+          const recruits = getLocalRecruits();
+          const updatedRecruits = recruits.map(r => {
+            if (r.email && r.email.toLowerCase() === cleanEmail) {
+              return {
+                ...r,
+                name: formData.fullName,
+                role: targetJobTitle,
+                dept: deptNames[formData.department_id] || formData.department_id
+              };
+            }
+            return r;
+          });
+          saveLocalRecruits(updatedRecruits);
+        } catch (e) {
+          console.warn('Error updating local recruits:', e);
+        }
+
+        // 5. Log activity
         await logActivity(
           editingEmployee.id,
           formData.fullName,
@@ -797,7 +866,7 @@ const EmployeeManagement = () => {
           `قام المدير بتحديث بيانات الموظف '${formData.fullName}': الصلاحية -> '${formData.role}'، القسم -> '${deptNames[formData.department_id] || formData.department_id}'`
         );
 
-        // 4. Update local state
+        // 6. Update local state
         setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? { 
           ...emp, 
           name_en: formData.fullName, 
@@ -805,7 +874,7 @@ const EmployeeManagement = () => {
           phone: formData.phone, 
           role: formData.role, 
           department_id: formData.department_id,
-          job_title: formData.role === 'department_head' ? 'Department Head (HOD)' : emp.job_title
+          job_title: targetJobTitle
         } : emp));
 
         setNotification({
