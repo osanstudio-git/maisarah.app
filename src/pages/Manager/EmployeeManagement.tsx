@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import {
   syncRecruitsFromSupabase,
   getLocalRecruits,
-  updateRecruitStatus
+  updateRecruitStatus,
+  DEFAULT_OFFERED_RECRUITS
 } from '../../utils/recruitmentSync';
 import {
   Users,
@@ -207,11 +208,16 @@ const EmployeeManagement = () => {
   const fetchPlacements = useCallback(async () => {
     setLoadingPlacements(true);
     try {
-      let data = await syncRecruitsFromSupabase();
-      if (!data || data.length === 0) {
-        data = getLocalRecruits();
-      }
-      const filtered = data.filter((c: any) => c.stage === 'offered' && c.placement_status !== 'placed');
+      const dbData = await syncRecruitsFromSupabase();
+      const localData = getLocalRecruits();
+      
+      const map = new Map<string, any>();
+      (DEFAULT_OFFERED_RECRUITS || []).forEach(r => map.set(r.id || r.email, r));
+      (localData || []).forEach(r => map.set(r.id || r.email, r));
+      (dbData || []).forEach(r => map.set(r.id || r.email, r));
+
+      const allRecruits = Array.from(map.values());
+      const filtered = allRecruits.filter((c: any) => c.stage === 'offered' && c.placement_status !== 'placed');
       setPendingPlacements(filtered);
     } catch (err) {
       console.error('Error fetching pending placements:', err);

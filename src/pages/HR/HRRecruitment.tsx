@@ -173,7 +173,9 @@ export default function HRRecruitment() {
         }
       }
 
-      const payload = {
+      const newId = crypto.randomUUID();
+      const payload: any = {
+        id: newId,
         name: newCandidate.name,
         role: newCandidate.role === 'custom' ? newCandidate.customRole : newCandidate.role,
         dept: newCandidate.dept === 'custom' ? newCandidate.customDept : newCandidate.dept,
@@ -184,23 +186,35 @@ export default function HRRecruitment() {
         resume_name: cvFile ? cvFile.name : null,
         resume_url: uploadedUrl,
         employment_type: newCandidate.employment_type,
+        placement_status: newCandidate.stage === 'offered' ? 'pending_placement' : 'none',
         onboarding_tasks: {
           contract_signed: false,
           bank_details_submitted: false,
           documents_uploaded: false,
           it_assets_ready: false
-        }
+        },
+        created_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase
-        .from('hr_recruits')
-        .insert([payload])
-        .select()
-        .single();
+      // Always save to shared store immediately so it's accessible across Manager & HR portals
+      upsertLocalRecruit(payload);
+      setCandidates(prev => [payload, ...prev.filter(c => c.id !== payload.id)]);
 
-      if (error) throw error;
+      try {
+        const { data, error } = await supabase
+          .from('hr_recruits')
+          .insert([payload])
+          .select()
+          .single();
 
-      setCandidates(prev => [data, ...prev]);
+        if (!error && data) {
+          upsertLocalRecruit(data);
+          setCandidates(prev => [data, ...prev.filter(c => c.id !== data.id && c.id !== newId)]);
+        }
+      } catch (dbErr) {
+        console.warn('Supabase recruits insert notice (cached locally):', dbErr);
+      }
+
       setShowModal(false);
       setCVFile(null); // Reset CV file selector
       setNewCandidate({

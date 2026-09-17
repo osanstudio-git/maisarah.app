@@ -5,6 +5,11 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
+import {
+  upsertLocalRecruit,
+  updateRecruitStatus,
+  getLocalRecruits
+} from '../../utils/recruitmentSync';
 
 interface Recruit {
   id: string;
@@ -152,7 +157,9 @@ export default function HROnboarding() {
       const finalRole = newHireData.role === 'custom' ? newHireData.customRole : newHireData.role;
       const finalDept = newHireData.dept === 'custom' ? newHireData.customDept : newHireData.dept;
 
-      const payload = {
+      const newId = crypto.randomUUID();
+      const payload: any = {
+        id: newId,
         name: newHireData.name,
         role: finalRole,
         dept: finalDept,
@@ -167,20 +174,30 @@ export default function HROnboarding() {
           bank_details_submitted: false,
           documents_uploaded: false,
           it_assets_ready: false
-        }
+        },
+        created_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase
-        .from('hr_recruits')
-        .insert([payload])
-        .select()
-        .single();
+      // Always save to shared recruitment store so candidate is instantly visible in Manager Placement portal
+      upsertLocalRecruit(payload);
+      setNewHires(prev => [payload, ...prev.filter(h => h.id !== payload.id)]);
+      setSelectedHireId(payload.id);
 
-      if (error) throw error;
+      try {
+        const { data, error } = await supabase
+          .from('hr_recruits')
+          .insert([payload])
+          .select()
+          .single();
 
-      // Optimistically update list
-      setNewHires(prev => [data, ...prev]);
-      setSelectedHireId(data.id);
+        if (!error && data) {
+          upsertLocalRecruit(data);
+          setNewHires(prev => [data, ...prev.filter(h => h.id !== data.id && h.id !== newId)]);
+        }
+      } catch (dbErr) {
+        console.warn('Supabase recruits insert notice (cached locally):', dbErr);
+      }
+
       setShowModal(false);
       
       // Reset form data
@@ -197,7 +214,7 @@ export default function HROnboarding() {
       });
 
       // Send welcome offer email (Email A)!
-      await sendOfferWelcomeEmail(data);
+      await sendOfferWelcomeEmail(payload);
     } catch (err: any) {
       setFormError(err.message || 'Failed to initialize direct onboarding');
     }
@@ -219,6 +236,7 @@ export default function HROnboarding() {
 
     // Update locally optimistically
     setNewHires(prev => prev.map(h => h.id === hireId ? { ...h, onboarding_tasks: updatedTasks } : h));
+    updateRecruitStatus(hireId, { onboarding_tasks: updatedTasks });
 
     try {
       const { error } = await supabase

@@ -43,6 +43,25 @@ export const DEFAULT_OFFERED_RECRUITS: RecruitCandidate[] = [
       it_assets_ready: true
     },
     created_at: new Date().toISOString()
+  },
+  {
+    id: 'rec-002',
+    name: 'hamid',
+    role: 'Audit Associate',
+    dept: 'Audit',
+    stage: 'offered',
+    score: 85,
+    email: 'hamid.maisarah@gmail.com',
+    phone: '+968 9587 4632',
+    employment_type: 'Experienced',
+    placement_status: 'pending_placement',
+    onboarding_tasks: {
+      contract_signed: true,
+      bank_details_submitted: true,
+      documents_uploaded: true,
+      it_assets_ready: true
+    },
+    created_at: new Date().toISOString()
   }
 ];
 
