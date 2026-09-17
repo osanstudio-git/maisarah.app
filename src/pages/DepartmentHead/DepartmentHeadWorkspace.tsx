@@ -153,25 +153,26 @@ const DepartmentHeadWorkspace = () => {
   const isAr = i18n.language === 'ar';
   const location = useLocation();
 
-  // Retrieve department context dynamically from Supabase user profile
+  // Retrieve department context dynamically from Supabase user profile & HR records
   const [deptContext, setDeptContext] = useState<string>('audit');
 
   useEffect(() => {
     const fetchDeptContext = async () => {
       if (!user) return;
       try {
-        const { data } = await supabase
-          .from('profiles')
-          .select('department_id, department')
-          .eq('id', user.id)
-          .maybeSingle();
+        const [{ data: prof }, { data: emp }] = await Promise.all([
+          supabase.from('profiles').select('department_id, department').eq('id', user.id).maybeSingle(),
+          supabase.from('hr_employees').select('dept, department_id').eq('email', user.email).maybeSingle()
+        ]);
 
-        const deptValue = data?.department_id || data?.department;
+        const deptValue = prof?.department_id || prof?.department || emp?.dept || emp?.department_id || user.user_metadata?.department_id;
         if (deptValue) {
           let dept = deptValue.trim().toLowerCase();
-          if (dept === 'tax & vat' || dept === 'tax_and_vat' || dept === 'tax') dept = 'tax_vat';
-          if (dept === 'business advisory' || dept === 'advisory') dept = 'business_advisory';
-          if (dept === 'client success' || dept === 'operations') dept = 'client_success';
+          if (dept.includes('tax') || dept.includes('vat')) dept = 'tax_vat';
+          else if (dept.includes('book') || dept.includes('account') || dept.includes('ledger')) dept = 'bookkeeping';
+          else if (dept.includes('advis') || dept.includes('consult')) dept = 'business_advisory';
+          else if (dept.includes('success') || dept.includes('client') || dept.includes('operat')) dept = 'client_success';
+          else if (dept.includes('audit')) dept = 'audit';
           setDeptContext(dept);
         }
       } catch (err) {
@@ -266,6 +267,7 @@ const DepartmentHeadWorkspace = () => {
       const [
         { data: sData, error: sErr },
         { data: pData, error: pErr },
+        { data: hData, error: hErr },
         { data: cData, error: cErr },
         { data: lData, error: lErr }
       ] = await Promise.all([
@@ -295,12 +297,14 @@ const DepartmentHeadWorkspace = () => {
           `)
           .order('created_at', { ascending: false }),
         supabase.from('profiles').select('id, full_name, role, department_id, email, phone').order('full_name'),
+        supabase.from('hr_employees').select('*'),
         supabase.from('clients').select('id, company_name, email, phone').order('company_name'),
         supabase.from('hr_leave_requests').select('*').order('created_at', { ascending: false })
       ]);
 
       if (sErr) console.error('HOD fetch services error:', sErr);
       if (pErr) console.error('HOD fetch profiles error:', pErr);
+      if (hErr) console.error('HOD fetch hr_employees error:', hErr);
       if (cErr) console.error('HOD fetch clients error:', cErr);
 
       // Normalize department code helper
@@ -308,18 +312,58 @@ const DepartmentHeadWorkspace = () => {
         if (!d) return '';
         const val = d.trim().toLowerCase();
         if (val.includes('tax') || val.includes('vat')) return 'tax_vat';
-        if (val.includes('book') || val.includes('account')) return 'bookkeeping';
+        if (val.includes('book') || val.includes('account') || val.includes('ledger')) return 'bookkeeping';
         if (val.includes('advis') || val.includes('consult')) return 'business_advisory';
         if (val.includes('success') || val.includes('client') || val.includes('operat')) return 'client_success';
         if (val.includes('audit')) return 'audit';
         return val;
       };
 
+      // Combine both profiles & hr_employees to ensure all placed staff are present
+      const combinedMap = new Map<string, EmployeeProfile>();
+
+      (hData || []).forEach((h: any) => {
+        const key = (h.email || h.id || '').toLowerCase();
+        combinedMap.set(key, {
+          id: h.id,
+          full_name: h.full_name || 'Staff Member',
+          role: h.role || 'employee',
+          department_id: normalizeDept(h.dept || h.department_id || 'audit'),
+          email: h.email,
+          phone: h.phone
+        });
+      });
+
+      (pData || []).forEach((p: any) => {
+        const key = (p.email || p.id || '').toLowerCase();
+        const existing = combinedMap.get(key);
+        if (existing) {
+          combinedMap.set(key, {
+            ...existing,
+            id: p.id || existing.id,
+            full_name: p.full_name || existing.full_name,
+            role: p.role || existing.role,
+            department_id: normalizeDept(p.department_id || p.department || existing.department_id),
+            email: p.email || existing.email,
+            phone: p.phone || existing.phone
+          });
+        } else {
+          combinedMap.set(key, {
+            id: p.id,
+            full_name: p.full_name || 'Staff Member',
+            role: p.role || 'employee',
+            department_id: normalizeDept(p.department_id || p.department || 'audit'),
+            email: p.email,
+            phone: p.phone
+          });
+        }
+      });
+
+      const allProfiles: EmployeeProfile[] = Array.from(combinedMap.values());
+
       // Filter employees by department
-      const allProfiles: EmployeeProfile[] = (pData as any[]) || [];
       const deptEmployees = allProfiles.filter(p => {
-        const d = normalizeDept(p.department_id || (p as any).department);
-        if (!d) return true; // Include unassigned as eligible
+        const d = normalizeDept(p.department_id);
         return d === currentDeptId || d.includes(currentDeptId) || currentDeptId.includes(d);
       });
 
@@ -327,7 +371,7 @@ const DepartmentHeadWorkspace = () => {
       const allServices: ServiceDeliverable[] = (sData as any[]) || [];
       const deptServices = allServices.filter(s => {
         const emp = allProfiles.find(p => p.id === s.employee_id);
-        const empDept = normalizeDept(emp?.department_id || (emp as any)?.department);
+        const empDept = normalizeDept(emp?.department_id);
         const matchesEmp = emp && (empDept === currentDeptId || empDept.includes(currentDeptId) || currentDeptId.includes(empDept));
         const matchesTitle = deptConfig?.services.some(srv => s.title.toLowerCase().includes(srv.toLowerCase()));
         return matchesEmp || matchesTitle || allServices.length <= 5;
