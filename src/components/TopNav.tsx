@@ -24,9 +24,9 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
     manager: { en: 'Executive Manager Panel', ar: 'لوحة المدير التنفيذي', icon: '⭐' }
   };
 
-  // Allow switching only if user is manager or has explicitly configured secondary roles
+  // Allow switching only for employees/staff with explicitly assigned secondary roles (manager does not switch portals)
   const availablePortals = React.useMemo(() => {
-    if (role === 'manager') return ['manager', 'accountant', 'employee', 'department_head', 'hr', 'crm'];
+    if (role === 'manager') return [];
     const list = new Set<string>();
     if (role) list.add(role);
     (secondaryRoles || []).forEach(r => list.add(r));
