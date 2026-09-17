@@ -66,6 +66,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const metaRole = initialSession.user.user_metadata?.role;
         const immediateRole = cachedRole || metaRole;
 
+        const metaSecondary = Array.isArray(initialSession.user.user_metadata?.secondary_roles)
+          ? initialSession.user.user_metadata.secondary_roles
+          : [];
+        if (metaSecondary.length > 0) {
+          setSecondaryRoles(metaSecondary);
+          localStorage.setItem('app_user_secondary_roles', JSON.stringify(metaSecondary));
+        }
+
         if (immediateRole) {
           setRole(immediateRole);
           setLoading(false); 
@@ -142,17 +150,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (profileErr) {
         console.warn('Profiles query notice:', profileErr.message);
       }
+      
+      const metaSec = Array.isArray(currentUser.user_metadata?.secondary_roles) ? currentUser.user_metadata.secondary_roles : [];
+      const profileSec = (profileData && Array.isArray(profileData.secondary_roles) && profileData.secondary_roles.length > 0)
+        ? profileData.secondary_roles
+        : metaSec;
+
+      setSecondaryRoles(profileSec);
+      localStorage.setItem('app_user_secondary_roles', JSON.stringify(profileSec));
         
       if (profileData?.role) {
-        const sec = Array.isArray(profileData.secondary_roles) ? profileData.secondary_roles : [];
-        setSecondaryRoles(sec);
-        localStorage.setItem('app_user_secondary_roles', JSON.stringify(sec));
-
         // Validate cached role against authorized roles for this user
         const cachedRole = localStorage.getItem('app_user_role');
         const isAuthorized = cachedRole && (
           cachedRole === profileData.role || 
-          sec.includes(cachedRole) || 
+          profileSec.includes(cachedRole) || 
           profileData.role === 'manager'
         );
 

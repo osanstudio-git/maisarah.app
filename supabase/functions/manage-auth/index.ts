@@ -48,7 +48,12 @@ serve(async (req) => {
     if (existingUser) {
       userId = existingUser.id
       const updateData: any = {
-        user_metadata: { full_name, role, department_id }
+        user_metadata: { 
+          full_name, 
+          role, 
+          department_id, 
+          secondary_roles: Array.isArray(secondary_roles) ? secondary_roles : [] 
+        }
       }
       if (password) {
         updateData.password = password
@@ -60,7 +65,12 @@ serve(async (req) => {
         email: cleanEmail,
         password: password,
         email_confirm: true,
-        user_metadata: { full_name, role, department_id }
+        user_metadata: { 
+          full_name, 
+          role, 
+          department_id, 
+          secondary_roles: Array.isArray(secondary_roles) ? secondary_roles : [] 
+        }
       })
       if (createErr) throw createErr
       userId = created.user.id
