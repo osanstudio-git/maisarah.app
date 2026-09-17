@@ -128,6 +128,37 @@ const EmployeeManagement = () => {
       console.warn('Clipboard write error:', e);
     }
   };
+
+  const handleIssueOrResetCredentials = async (emp: any) => {
+    const newTempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
+    const cleanEmail = (emp.email || '').trim().toLowerCase();
+
+    // Call manage-auth to update password in Supabase Auth directly
+    try {
+      await supabase.functions.invoke('manage-auth', {
+        body: {
+          email: cleanEmail,
+          password: newTempPassword,
+          full_name: emp.name_en || emp.name_ar,
+          role: emp.role,
+          department_id: emp.department_id,
+          secondary_roles: emp.secondary_roles || []
+        }
+      });
+    } catch (e) {
+      console.warn('manage-auth invoke notice:', e);
+    }
+
+    setCredentialsModal({
+      show: true,
+      name: emp.name_en || emp.name_ar,
+      email: cleanEmail,
+      password: newTempPassword,
+      role: emp.job_title || emp.role,
+      dept: emp.department_id || 'Bookkeeping',
+      supervisor: emp.immediateSupervisor || 'Executive Management & Board of Directors'
+    });
+  };
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [dossierTab, setDossierTab] = useState<'general' | 'job' | 'financials' | 'performance'>('general');
   const [isSavingDossier, setIsSavingDossier] = useState(false);
@@ -555,71 +586,32 @@ const EmployeeManagement = () => {
       : (placementData.supervisor === 'custom' ? (placementData.customSupervisor || 'General Manager') : placementData.supervisor);
 
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-      });
-
-      let userId: string | null = null;
-      let isAlreadyRegistered = false;
+      let userId: string = crypto.randomUUID();
       const cleanEmail = selectedPlacement.email.trim().toLowerCase();
+      const assignedSecondary = (placementData.secondaryRoles || []).filter((r: string) => r !== effectiveRole);
 
-      // Pre-check if user profile or employee record already exists
-      const [{ data: existingProfile }, { data: existingEmp }] = await Promise.all([
-        supabase.from('profiles').select('id').eq('email', cleanEmail).maybeSingle(),
-        supabase.from('hr_employees').select('id').eq('email', cleanEmail).maybeSingle()
-      ]);
-
-      const isValidUUID = (str: string | null) => str ? /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str) : false;
-
-      if (existingProfile?.id && isValidUUID(existingProfile.id)) {
-        userId = existingProfile.id;
-        isAlreadyRegistered = true;
-      } else if (existingEmp?.id && isValidUUID(existingEmp.id)) {
-        userId = existingEmp.id;
-        isAlreadyRegistered = true;
-      }
-
-      // 1. Only call Supabase Auth signUp if user does NOT already exist in DB
-      if (!userId) {
-        const { data: authData, error: authError } = await tempClient.auth.signUp({
-          email: selectedPlacement.email,
-          password: tempPassword,
-          options: {
-            data: {
-              full_name: selectedPlacement.name,
-              role: effectiveRole,
-              department_id: targetDeptKey
-            }
+      // 1. Synchronize Supabase Auth Account and Password via Admin Auth API (Edge Function)
+      try {
+        const { data: authResult, error: authErr } = await supabase.functions.invoke('manage-auth', {
+          body: {
+            email: cleanEmail,
+            password: tempPassword,
+            full_name: selectedPlacement.name,
+            role: effectiveRole,
+            department_id: targetDeptKey,
+            secondary_roles: assignedSecondary
           }
         });
 
-        if (authError) {
-          const isExisting =
-            authError.status === 422 ||
-            authError.status === 400 ||
-            authError.message?.toLowerCase().includes('already registered') ||
-            authError.message?.toLowerCase().includes('already exists') ||
-            authError.message?.toLowerCase().includes('user');
-
-          if (isExisting) {
-            isAlreadyRegistered = true;
-          } else {
-            throw authError;
-          }
-        } else {
-          userId = authData.user?.id || null;
+        if (!authErr && authResult?.userId) {
+          userId = authResult.userId;
         }
-      }
-
-      if (!userId || !isValidUUID(userId)) {
-        userId = crypto.randomUUID();
+      } catch (authEdgeErr) {
+        console.warn('manage-auth edge function notice:', authEdgeErr);
       }
 
       // 2. Insert/Upsert profile record (safely catch RLS/FK warnings)
       try {
-        const assignedSecondary = (placementData.secondaryRoles || []).filter((r: string) => r !== effectiveRole);
         const { error: profileError } = await supabase.from('profiles').upsert({
           id: userId,
           full_name: selectedPlacement.name,
@@ -1256,18 +1248,7 @@ const EmployeeManagement = () => {
                               </td>
                               <td className="px-6 py-4 text-end space-x-2 space-x-reverse">
                                 <button 
-                                  onClick={() => {
-                                    const newTempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
-                                    setCredentialsModal({
-                                      show: true,
-                                      name: emp.name_en || emp.name_ar,
-                                      email: emp.email,
-                                      password: newTempPassword,
-                                      role: emp.job_title || emp.role,
-                                      dept: emp.department_id || 'Bookkeeping',
-                                      supervisor: emp.immediateSupervisor || 'Department Head'
-                                    });
-                                  }} 
+                                  onClick={() => handleIssueOrResetCredentials(emp)} 
                                   title={isAr ? 'عرض / إعادة إصدار بيانات الدخول' : 'View / Issue Login Credentials'}
                                   className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                                 >
@@ -2563,18 +2544,7 @@ const EmployeeManagement = () => {
                         {isAr ? 'تعديل البيانات' : 'Edit Profile'}
                       </button>
                       <button
-                        onClick={() => {
-                          const newTempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
-                          setCredentialsModal({
-                            show: true,
-                            name: viewingEmployee.name_en || viewingEmployee.name_ar,
-                            email: viewingEmployee.email,
-                            password: newTempPassword,
-                            role: viewingEmployee.job_title || viewingEmployee.role,
-                            dept: viewingEmployee.department_id || 'Bookkeeping',
-                            supervisor: viewingEmployee.immediateSupervisor || 'Department Head'
-                          });
-                        }}
+                        onClick={() => handleIssueOrResetCredentials(viewingEmployee)}
                         className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
                       >
                         <Key size={13} />
