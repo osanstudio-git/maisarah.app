@@ -427,8 +427,20 @@ export default function HROnboarding() {
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
                     <option value="Senior Auditor">Senior Auditor</option>
+                    <option value="Audit Associate">Audit Associate</option>
                     <option value="Tax Consultant">Tax Consultant</option>
+                    <option value="Tax Specialist">Tax Specialist</option>
+                    <option value="Accountant">Accountant</option>
+                    <option value="Senior Accountant">Senior Accountant</option>
+                    <option value="Bookkeeper">Bookkeeper</option>
+                    <option value="Business Advisory Consultant">Business Advisory Consultant</option>
+                    <option value="Financial Analyst">Financial Analyst</option>
+                    <option value="Client Relations Officer">Client Relations Officer</option>
+                    <option value="CRM Coordinator">CRM Coordinator</option>
                     <option value="Junior Associate">Junior Associate</option>
+                    <option value="HR Specialist">HR Specialist</option>
+                    <option value="Operations Associate">Operations Associate</option>
+                    <option value="Department Head (HOD)">Department Head (HOD)</option>
                     <option value="custom">+ Add Custom Position...</option>
                   </select>
                   {newHireData.role === 'custom' && (
@@ -451,7 +463,11 @@ export default function HROnboarding() {
                   >
                     <option value="Audit">Audit</option>
                     <option value="Tax & VAT">Tax & VAT</option>
-                    <option value="Accounting">Accounting</option>
+                    <option value="Bookkeeping">Bookkeeping / Accounting</option>
+                    <option value="Business Advisory">Business Advisory and Development</option>
+                    <option value="Client Success">Client Success & Operations (CRM)</option>
+                    <option value="Innovation & Tech">Innovation & Development</option>
+                    <option value="HR & Admin">Internal Support & Administration (HR)</option>
                     <option value="custom">+ Add Custom Department...</option>
                   </select>
                   {newHireData.dept === 'custom' && (
