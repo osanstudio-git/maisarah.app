@@ -16,6 +16,7 @@ import EngagementLetterModal from '../../components/crm/EngagementLetterModal';
 import BookkeepingProposalModal from '../../components/crm/BookkeepingProposalModal';
 import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
+import { addDSREntry } from '../../utils/dsrSync';
 
 // --- Types & Interfaces ---
 interface Lead {
@@ -867,6 +868,28 @@ export default function CRMPortal() {
         ref_id: quotation.id,
         ref_table: 'quotations',
       }]);
+
+      // Automatically initialize in DSR (Daily Service Register) for Accounts
+      try {
+        addDSREntry({
+          date: new Date().toISOString().split('T')[0],
+          employee_name: 'Shafnas', // Default department supervisory assignment
+          service: serviceName,
+          company_name: quotation.companyName || quotation.clientName,
+          client_id: newClient ? newClient.id : undefined,
+          cr_number: quotation.registrationNumber || '1454255',
+          amount: quotation.subtotal || quotation.budget,
+          gov_fee: 0,
+          profit: quotation.subtotal || quotation.budget,
+          status: 'Unpaid',
+          payment_date: '',
+          payment_method: '',
+          accountant_note: `Accepted from Quote #${quotation.quoteNumber || quotation.id}`,
+          invoice_issued: false,
+        });
+      } catch (dsrErr) {
+        console.warn('Error syncing DSR entry on quote acceptance:', dsrErr);
+      }
 
       alert(isAr
         ? `تم قبول عرض السعر رقم ${quotation.quoteNumber || quotation.id}! تم إضافة العميل وإرسال المهمة لرئيس القسم بنجاح! 🎉`

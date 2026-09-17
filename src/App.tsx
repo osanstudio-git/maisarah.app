@@ -32,6 +32,7 @@ import AccountantDashboard from './pages/Accountant/AccountantDashboard';
 import InvoiceManagement from './pages/Accountant/InvoiceManagement';
 import ExpenseTracking from './pages/Accountant/ExpenseTracking';
 import ClientPayments from './pages/Accountant/ClientPayments';
+import DSRRegister from './pages/Accountant/DSRRegister';
 
 // Manager Views
 import ManagerDashboard from './pages/Manager/ManagerDashboard';
@@ -104,6 +105,7 @@ function App() {
             {/* Accountant Routes */}
             <Route element={<ProtectedRoute allowedRoles={['accountant', 'manager']} />}>
               <Route path="/accountant" element={<AccountantDashboard />} />
+              <Route path="/accountant/dsr" element={<DSRRegister />} />
               <Route path="/accountant/invoices" element={<InvoiceManagement />} />
               <Route path="/accountant/expenses" element={<ExpenseTracking />} />
               <Route path="/accountant/clients" element={<ClientPayments />} />

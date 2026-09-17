@@ -30,7 +30,8 @@ import {
   Bot,
   Bell,
   CreditCard,
-  Send
+  Send,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
@@ -67,6 +68,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
       case 'accountant':
         return [
           { title: t('accountant.dashboardTitle'), icon: Home, path: '/accountant' },
+          { title: isAr ? 'سجل الخدمات اليومي (DSR)' : 'DSR Daily Register', icon: FileSpreadsheet, path: '/accountant/dsr' },
           { title: t('accountant.invoiceManagement'), icon: FileText, path: '/accountant/invoices' },
           { title: t('accountant.expenseTracking'), icon: Wallet, path: '/accountant/expenses' },
           { title: t('messaging.messages'), icon: MessageCircle, path: '/accountant/messages' },

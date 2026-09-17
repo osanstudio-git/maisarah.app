@@ -6,8 +6,12 @@ import { logActivity } from '../../lib/activityLogger';
 import {
   Briefcase, Plus, X, CheckCircle2, Clock, AlertTriangle,
   PlayCircle, Search, ChevronDown, AlertCircle, Eye, Trash2, Edit,
+  Receipt, DollarSign, FileCheck, ShieldCheck, CheckCheck, FileText
 } from 'lucide-react';
 import { getAllDepartments } from '../../config/departments';
+import { getDSREntries, updateDSREntry, addDSREntry, type DSREntry } from '../../utils/dsrSync';
+import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
+import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,7 +42,6 @@ const STATUS_MAP: Record<string, { label_ar: string; label_en: string; icon: Rea
   delayed:      { label_ar: 'متأخر',        label_en: 'Delayed',      icon: <AlertTriangle size={13} />,cls: 'bg-red-100 text-red-700',     bar: 'bg-brand-dark' },
 };
 
-// ── Master Catalog Hook ───────────────────────────────────────────────────
 const useServiceCatalog = (isAr: boolean) => {
   const [catalog, setCatalog] = useState<{ id: string; name: string; department_id: string }[]>([]);
 
@@ -115,9 +118,28 @@ const ServicesManager = () => {
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
 
+  // ── DSR & Payment States ──────────────────────────────────────────────────
+  const [dsrEntries, setDsrEntries] = useState<DSREntry[]>([]);
+  const [paymentModalService, setPaymentModalService] = useState<ServiceRecord | null>(null);
+  const [paymentForm, setPaymentForm] = useState({
+    amount: 30,
+    method: 'Mobile Payment' as DSREntry['payment_method'],
+    date: new Date().toISOString().split('T')[0],
+    reference: '',
+    notes: '',
+  });
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const [selectedReceiptDsr, setSelectedReceiptDsr] = useState<DSREntry | null>(null);
+  const [selectedInvoiceDsr, setSelectedInvoiceDsr] = useState<DSREntry | null>(null);
+
+  const loadDSR = useCallback(() => {
+    setDsrEntries(getDSREntries());
+  }, []);
+
   // ── Fetch (Scoped to Logged-in Employee) ───────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
+    loadDSR();
     try {
       let query = supabase
         .from('services')
@@ -139,7 +161,7 @@ const ServicesManager = () => {
       console.error(err);
     }
     setLoading(false);
-  }, [user?.id]);
+  }, [user?.id, loadDSR]);
 
   useEffect(() => { 
     fetchData(); 
@@ -312,6 +334,87 @@ const ServicesManager = () => {
     }
   };
 
+  // ── DSR Matcher Helper ───────────────────────────────────────────────────
+  const getDSRForService = (svc: ServiceRecord) => {
+    const cName = svc.clients?.company_name?.toLowerCase() || '';
+    return dsrEntries.find(d => 
+      (cName && d.company_name.toLowerCase().includes(cName)) ||
+      (cName && cName.includes(d.company_name.toLowerCase())) ||
+      (svc.title.toLowerCase().includes(d.service.toLowerCase()))
+    );
+  };
+
+  const openPaymentModal = (svc: ServiceRecord) => {
+    const dsr = getDSRForService(svc);
+    setPaymentModalService(svc);
+    setPaymentForm({
+      amount: dsr?.amount || 30,
+      method: dsr?.payment_method || 'Mobile Payment',
+      date: dsr?.payment_date || new Date().toISOString().split('T')[0],
+      reference: dsr?.payment_reference || '',
+      notes: dsr?.accountant_note || '',
+    });
+  };
+
+  const handleRecordPaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paymentModalService) return;
+    setIsSubmittingPayment(true);
+
+    try {
+      const clientName = paymentModalService.clients?.company_name || 'Valued Client';
+      const dsr = getDSRForService(paymentModalService);
+
+      if (dsr) {
+        updateDSREntry(dsr.id, {
+          amount: Number(paymentForm.amount),
+          payment_method: paymentForm.method,
+          payment_date: paymentForm.date,
+          payment_reference: paymentForm.reference,
+          status: 'Paid',
+          accountant_note: paymentForm.notes ? `${dsr.accountant_note} | Staff: ${paymentForm.notes}` : dsr.accountant_note,
+        });
+      } else {
+        addDSREntry({
+          date: new Date().toISOString().split('T')[0],
+          employee_name: user?.user_metadata?.full_name || 'Staff Member',
+          employee_id: user?.id,
+          service: paymentModalService.title,
+          company_name: clientName,
+          client_id: paymentModalService.client_id || undefined,
+          cr_number: '1454255',
+          amount: Number(paymentForm.amount),
+          gov_fee: 0,
+          profit: Number(paymentForm.amount),
+          status: 'Paid',
+          payment_date: paymentForm.date,
+          payment_method: paymentForm.method,
+          payment_reference: paymentForm.reference,
+          accountant_note: paymentForm.notes ? `Staff logged: ${paymentForm.notes}` : 'Payment logged by employee',
+          invoice_issued: false,
+        });
+      }
+
+      // Notify Accounts Desk
+      await supabase.from('notifications').insert([{
+        role: 'accountant',
+        type: 'payment_received',
+        title: isAr ? 'تم استلام دفعة جديدة من الموظف' : 'Client Payment Logged by Staff',
+        message: `Staff logged payment of OMR ${Number(paymentForm.amount).toFixed(3)} via ${paymentForm.method} for "${clientName}". Ready for verification & Tax Invoice.`,
+        ref_id: paymentModalService.id,
+        ref_table: 'services',
+      }]);
+
+      loadDSR();
+      setPaymentModalService(null);
+      alert(isAr ? 'تم تسجيل الدفعة وإرسالها للمحاسبة للتحقق وإصدار الفاتورة! 🎉' : 'Payment successfully recorded and sent to Accounts for verification! 🎉');
+    } catch (err: any) {
+      alert(err.message || 'Error recording payment');
+    } finally {
+      setIsSubmittingPayment(false);
+    }
+  };
+
   // ── Filtered list ─────────────────────────────────────────────────────────
   const filtered = services.filter(s => {
     const matchSearch = (s.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -462,67 +565,128 @@ const ServicesManager = () => {
                             ))}
                           </select>
                         </td>
-                         <td className="px-5 py-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => setViewingService(svc)}
-                              className="p-2 text-gray-400 hover:text-brand-dark hover:bg-red-50 rounded-xl transition-all"
-                              title={isAr ? 'عرض التفاصيل' : 'View Details'}
-                            >
-                              <Eye size={16} />
-                            </button>
-                            <button
-                              onClick={() => openEditModal(svc)}
-                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                              title={isAr ? 'تعديل' : 'Edit'}
-                            >
-                              <Edit size={16} />
-                            </button>
-                            <button
-                              onClick={() => setDeletingService(svc)}
-                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                              title={isAr ? 'حذف الخدمة' : 'Delete Service'}
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          <td className="px-5 py-4">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                              {/* Payment & Receipt Action */}
+                              {(() => {
+                                const dsr = getDSRForService(svc);
+                                if (dsr && dsr.invoice_issued) {
+                                  return (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={() => setSelectedInvoiceDsr(dsr)}
+                                        className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[10px] rounded-lg transition flex items-center gap-1 border border-blue-200"
+                                        title={isAr ? 'عرض الفاتورة الضريبية' : 'View Tax Invoice'}
+                                      >
+                                        <FileText size={12} />
+                                        {isAr ? 'الفاتورة' : 'Invoice'}
+                                      </button>
+                                      <button
+                                        onClick={() => setSelectedReceiptDsr(dsr)}
+                                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] rounded-lg transition flex items-center gap-1 border border-emerald-200"
+                                        title={isAr ? 'عرض سند القبض' : 'View Receipt'}
+                                      >
+                                        <Receipt size={12} />
+                                        {isAr ? 'السند' : 'Receipt'}
+                                      </button>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <button
+                                    onClick={() => openPaymentModal(svc)}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-sm transition flex items-center gap-1"
+                                    title={isAr ? 'تسجيل استلام الدفعة' : 'Record Client Payment'}
+                                  >
+                                    <DollarSign size={12} />
+                                    {isAr ? 'تسجيل دفعة' : 'Record Payment'}
+                                  </button>
+                                );
+                              })()}
 
-            {/* Mobile Cards */}
-            <div className="md:hidden divide-y divide-gray-50">
-              {filtered.map(svc => (
-                <div key={svc.id} className="p-4 space-y-3">
-                  <div className="flex justify-between items-start gap-2">
-                    <div>
-                      <p className="font-semibold text-sm text-gray-800">{svc.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{svc.clients?.company_name || '—'}</p>
+                              <button
+                                onClick={() => setViewingService(svc)}
+                                className="p-1.5 text-gray-400 hover:text-brand-dark hover:bg-red-50 rounded-lg transition-all"
+                                title={isAr ? 'عرض التفاصيل' : 'View Details'}
+                              >
+                                <Eye size={15} />
+                              </button>
+                              <button
+                                onClick={() => openEditModal(svc)}
+                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                title={isAr ? 'تعديل' : 'Edit'}
+                              >
+                                <Edit size={15} />
+                              </button>
+                              <button
+                                onClick={() => setDeletingService(svc)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                title={isAr ? 'حذف الخدمة' : 'Delete Service'}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="md:hidden divide-y divide-gray-50">
+                {filtered.map(svc => (
+                  <div key={svc.id} className="p-4 space-y-3">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <p className="font-semibold text-sm text-gray-800">{svc.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{svc.clients?.company_name || '—'}</p>
+                      </div>
+                      <StatusBadge status={svc.status} isAr={isAr} />
                     </div>
-                    <StatusBadge status={svc.status} isAr={isAr} />
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-xs text-gray-400">
+                        {svc.due_date ? new Date(svc.due_date).toLocaleDateString() : '—'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const dsr = getDSRForService(svc);
+                          if (dsr && dsr.invoice_issued) {
+                            return (
+                              <button
+                                onClick={() => setSelectedReceiptDsr(dsr)}
+                                className="px-2 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg"
+                              >
+                                {isAr ? 'السند والفاتورة' : 'Receipt & Invoice'}
+                              </button>
+                            );
+                          }
+                          return (
+                            <button
+                              onClick={() => openPaymentModal(svc)}
+                              className="px-2 py-1 bg-emerald-600 text-white font-bold text-[10px] rounded-lg flex items-center gap-1"
+                            >
+                              <DollarSign size={10} />
+                              {isAr ? 'تسجيل دفعة' : 'Payment'}
+                            </button>
+                          );
+                        })()}
+                        <select
+                          value={svc.status}
+                          onChange={e => updateStatus(svc.id, e.target.value)}
+                          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none
+                            focus:border-red-700 bg-white text-gray-600"
+                        >
+                          {Object.entries(STATUS_MAP).map(([k, v]) => (
+                            <option key={k} value={k}>{isAr ? v.label_ar : v.label_en}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">
-                      {svc.due_date ? new Date(svc.due_date).toLocaleDateString() : '—'}
-                    </span>
-                    <select
-                      value={svc.status}
-                      onChange={e => updateStatus(svc.id, e.target.value)}
-                      className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none
-                        focus:border-red-700 bg-white text-gray-600"
-                    >
-                      {Object.entries(STATUS_MAP).map(([k, v]) => (
-                        <option key={k} value={k}>{isAr ? v.label_ar : v.label_en}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
           </>
         )}
       </div>
@@ -810,6 +974,162 @@ const ServicesManager = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* Record Client Payment Modal */}
+      {paymentModalService && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-150">
+            <div className="p-5 bg-gradient-to-r from-emerald-800 to-teal-900 text-white flex justify-between items-center">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-200">
+                  {isAr ? 'تسجيل مدفوعات العميل' : 'Client Payment Logging'}
+                </span>
+                <h3 className="text-base font-bold mt-0.5">
+                  {paymentModalService.clients?.company_name || paymentModalService.title}
+                </h3>
+              </div>
+              <button
+                onClick={() => setPaymentModalService(null)}
+                className="p-1.5 text-emerald-200 hover:text-white hover:bg-white/10 rounded-xl"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordPaymentSubmit} className="p-5 space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-xs text-emerald-900 flex items-start gap-2">
+                <CheckCheck size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                <p>
+                  {isAr
+                    ? 'سيتم تسجيل الدفعة وإرسالها فوراً إلى قسم المحاسبة في سجل DSR لإصدار الفاتورة الضريبية.'
+                    : 'Payment will be registered immediately into the Accounts DSR queue for Tax Invoice & Receipt issuance.'}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">
+                  {isAr ? 'المبلغ المستلم (ر.ع)' : 'Amount Paid (OMR)'} *
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={paymentForm.amount}
+                  onChange={e => setPaymentForm({ ...paymentForm, amount: parseFloat(e.target.value) || 0 })}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 outline-none focus:border-emerald-600"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'طريقة الدفع' : 'Payment Method'}
+                  </label>
+                  <select
+                    value={paymentForm.method}
+                    onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value as any })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:border-emerald-600"
+                  >
+                    <option value="Mobile Payment">Mobile Payment</option>
+                    <option value="POS">POS Terminal</option>
+                    <option value="Bank transfer">Bank transfer</option>
+                    <option value="Cash">Cash</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'تاريخ الدفع' : 'Payment Date'}
+                  </label>
+                  <input
+                    type="date"
+                    value={paymentForm.date}
+                    onChange={e => setPaymentForm({ ...paymentForm, date: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">
+                  {isAr ? 'رقم الإيصال / الحوالة' : 'Transaction Ref / Slip #'}
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. BM-984723 or POS-009"
+                  value={paymentForm.reference}
+                  onChange={e => setPaymentForm({ ...paymentForm, reference: e.target.value })}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">
+                  {isAr ? 'ملاحظة للمحاسب' : 'Notes for Accountant'}
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Client paid in full via BenefitPay"
+                  value={paymentForm.notes}
+                  onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentModalService(null)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl text-xs font-semibold"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingPayment}
+                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5"
+                >
+                  <DollarSign size={15} />
+                  {isSubmittingPayment ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'تأكيد وإرسال للمحاسب' : 'Submit Payment')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Tax Invoice Modal for Employee */}
+      {selectedInvoiceDsr && (
+        <TaxInvoiceModal
+          isOpen={!!selectedInvoiceDsr}
+          onClose={() => setSelectedInvoiceDsr(null)}
+          clientData={{
+            clientName: selectedInvoiceDsr.company_name,
+            companyName: selectedInvoiceDsr.company_name,
+            registrationNumber: selectedInvoiceDsr.cr_number,
+            totalAmount: selectedInvoiceDsr.amount,
+            subtotal: selectedInvoiceDsr.amount,
+            quoteNumber: selectedInvoiceDsr.invoice_number || 'INV-2026-8801',
+            serviceName: selectedInvoiceDsr.service,
+          }}
+        />
+      )}
+
+      {/* Payment Receipt Modal for Employee */}
+      {selectedReceiptDsr && (
+        <PaymentReceiptModal
+          isOpen={!!selectedReceiptDsr}
+          onClose={() => setSelectedReceiptDsr(null)}
+          clientData={{
+            clientName: selectedReceiptDsr.company_name,
+            companyName: selectedReceiptDsr.company_name,
+            registrationNumber: selectedReceiptDsr.cr_number,
+            totalAmount: selectedReceiptDsr.amount,
+            subtotal: selectedReceiptDsr.amount,
+            quoteNumber: selectedReceiptDsr.receipt_number || 'REC-2026-8801',
+            serviceName: selectedReceiptDsr.service,
+          }}
+        />
       )}
     </div>
   );

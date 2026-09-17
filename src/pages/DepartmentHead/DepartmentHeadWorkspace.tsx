@@ -51,6 +51,7 @@ import {
 } from 'lucide-react';
 import { getDepartmentById, getAllDepartments } from '../../config/departments';
 import { getLocalRecruits } from '../../utils/recruitmentSync';
+import { addDSREntry, getDSREntries, saveDSREntries } from '../../utils/dsrSync';
 
 interface EmployeeProfile {
   id: string;
@@ -894,6 +895,48 @@ const DepartmentHeadWorkspace = () => {
           ref_id: assignJobNotif.ref_id,
           ref_table: 'client_jobs',
         }]);
+      }
+
+      // Sync assigned employee name and details with DSR Register for Accounts
+      try {
+        const clientNameMatch = assignJobNotif.message?.match(/"([^"]+)"/)?.at(1) || 'Valued Client';
+        const currentDSR = getDSREntries();
+        const existingIdx = currentDSR.findIndex(d => 
+          d.company_name.toLowerCase().includes(clientNameMatch.toLowerCase()) || 
+          clientNameMatch.toLowerCase().includes(d.company_name.toLowerCase())
+        );
+
+        if (existingIdx >= 0) {
+          currentDSR[existingIdx] = {
+            ...currentDSR[existingIdx],
+            employee_name: selectedEmp?.full_name || 'Staff Member',
+            employee_id: selectedEmp?.id,
+            service: assignJobForm.serviceType || currentDSR[existingIdx].service,
+            amount: parseFloat(assignJobForm.amount) || currentDSR[existingIdx].amount,
+            profit: parseFloat(assignJobForm.amount) || currentDSR[existingIdx].profit,
+          };
+          saveDSREntries(currentDSR);
+        } else {
+          addDSREntry({
+            date: new Date().toISOString().split('T')[0],
+            employee_name: selectedEmp?.full_name || 'Staff Member',
+            employee_id: selectedEmp?.id,
+            service: assignJobForm.serviceType,
+            company_name: clientNameMatch,
+            client_id: assignJobNotif.ref_id,
+            cr_number: '1454255',
+            amount: parseFloat(assignJobForm.amount) || 0,
+            gov_fee: 0,
+            profit: parseFloat(assignJobForm.amount) || 0,
+            status: 'Unpaid',
+            payment_date: '',
+            payment_method: '',
+            accountant_note: 'Assigned by HOD',
+            invoice_issued: false,
+          });
+        }
+      } catch (dsrErr) {
+        console.warn('Error syncing DSR on HOD assignment:', dsrErr);
       }
 
       // Dismiss original HOD notification
