@@ -35,7 +35,7 @@ async function syncAndCheck() {
   });
 
   console.log("Logged in user_metadata:", signData?.user?.user_metadata);
-  
+
   const { data: prof, error: pErr } = await supabase
     .from('profiles')
     .select('*')
