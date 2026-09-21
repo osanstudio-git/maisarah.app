@@ -68,6 +68,7 @@ interface Quotation {
   email?: string;
   phone?: string;
   companyName?: string;
+  registrationNumber?: string;
   type: 'B2B' | 'B2C';
   serviceType: string;
   servicesPackage?: string[];
@@ -279,6 +280,7 @@ export default function CRMPortal() {
     email: row.email ?? '',
     phone: row.phone ?? '',
     companyName: row.company_name ?? undefined,
+    registrationNumber: row.registration_number ?? row.cr_number ?? undefined,
     type: row.client_type ?? 'B2B',
     serviceType: Array.isArray(row.services) ? row.services.join(', ') : (row.service_type ?? 'Bookkeeping & Tax'),
     servicesPackage: Array.isArray(row.services) ? row.services : ['Tax & VAT'],

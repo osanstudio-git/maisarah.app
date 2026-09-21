@@ -53,6 +53,11 @@ import { getDepartmentById, getAllDepartments } from '../../config/departments';
 import { getLocalRecruits } from '../../utils/recruitmentSync';
 import { addDSREntry, getDSREntries, saveDSREntries } from '../../utils/dsrSync';
 
+const isValidUUID = (val?: string | null): boolean => {
+  if (!val) return false;
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(val);
+};
+
 interface EmployeeProfile {
   id: string;
   full_name: string;
@@ -517,8 +522,8 @@ const DepartmentHeadWorkspace = () => {
         .update({
           title: editTitle.trim(),
           description: editDesc.trim() || null,
-          client_id: editClientId || null,
-          employee_id: editEmployeeId || null,
+          client_id: isValidUUID(editClientId) ? editClientId : null,
+          employee_id: isValidUUID(editEmployeeId) ? editEmployeeId : null,
           due_date: editDueDate || null,
           status: editStatus
         })
@@ -631,8 +636,8 @@ const DepartmentHeadWorkspace = () => {
         .insert([{
           title: taskTitle.trim(),
           description: taskDesc.trim() || null,
-          client_id: targetClient?.id || null,
-          employee_id: targetEmp?.id || null,
+          client_id: isValidUUID(targetClient?.id) ? targetClient.id : null,
+          employee_id: isValidUUID(targetEmp?.id) ? targetEmp.id : null,
           due_date: taskDue || null,
           status: 'ongoing'
         }])
@@ -676,7 +681,7 @@ const DepartmentHeadWorkspace = () => {
 
     const { error } = await supabase
       .from('services')
-      .update({ employee_id: newEmployeeId })
+      .update({ employee_id: isValidUUID(newEmployeeId) ? newEmployeeId : null })
       .eq('id', serviceId);
 
     setReassignService(null);
@@ -847,7 +852,9 @@ const DepartmentHeadWorkspace = () => {
   };
 
   const dismissNotification = async (id: string) => {
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    if (isValidUUID(id)) {
+      await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    }
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
   };
 
@@ -857,14 +864,17 @@ const DepartmentHeadWorkspace = () => {
     setIsAssigningJob(true);
     try {
       const selectedEmp = personnel.find(p => p.id === assignJobForm.employeeId) || personnel[0];
+      const validClientId = isValidUUID(assignJobNotif.ref_id) ? assignJobNotif.ref_id : null;
+      const validHodId = isValidUUID(user?.id) ? user.id : null;
+      const validEmpId = isValidUUID(selectedEmp?.id) ? selectedEmp.id : null;
 
       // Insert into client_jobs table
       const { error } = await supabase.from('client_jobs').insert([{
-        client_id: assignJobNotif.ref_id || null,
+        client_id: validClientId,
         service_type: assignJobForm.serviceType,
         billing_type: assignJobForm.billingType,
-        assigned_hod: user?.id || null,
-        assigned_employee: selectedEmp?.id || null,
+        assigned_hod: validHodId,
+        assigned_employee: validEmpId,
         description: assignJobForm.description || null,
         deadline: assignJobForm.deadline,
         amount: parseFloat(assignJobForm.amount) || 0,
@@ -878,23 +888,27 @@ const DepartmentHeadWorkspace = () => {
       await supabase.from('services').insert([{
         title: `${assignJobForm.serviceType} — ${assignJobNotif.message?.match(/"([^"]+)"/)?.at(1) || 'New Client'}`,
         description: assignJobForm.description || `${assignJobForm.serviceType} job assigned by HOD`,
-        client_id: assignJobNotif.ref_id || null,
-        employee_id: selectedEmp?.id || null,
+        client_id: validClientId,
+        employee_id: validEmpId,
         due_date: assignJobForm.deadline,
         status: 'ongoing',
       }]);
 
-      // Notify assigned employee
-      if (selectedEmp?.id) {
-        await supabase.from('notifications').insert([{
-          user_id: selectedEmp.id,
-          role: 'employee',
-          type: 'job_assigned',
-          title: 'New Job Assigned by HOD',
-          message: `You have been assigned: ${assignJobForm.serviceType}. Deadline: ${assignJobForm.deadline}. Amount: OMR ${parseFloat(assignJobForm.amount).toFixed(3)}.`,
-          ref_id: assignJobNotif.ref_id,
-          ref_table: 'client_jobs',
-        }]);
+      // Notify assigned employee if valid user UUID
+      if (validEmpId) {
+        try {
+          await supabase.from('notifications').insert([{
+            user_id: validEmpId,
+            role: 'employee',
+            type: 'job_assigned',
+            title: 'New Job Assigned by HOD',
+            message: `You have been assigned: ${assignJobForm.serviceType}. Deadline: ${assignJobForm.deadline}. Amount: OMR ${parseFloat(assignJobForm.amount || '0').toFixed(3)}.`,
+            ref_id: validClientId || undefined,
+            ref_table: 'client_jobs',
+          }]);
+        } catch (notifErr) {
+          console.warn('Could not insert employee notification:', notifErr);
+        }
       }
 
       // Sync assigned employee name and details with DSR Register for Accounts

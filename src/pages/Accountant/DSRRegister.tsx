@@ -476,9 +476,8 @@ export default function DSRRegister() {
                 return (
                   <tr
                     key={e.id}
-                    className={`hover:bg-amber-50/40 transition-colors ${
-                      e.status === 'Unpaid' ? 'bg-red-50/20' : e.status === 'Partial' ? 'bg-amber-50/20' : ''
-                    }`}
+                    className={`hover:bg-amber-50/40 transition-colors ${e.status === 'Unpaid' ? 'bg-red-50/20' : e.status === 'Partial' ? 'bg-amber-50/20' : ''
+                      }`}
                   >
                     {/* Date */}
                     <td className="px-3 py-2.5 font-medium text-gray-600 border-e border-gray-200 whitespace-nowrap">
@@ -549,13 +548,12 @@ export default function DSRRegister() {
                         </select>
                       ) : (
                         <span
-                          className={`inline-block px-2 py-0.5 rounded font-bold text-[10px] ${
-                            e.status === 'Paid'
+                          className={`inline-block px-2 py-0.5 rounded font-bold text-[10px] ${e.status === 'Paid'
                               ? 'bg-emerald-500 text-white'
                               : e.status === 'Unpaid'
-                              ? 'bg-red-600 text-white'
-                              : 'bg-amber-400 text-gray-900'
-                          }`}
+                                ? 'bg-red-600 text-white'
+                                : 'bg-amber-400 text-gray-900'
+                            }`}
                         >
                           {e.status}
                         </span>

@@ -43,7 +43,7 @@ export default function EmployeeHR() {
   const { i18n, t } = useTranslation();
   const isAr = i18n.language === 'ar';
   const { user } = useAuth();
-  
+
   const employeeName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Employee';
   const employeeRole = user?.user_metadata?.role === 'manager' ? 'Executive Director' : 'Consultant Staff';
 
@@ -82,7 +82,7 @@ export default function EmployeeHR() {
       if (dbLeaves && dbLeaves.length > 0) {
         dbLeaves.forEach((leave: any) => {
           const isMine = (leave.employee_name && leave.employee_name.toLowerCase() === employeeName.toLowerCase()) ||
-                         (user?.id && leave.employee_id === user.id);
+            (user?.id && leave.employee_id === user.id);
           if (isMine) {
             liveList.push({
               id: leave.id.toString().slice(0, 8),
@@ -123,7 +123,7 @@ export default function EmployeeHR() {
       const parsedLogs = JSON.parse(savedLogs) as AttendanceLog[];
       const todayStr = new Date().toISOString().split('T')[0];
       const todayLog = parsedLogs.find(l => l.name === employeeName && l.date === todayStr);
-      
+
       setClockLogs(parsedLogs.filter(l => l.name === employeeName));
       if (todayLog) {
         setActiveClockLog(todayLog);
@@ -155,7 +155,7 @@ export default function EmployeeHR() {
   const handleClockToggle = () => {
     const todayStr = new Date().toISOString().split('T')[0];
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const allSavedLogs = localStorage.getItem('hr_attendance_logs') 
+    const allSavedLogs = localStorage.getItem('hr_attendance_logs')
       ? JSON.parse(localStorage.getItem('hr_attendance_logs')!) as AttendanceLog[]
       : [];
 
@@ -243,7 +243,7 @@ export default function EmployeeHR() {
     const nextLeaves = [newRequest, ...allSavedLeaves];
     localStorage.setItem('hr_leave_requests', JSON.stringify(nextLeaves));
     setLeaveRequests(prev => [newRequest, ...prev]);
-    
+
     // Reset Form
     setLeaveForm({
       type: 'Annual Leave',
@@ -391,8 +391,8 @@ export default function EmployeeHR() {
             {isAr ? 'الخدمة الذاتية للموظفين (ESS)' : 'Employee Self-Service (ESS)'}
           </h2>
           <p className="text-xs text-gray-500 font-bold mt-1">
-            {isAr 
-              ? 'إدارة الحضور والانصراف، تقديم الإجازات ومراجعة كشوف الرواتب' 
+            {isAr
+              ? 'إدارة الحضور والانصراف، تقديم الإجازات ومراجعة كشوف الرواتب'
               : 'Directly manage your work attendance, leave applications, and view earnings statements'}
           </p>
         </div>
@@ -400,11 +400,10 @@ export default function EmployeeHR() {
         {/* Live Attendance Punch Button */}
         <button
           onClick={handleClockToggle}
-          className={`flex items-center gap-2 px-5 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-md transition-all active:scale-95 ${
-            isClockedIn 
-              ? 'bg-red-600 text-white hover:bg-red-700 shadow-red-200' 
+          className={`flex items-center gap-2 px-5 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-md transition-all active:scale-95 ${isClockedIn
+              ? 'bg-red-600 text-white hover:bg-red-700 shadow-red-200'
               : 'bg-green-600 text-white hover:bg-green-700 shadow-green-200'
-          }`}
+            }`}
         >
           <Clock size={16} />
           <span>{isClockedIn ? (isAr ? 'تسجيل انصراف' : 'Clock Out') : (isAr ? 'تسجيل حضور' : 'Clock In')}</span>
@@ -413,7 +412,7 @@ export default function EmployeeHR() {
 
       {/* Grid section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Column 1 & 2: Leave & History */}
         <div className="lg:col-span-2 space-y-6">
           {/* Submit Leave Card */}
@@ -500,7 +499,7 @@ export default function EmployeeHR() {
               <Calendar className="text-[#A11212]" size={18} />
               {isAr ? 'سجل طلبات الإجازات' : 'My Leave Requests History'}
             </h3>
-            
+
             <div className="space-y-3">
               {leaveRequests.map((req) => (
                 <div key={req.id} className="p-4 bg-gray-50 rounded-2xl border border-gray-150 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
@@ -510,16 +509,14 @@ export default function EmployeeHR() {
                     {req.notes && <p className="text-[10px] text-gray-400 font-medium mt-0.5">{req.notes}</p>}
                   </div>
                   <div className="flex gap-2 text-[9px] font-black uppercase">
-                    <span className={`px-2 py-0.5 rounded border ${
-                      req.managerApproval === 'Approved' ? 'bg-green-50 text-green-700 border-green-150' :
-                      req.managerApproval === 'Rejected' ? 'bg-red-50 text-red-700 border-red-150' : 'bg-orange-50 text-orange-700 border-orange-150'
-                    }`}>
+                    <span className={`px-2 py-0.5 rounded border ${req.managerApproval === 'Approved' ? 'bg-green-50 text-green-700 border-green-150' :
+                        req.managerApproval === 'Rejected' ? 'bg-red-50 text-red-700 border-red-150' : 'bg-orange-50 text-orange-700 border-orange-150'
+                      }`}>
                       HOD: {req.managerApproval}
                     </span>
-                    <span className={`px-2 py-0.5 rounded border ${
-                      req.hrApproval === 'Approved' ? 'bg-green-50 text-green-700 border-green-150' :
-                      req.hrApproval === 'Rejected' ? 'bg-red-50 text-red-700 border-red-150' : 'bg-orange-50 text-orange-700 border-orange-150'
-                    }`}>
+                    <span className={`px-2 py-0.5 rounded border ${req.hrApproval === 'Approved' ? 'bg-green-50 text-green-700 border-green-150' :
+                        req.hrApproval === 'Rejected' ? 'bg-red-50 text-red-700 border-red-150' : 'bg-orange-50 text-orange-700 border-orange-150'
+                      }`}>
                       HR: {req.hrApproval}
                     </span>
                   </div>
@@ -547,9 +544,8 @@ export default function EmployeeHR() {
                     <p className="text-gray-900">{log.date}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5 font-medium">In: {log.checkIn} &bull; Out: {log.checkOut}</p>
                   </div>
-                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
-                    log.status === 'present' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
-                  }`}>
+                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${log.status === 'present' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                    }`}>
                     {log.status}
                   </span>
                 </div>
@@ -566,7 +562,7 @@ export default function EmployeeHR() {
               <FileText className="text-[#A11212]" size={18} />
               {isAr ? 'كشوف الرواتب والتحويلات' : 'My Payslip Statements'}
             </h3>
-            
+
             <div className="space-y-3">
               {MOCK_PAYSLIPS.map(payslip => (
                 <div key={payslip.id} className="p-3.5 bg-gray-50 rounded-2xl border border-gray-150 flex justify-between items-center">
