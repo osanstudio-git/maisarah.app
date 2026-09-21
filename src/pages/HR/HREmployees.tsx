@@ -9,7 +9,7 @@ import {
   Download, UploadCloud, Plus, Edit, Trash2, CheckCircle2, X, PlusCircle, LayoutGrid, ListFilter, SlidersHorizontal, UserX, AlertCircle, ShieldAlert,
   Copy, Check, Share2, Send, Lock, Mail, Key, Loader2, Sparkles
 } from 'lucide-react';
-import { getLocalRecruits } from '../../utils/recruitmentSync';
+import { getLocalRecruits, upsertLocalRecruit } from '../../utils/recruitmentSync';
 
 interface Employee {
   id: string;
@@ -591,6 +591,7 @@ export default function HREmployees() {
     id: '',
     name: '',
     role: 'Senior Auditor',
+    systemRole: 'employee' as 'employee' | 'accountant' | 'department_head' | 'hr',
     dept: 'Audit',
     email: '',
     phone: '',
@@ -621,6 +622,7 @@ export default function HREmployees() {
     emergencyName: '',
     emergencyRelation: 'Parent',
     emergencyPhone: '',
+    activationMode: 'direct_activate' as 'direct_activate' | 'manager_placement',
     uploadedFiles: [] as Array<{ name: string; type: string; file?: File }>
   });
 
@@ -638,6 +640,7 @@ export default function HREmployees() {
       id: `EMP-00${employees.length + 1}`,
       name: '',
       role: 'Senior Auditor',
+      systemRole: 'employee',
       dept: 'Audit',
       email: '',
       phone: '',
@@ -668,6 +671,7 @@ export default function HREmployees() {
       emergencyName: '',
       emergencyRelation: 'Parent',
       emergencyPhone: '',
+      activationMode: 'direct_activate',
       uploadedFiles: []
     });
     setShowModal(true);
@@ -677,10 +681,23 @@ export default function HREmployees() {
     setIsEditMode(true);
     setFormError(null);
     setIsSubmitting(false);
+
+    let initialSysRole: 'employee' | 'accountant' | 'department_head' | 'hr' = 'employee';
+    const rLower = (emp.role || '').toLowerCase();
+    const dLower = (emp.dept || '').toLowerCase();
+    if (rLower.includes('head') || rLower.includes('hod') || rLower.includes('director')) {
+      initialSysRole = 'department_head';
+    } else if (rLower.includes('accountant') || dLower.includes('account') || dLower.includes('finance')) {
+      initialSysRole = 'accountant';
+    } else if (rLower.includes('hr') || dLower.includes('hr')) {
+      initialSysRole = 'hr';
+    }
+
     setFormData({
       id: emp.id,
       name: emp.name,
       role: emp.role,
+      systemRole: initialSysRole,
       dept: emp.dept,
       email: emp.email,
       phone: emp.phone,
@@ -693,7 +710,7 @@ export default function HREmployees() {
       gender: emp.gender,
       maritalStatus: emp.maritalStatus,
       joinedDate: emp.joinedDate,
-      immediateSupervisor: emp.immediateSupervisor,
+      immediateSupervisor: emp.immediateSupervisor || 'Fatma Al-Harthy',
       basicSalary: emp.basicSalary,
       type: emp.type || 'Experienced',
       accommodationStatus: emp.accommodationStatus || 'Lives with family',
@@ -711,6 +728,7 @@ export default function HREmployees() {
       emergencyName: emp.emergencyContact?.name || '',
       emergencyRelation: emp.emergencyContact?.relation || 'Parent',
       emergencyPhone: emp.emergencyContact?.phone || '',
+      activationMode: 'direct_activate',
       uploadedFiles: []
     });
     setShowModal(true);
@@ -879,23 +897,97 @@ export default function HREmployees() {
     setFormError(null);
 
     try {
-      // 1. Determine final target ID and roles
+      // 1. If Manager Placement workflow is chosen for a new candidate:
+      if (!isEditMode && formData.activationMode === 'manager_placement') {
+        const recruitId = crypto.randomUUID();
+        const recruitPayload: any = {
+          id: recruitId,
+          name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
+          phone: formData.phone || '',
+          role: formData.role,
+          dept: formData.dept,
+          stage: 'offered',
+          placement_status: 'pending_placement',
+          employment_type: formData.type || 'Experienced',
+          supervisor: formData.immediateSupervisor || 'Fatma Al-Harthy',
+          score: 0,
+          onboarding_tasks: {
+            contract_signed: false,
+            bank_details_submitted: false,
+            documents_uploaded: false,
+            it_assets_ready: false
+          },
+          created_at: new Date().toISOString()
+        };
+
+        upsertLocalRecruit(recruitPayload);
+        try {
+          await supabase.from('hr_recruits').insert([recruitPayload]);
+        } catch (rErr) {
+          console.warn('hr_recruits insert notice:', rErr);
+        }
+
+        // Send Offer Welcome Email (Email A)
+        supabase.functions.invoke('send-email', {
+          body: {
+            to: formData.email.trim().toLowerCase(),
+            subject: isAr 
+              ? 'مرحباً بك في مجموعة ميسرة - عرض العمل والخطوات القادمة' 
+              : 'Welcome to Maisarah Group - Job Offer & Next Steps',
+            html: `
+              <div style="font-family: sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px;">
+                <h2 style="color: #A11212; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">
+                  ${isAr ? 'تهانينا على عرض العمل!' : 'Congratulations on your Job Offer!'}
+                </h2>
+                <p>${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${formData.name}</strong>,</p>
+                <p>
+                  ${isAr 
+                    ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تفعيل عرض العمل الخاص بك وتوجيهه للمدير التنفيذي لوضع اللمسات الأخيرة وتعيين المشرف المباشر واعتماد الصلاحيات.' 
+                    : 'We are thrilled to welcome you to the Maisarah family. Your job offer has been submitted and forwarded to the Executive Manager for final department placement and role configuration.'}
+                </p>
+                <div style="background-color: #fcfcfc; border: 1px solid #f0f0f0; padding: 15px; border-radius: 10px; margin: 20px 0;">
+                  <h4 style="margin-top: 0; color: #555;">${isAr ? 'تفاصيل التوظيف المقترحة:' : 'Designated Details:'}</h4>
+                  <p style="margin: 4px 0;"><strong>${isAr ? 'المسمى الوظيفي:' : 'Position:'}</strong> ${formData.role}</p>
+                  <p style="margin: 4px 0;"><strong>${isAr ? 'القسم:' : 'Department:'}</strong> ${formData.dept}</p>
+                  <p style="margin: 4px 0;"><strong>${isAr ? 'المشرف المقترح:' : 'Designated Supervisor:'}</strong> ${formData.immediateSupervisor}</p>
+                </div>
+                <p>
+                  ${isAr 
+                    ? 'ستصلك رسالة ثانية تحتوي على بيانات الدخول إلى منصة الموظفين فور اعتماد المدير التنفيذي.' 
+                    : 'You will receive your portal login credentials as soon as executive placement review is completed.'}
+                </p>
+                <br/>
+                <p>${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
+                <p>${isAr ? 'إدارة الموارد البشرية - ميسرة' : 'Maisarah HR Department'}</p>
+              </div>
+            `
+          }
+        }).catch(mailErr => console.warn('Offer email dispatch notice:', mailErr));
+
+        window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+
+        setNotification({
+          show: true,
+          title: isAr ? 'تم إرسال الملف للاعتماد' : 'Forwarded to Manager',
+          message: isAr 
+            ? `تم إرسال ملف ${formData.name} إلى قائمة التعيينات والاعتماد لدى المدير التنفيذي بنجاح.` 
+            : `Candidate ${formData.name} forwarded to Executive Manager Placements queue.`,
+          type: 'success'
+        });
+
+        setShowModal(false);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 2. Direct Activation Flow:
       let targetId = formData.id;
       let tempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
-      let accessRole = 'employee';
+      let accessRole = formData.systemRole || 'employee';
       let departmentId = 'audit';
 
       const normalizedDept = (formData.dept || '').toLowerCase();
-      const normalizedRole = (formData.role || '').toLowerCase();
-
-      if (normalizedDept.includes('hr') || normalizedRole.includes('hr')) {
-        accessRole = 'hr';
-      } else if (normalizedDept.includes('finance') || normalizedDept.includes('account') || normalizedRole.includes('accountant')) {
-        accessRole = 'accountant';
-      } else if (normalizedRole.includes('head') || normalizedRole.includes('hod') || normalizedRole.includes('director')) {
-        accessRole = 'department_head';
-      }
-
       if (normalizedDept.includes('tax') || normalizedDept.includes('vat')) {
         departmentId = 'tax_vat';
       } else if (normalizedDept.includes('book') || normalizedDept.includes('ledger') || normalizedDept.includes('account')) {
@@ -1975,6 +2067,65 @@ export default function HREmployees() {
             )}
 
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Onboarding Workflow Selection (When registering new employee) */}
+              {!isEditMode && (
+                <div className="bg-gradient-to-r from-red-50/70 via-gray-50 to-red-50/70 border border-red-100/80 rounded-2xl p-3.5 mb-2">
+                  <label className="block text-[10px] font-black text-[#A11212] uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                    <Sparkles size={13} className="text-[#A11212]" />
+                    {isAr ? 'مسار التسجيل والاعتماد' : 'Onboarding & Activation Mode'}
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, activationMode: 'direct_activate' })}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                        formData.activationMode === 'direct_activate'
+                          ? 'bg-white border-[#A11212] shadow-sm ring-2 ring-[#A11212]/20'
+                          : 'bg-white/60 border-gray-200 hover:bg-white opacity-70'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-gray-900 flex items-center gap-1.5">
+                          ⚡ {isAr ? 'تفعيل فوري وإصدار بيانات الدخول' : 'Direct Activation'}
+                        </span>
+                        {formData.activationMode === 'direct_activate' && (
+                          <span className="h-2 w-2 rounded-full bg-[#A11212]"></span>
+                        )}
+                      </div>
+                      <p className="text-[9px] text-gray-500 font-bold leading-tight">
+                        {isAr
+                          ? 'إنشاء الحساب فوراً وتوليد كلمة المرور وإرسال بريد الدخول للموظف'
+                          : 'Creates login account, generates password & emails credentials immediately'}
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, activationMode: 'manager_placement' })}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                        formData.activationMode === 'manager_placement'
+                          ? 'bg-white border-[#A11212] shadow-sm ring-2 ring-[#A11212]/20'
+                          : 'bg-white/60 border-gray-200 hover:bg-white opacity-70'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-gray-900 flex items-center gap-1.5">
+                          📋 {isAr ? 'إحالة للمدير التنفيذي للاعتماد' : 'Forward to Manager'}
+                        </span>
+                        {formData.activationMode === 'manager_placement' && (
+                          <span className="h-2 w-2 rounded-full bg-[#A11212]"></span>
+                        )}
+                      </div>
+                      <p className="text-[9px] text-gray-500 font-bold leading-tight">
+                        {isAr
+                          ? 'إرسال عرض عمل وإحالة المرشح للمدير التنفيذي لاعتماد القسم والمشرف'
+                          : 'Sends job offer email & queues in Manager Placements for final review'}
+                      </p>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
@@ -2004,10 +2155,25 @@ export default function HREmployees() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-[#A11212] uppercase tracking-widest mb-1.5">
+                    {isAr ? 'صلاحية النظام (System Role)' : 'System Access Role'}
+                  </label>
+                  <select
+                    value={formData.systemRole}
+                    onChange={(e) => setFormData({ ...formData, systemRole: e.target.value as any })}
+                    className="w-full bg-red-50/50 border border-red-200 rounded-xl px-4 py-2.5 text-xs font-black text-[#A11212] outline-none focus:border-[#A11212] cursor-pointer"
+                  >
+                    <option value="employee">{isAr ? 'موظف عادي (Employee)' : 'Standard Employee'}</option>
+                    <option value="accountant">{isAr ? 'محاسب (Accountant)' : 'Accountant (DSR & Invoices)'}</option>
+                    <option value="department_head">{isAr ? 'رئيس قسم (Dept Head)' : 'Department Head (HOD)'}</option>
+                    <option value="hr">{isAr ? 'موارد بشرية (HR Specialist)' : 'HR Specialist'}</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'المسمى الوظيفي' : 'Designated Role'}
+                    {isAr ? 'المسمى الوظيفي' : 'Designated Position'}
                   </label>
                   <select
                     value={formData.role}
@@ -2273,16 +2439,20 @@ export default function HREmployees() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'المشرف المباشر' : 'Supervisor'}
+                  <label className="block text-[10px] font-black text-[#A11212] uppercase tracking-widest mb-1.5">
+                    {isAr ? 'المشرف المباشر / رئيس القسم (HOD)' : 'Immediate Supervisor / HOD'}
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Fatma Al-Harthy"
+                  <select
                     value={formData.immediateSupervisor}
                     onChange={(e) => setFormData({ ...formData, immediateSupervisor: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                  />
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
+                  >
+                    <option value="Fatma Al-Harthy">Fatma Al-Harthy (Audit Head - رئيس قسم التدقيق)</option>
+                    <option value="Nasser Al-Amri">Nasser Al-Amri (Tax Head - رئيس قسم الضرائب)</option>
+                    <option value="Salim Al-Harthy">Salim Al-Harthy (Accounting Head - رئيس قسم المحاسبة)</option>
+                    <option value="Hamid">Hamid (Audit & Assurance Lead - مشرف التدقيق)</option>
+                    <option value="Riyas">Riyas (Finance & Bookkeeping Lead - مشرف الحسابات)</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
@@ -2511,10 +2681,20 @@ export default function HREmployees() {
                 {isSubmitting ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    <span>{isAr ? 'جاري التسجيل وتفعيل الحساب...' : 'Registering & Activating...'}</span>
+                    <span>
+                      {formData.activationMode === 'manager_placement' && !isEditMode
+                        ? (isAr ? 'جاري إحالة المرشح للمدير...' : 'Forwarding to Manager...')
+                        : (isAr ? 'جاري التسجيل وتفعيل الحساب...' : 'Registering & Activating...')}
+                    </span>
                   </>
                 ) : (
-                  <span>{isEditMode ? (isAr ? 'حفظ التعديلات' : 'Save Modifications') : (isAr ? 'تسجيل الموظف' : 'Register Employee')}</span>
+                  <span>
+                    {isEditMode
+                      ? (isAr ? 'حفظ التعديلات' : 'Save Modifications')
+                      : formData.activationMode === 'manager_placement'
+                        ? (isAr ? '📋 إحالة للمدير التنفيذي للاعتماد' : '📋 Forward for Manager Review')
+                        : (isAr ? '⚡ تسجيل وتفعيل الحساب فوراً' : '⚡ Register & Activate Credentials')}
+                  </span>
                 )}
               </button>
             </div>
