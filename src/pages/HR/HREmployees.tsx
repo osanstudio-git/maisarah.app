@@ -760,31 +760,31 @@ export default function HREmployees() {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     if (isUuid) {
       try {
-        // Unassign foreign keys safely
-        await supabase.from('services').update({ employee_id: null }).eq('employee_id', id).catch(() => {});
-        await supabase.from('clients').update({ assigned_employee_id: null }).eq('assigned_employee_id', id).catch(() => {});
+        // 1. Unassign foreign keys safely
+        try { await supabase.from('services').update({ employee_id: null }).eq('employee_id', id); } catch {}
+        try { await supabase.from('clients').update({ assigned_employee_id: null }).eq('assigned_employee_id', id); } catch {}
 
-        // Clean up child tables safely without letting a missing table stop execution
-        await supabase.from('hr_leave_requests').delete().eq('employee_id', id).catch(() => {});
-        await supabase.from('hr_leave_balances').delete().eq('employee_id', id).catch(() => {});
-        await supabase.from('hr_attendance').delete().eq('employee_id', id).catch(() => {});
+        // 2. Clean up child tables safely
+        try { await supabase.from('hr_leave_requests').delete().eq('employee_id', id); } catch {}
+        try { await supabase.from('hr_leave_balances').delete().eq('employee_id', id); } catch {}
+        try { await supabase.from('hr_attendance').delete().eq('employee_id', id); } catch {}
 
-        // Delete from hr_employees
-        const { error: hrErr } = await supabase.from('hr_employees').delete().eq('id', id);
-        if (hrErr) console.warn('HR employee deletion notice:', hrErr);
+        // 3. Delete from hr_employees & profiles
+        try { await supabase.from('hr_employees').delete().eq('id', id); } catch (e) { console.warn('hr_employees delete notice:', e); }
+        try { await supabase.from('profiles').delete().eq('id', id); } catch (e) { console.warn('profiles delete notice:', e); }
 
-        // Delete from profiles (core identity)
-        const { error: profError } = await supabase.from('profiles').delete().eq('id', id);
-        if (profError) console.warn('Profile deletion notice:', profError);
-
-        // Delete from Supabase Auth via manage-auth edge function
-        supabase.functions.invoke('manage-auth', {
-          body: {
-            action: 'delete',
-            user_id: id,
-            email: emp?.email
-          }
-        }).catch(aErr => console.warn('manage-auth delete notice:', aErr));
+        // 4. Delete from Supabase Auth via manage-auth edge function
+        try {
+          await supabase.functions.invoke('manage-auth', {
+            body: {
+              action: 'delete',
+              user_id: id,
+              email: emp?.email
+            }
+          });
+        } catch (aErr) {
+          console.warn('manage-auth delete notice:', aErr);
+        }
 
         setNotification({
           show: true,
