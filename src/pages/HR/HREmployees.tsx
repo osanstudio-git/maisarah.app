@@ -760,28 +760,31 @@ export default function HREmployees() {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     if (isUuid) {
       try {
-        // Unassign foreign keys
-        await supabase.from('services').update({ employee_id: null }).eq('employee_id', id);
-        await supabase.from('clients').update({ assigned_employee_id: null }).eq('assigned_employee_id', id);
+        // Unassign foreign keys safely
+        await supabase.from('services').update({ employee_id: null }).eq('employee_id', id).catch(() => {});
+        await supabase.from('clients').update({ assigned_employee_id: null }).eq('assigned_employee_id', id).catch(() => {});
 
-        // Clean up child tables
-        await supabase.from('hr_leave_requests').delete().eq('employee_id', id);
-        await supabase.from('hr_leave_balances').delete().eq('employee_id', id);
-        await supabase.from('hr_attendance').delete().eq('employee_id', id);
-        await supabase.from('hr_onboarding_tasks').delete().eq('employee_id', id);
+        // Clean up child tables safely without letting a missing table stop execution
+        await supabase.from('hr_leave_requests').delete().eq('employee_id', id).catch(() => {});
+        await supabase.from('hr_leave_balances').delete().eq('employee_id', id).catch(() => {});
+        await supabase.from('hr_attendance').delete().eq('employee_id', id).catch(() => {});
 
         // Delete from hr_employees
-        await supabase.from('hr_employees').delete().eq('id', id);
+        const { error: hrErr } = await supabase.from('hr_employees').delete().eq('id', id);
+        if (hrErr) console.warn('HR employee deletion notice:', hrErr);
 
         // Delete from profiles (core identity)
-        const { error: profError } = await supabase
-          .from('profiles')
-          .delete()
-          .eq('id', id);
+        const { error: profError } = await supabase.from('profiles').delete().eq('id', id);
+        if (profError) console.warn('Profile deletion notice:', profError);
 
-        if (profError) {
-          console.warn('Profile deletion notice:', profError);
-        }
+        // Delete from Supabase Auth via manage-auth edge function
+        supabase.functions.invoke('manage-auth', {
+          body: {
+            action: 'delete',
+            user_id: id,
+            email: emp?.email
+          }
+        }).catch(aErr => console.warn('manage-auth delete notice:', aErr));
 
         setNotification({
           show: true,
@@ -808,17 +811,32 @@ export default function HREmployees() {
       });
     }
 
-    // 3. Clean up localStorage cache
+    // 3. Clean up all local storage caches
     try {
       const rawCache = localStorage.getItem('hr_employee_records');
       if (rawCache) {
         const parsed = JSON.parse(rawCache);
-        const filtered = parsed.filter((e: any) => e.id !== id && e.name !== empName);
+        const filtered = parsed.filter((e: any) => e.id !== id && e.name !== empName && e.email !== emp?.email);
         localStorage.setItem('hr_employee_records', JSON.stringify(filtered));
+      }
+      const rawPlaced = localStorage.getItem('maisarah_placed_employees');
+      if (rawPlaced) {
+        const parsedPlaced = JSON.parse(rawPlaced);
+        const filteredPlaced = parsedPlaced.filter((e: any) => e.id !== id && e.email !== emp?.email);
+        localStorage.setItem('maisarah_placed_employees', JSON.stringify(filteredPlaced));
+      }
+      const rawRecruits = localStorage.getItem('maisarah_recruits_v1');
+      if (rawRecruits) {
+        const parsedRecruits = JSON.parse(rawRecruits);
+        const filteredRecruits = parsedRecruits.filter((e: any) => e.id !== id && e.email !== emp?.email);
+        localStorage.setItem('maisarah_recruits_v1', JSON.stringify(filteredRecruits));
       }
     } catch (cErr) {
       console.warn('Cache cleanup error:', cErr);
     }
+
+    window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+    window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
   };
 
   const handleRevokeAccess = (empId: string) => {

@@ -27,7 +27,40 @@ serve(async (req) => {
     })
 
     const body = await req.json()
-    const { email, password, full_name, role, department_id, secondary_roles } = body
+    const { action, email, password, full_name, role, department_id, secondary_roles, user_id } = body
+
+    if (action === 'delete' || body.delete === true) {
+      let targetUserId = user_id
+      const cleanEmail = (email || '').trim().toLowerCase()
+
+      if (!targetUserId && cleanEmail) {
+        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
+        if (!listErr) {
+          const found = users?.find(u => u.email?.toLowerCase() === cleanEmail)
+          if (found) targetUserId = found.id
+        }
+      }
+
+      if (targetUserId) {
+        try {
+          await supabaseAdmin.from('services').update({ employee_id: null }).eq('employee_id', targetUserId)
+          await supabaseAdmin.from('clients').update({ assigned_employee_id: null }).eq('assigned_employee_id', targetUserId)
+          await supabaseAdmin.from('hr_leave_requests').delete().eq('employee_id', targetUserId)
+          await supabaseAdmin.from('hr_leave_balances').delete().eq('employee_id', targetUserId)
+          await supabaseAdmin.from('hr_attendance').delete().eq('employee_id', targetUserId)
+          await supabaseAdmin.from('hr_employees').delete().eq('id', targetUserId)
+          await supabaseAdmin.from('profiles').delete().eq('id', targetUserId)
+          await supabaseAdmin.auth.admin.deleteUser(targetUserId)
+        } catch (delErr: any) {
+          console.warn('Cascade delete notice in manage-auth:', delErr.message)
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, message: 'User deleted successfully' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     if (!email) {
       return new Response(
