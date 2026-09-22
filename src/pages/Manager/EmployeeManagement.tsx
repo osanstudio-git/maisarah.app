@@ -6,6 +6,7 @@ import {
   syncRecruitsFromSupabase,
   getLocalRecruits,
   updateRecruitStatus,
+  deleteLocalRecruit,
   DEFAULT_OFFERED_RECRUITS
 } from '../../utils/recruitmentSync';
 import {
@@ -239,16 +240,35 @@ const EmployeeManagement = () => {
   const fetchPlacements = useCallback(async () => {
     setLoadingPlacements(true);
     try {
+      const deletedBlacklist: string[] = JSON.parse(localStorage.getItem('maisarah_deleted_employees') || '[]');
+      const isDeleted = (empId?: string, empEmail?: string, empName?: string) => {
+        const idLower = (empId || '').trim().toLowerCase();
+        const emailLower = (empEmail || '').trim().toLowerCase();
+        const nameLower = (empName || '').trim().toLowerCase();
+        return deletedBlacklist.some(d => {
+          const dLower = d.trim().toLowerCase();
+          return (idLower && dLower === idLower) || 
+                 (emailLower && dLower === emailLower) || 
+                 (nameLower && dLower === nameLower);
+        });
+      };
+
       const dbData = await syncRecruitsFromSupabase();
       const localData = getLocalRecruits();
       
       const map = new Map<string, any>();
-      (DEFAULT_OFFERED_RECRUITS || []).forEach(r => map.set(r.id || r.email, r));
-      (localData || []).forEach(r => map.set(r.id || r.email, r));
-      (dbData || []).forEach(r => map.set(r.id || r.email, r));
+      (DEFAULT_OFFERED_RECRUITS || []).forEach(r => {
+        if (!isDeleted(r.id, r.email, r.name)) map.set(r.id || r.email, r);
+      });
+      (localData || []).forEach(r => {
+        if (!isDeleted(r.id, r.email, r.name)) map.set(r.id || r.email, r);
+      });
+      (dbData || []).forEach(r => {
+        if (!isDeleted(r.id, r.email, r.name)) map.set(r.id || r.email, r);
+      });
 
       const allRecruits = Array.from(map.values());
-      const filtered = allRecruits.filter((c: any) => c.stage === 'offered' && c.placement_status !== 'placed');
+      const filtered = allRecruits.filter((c: any) => c.stage === 'offered' && c.placement_status !== 'placed' && !isDeleted(c.id, c.email, c.name));
       setPendingPlacements(filtered);
     } catch (err) {
       console.error('Error fetching pending placements:', err);
@@ -537,8 +557,18 @@ const EmployeeManagement = () => {
       });
     }
 
-    // 3. Clean up localStorage caches
+    // 3. Clean up localStorage caches & add to deleted blacklist
     try {
+      const deletedList: string[] = JSON.parse(localStorage.getItem('maisarah_deleted_employees') || '[]');
+      if (id && !deletedList.includes(id)) deletedList.push(id);
+      if (emp?.email && !deletedList.includes(emp.email.trim().toLowerCase())) deletedList.push(emp.email.trim().toLowerCase());
+      if (empName && !deletedList.includes(empName.trim().toLowerCase())) deletedList.push(empName.trim().toLowerCase());
+      localStorage.setItem('maisarah_deleted_employees', JSON.stringify(deletedList));
+
+      deleteLocalRecruit(id);
+      if (emp?.email) deleteLocalRecruit(emp.email);
+      if (empName) deleteLocalRecruit(empName);
+
       const rawCache = localStorage.getItem('hr_employee_records');
       if (rawCache) {
         const parsed = JSON.parse(rawCache);
@@ -551,11 +581,11 @@ const EmployeeManagement = () => {
         const filteredPlaced = parsedPlaced.filter((e: any) => e.id !== id && e.email !== emp?.email);
         localStorage.setItem('maisarah_placed_employees', JSON.stringify(filteredPlaced));
       }
-      const rawRecruits = localStorage.getItem('maisarah_recruits_v1');
+      const rawRecruits = localStorage.getItem('maisarah_hr_recruits_v1');
       if (rawRecruits) {
         const parsedRecruits = JSON.parse(rawRecruits);
         const filteredRecruits = parsedRecruits.filter((e: any) => e.id !== id && e.email !== emp?.email);
-        localStorage.setItem('maisarah_recruits_v1', JSON.stringify(filteredRecruits));
+        localStorage.setItem('maisarah_hr_recruits_v1', JSON.stringify(filteredRecruits));
       }
     } catch (cErr) {
       console.warn('Cache cleanup error:', cErr);

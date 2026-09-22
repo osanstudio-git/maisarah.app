@@ -68,9 +68,9 @@ export const DEFAULT_OFFERED_RECRUITS: RecruitCandidate[] = [
 export function getLocalRecruits(): RecruitCandidate[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.warn('Failed to read local recruits:', e);
@@ -85,6 +85,21 @@ export function saveLocalRecruits(recruits: RecruitCandidate[]) {
     window.dispatchEvent(new Event('maisarah_recruits_updated'));
   } catch (e) {
     console.warn('Failed to save local recruits:', e);
+  }
+}
+
+export function deleteLocalRecruit(idOrEmail: string) {
+  try {
+    const current = getLocalRecruits();
+    const cleanTarget = (idOrEmail || '').trim().toLowerCase();
+    const filtered = current.filter(r => 
+      r.id !== idOrEmail && 
+      r.name?.toLowerCase() !== cleanTarget &&
+      r.email?.toLowerCase() !== cleanTarget
+    );
+    saveLocalRecruits(filtered);
+  } catch (e) {
+    console.warn('Failed to delete local recruit:', e);
   }
 }
 

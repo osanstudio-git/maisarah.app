@@ -9,7 +9,7 @@ import {
   Download, UploadCloud, Plus, Edit, Trash2, CheckCircle2, X, PlusCircle, LayoutGrid, ListFilter, SlidersHorizontal, UserX, AlertCircle, ShieldAlert,
   Copy, Check, Share2, Send, Lock, Mail, Key, Loader2, Sparkles
 } from 'lucide-react';
-import { getLocalRecruits, upsertLocalRecruit } from '../../utils/recruitmentSync';
+import { getLocalRecruits, upsertLocalRecruit, deleteLocalRecruit } from '../../utils/recruitmentSync';
 
 interface Employee {
   id: string;
@@ -355,11 +355,25 @@ export default function HREmployees() {
           }
         }
 
+        // Load deleted blacklist to prevent re-hydration
+        const deletedBlacklist: string[] = JSON.parse(localStorage.getItem('maisarah_deleted_employees') || '[]');
+        const isDeleted = (empId?: string, empEmail?: string, empName?: string) => {
+          const idLower = (empId || '').trim().toLowerCase();
+          const emailLower = (empEmail || '').trim().toLowerCase();
+          const nameLower = (empName || '').trim().toLowerCase();
+          return deletedBlacklist.some(d => {
+            const dLower = d.trim().toLowerCase();
+            return (idLower && dLower === idLower) || 
+                   (emailLower && dLower === emailLower) || 
+                   (nameLower && dLower === nameLower);
+          });
+        };
+
         // Merge locally placed employees from Manager workforce
         try {
           const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
           localPlaced.forEach(lp => {
-            if (lp.email && !liveEmployees.some(e => e.email && e.email.toLowerCase() === lp.email.toLowerCase())) {
+            if (lp.email && !isDeleted(lp.id, lp.email, lp.full_name) && !liveEmployees.some(e => e.email && e.email.toLowerCase() === lp.email.toLowerCase())) {
               liveEmployees.push({
                 id: lp.id || crypto.randomUUID(),
                 name: lp.full_name || 'Staff Member',
@@ -402,7 +416,7 @@ export default function HREmployees() {
         try {
           const recruits = getLocalRecruits();
           recruits.forEach(r => {
-            if ((r.stage === 'offered' || r.placement_status === 'placed' || r.placement_status === 'pending_placement') && r.email) {
+            if ((r.stage === 'offered' || r.placement_status === 'placed' || r.placement_status === 'pending_placement') && r.email && !isDeleted(r.id, r.email, r.name)) {
               if (!liveEmployees.some(e => e.email && e.email.toLowerCase() === r.email.toLowerCase())) {
                 liveEmployees.push({
                   id: r.id || crypto.randomUUID(),
@@ -443,10 +457,13 @@ export default function HREmployees() {
           console.warn('Error reading recruits in HR:', rErr);
         }
 
-        setEmployees(liveEmployees);
-        localStorage.setItem('hr_employee_records', JSON.stringify(liveEmployees));
-        if (liveEmployees.length > 0) {
-          setSelectedEmpId(prev => prev && liveEmployees.some(e => e.id === prev) ? prev : liveEmployees[0].id);
+        // Filter all live employees through deleted blacklist
+        const sanitizedEmployees = liveEmployees.filter(emp => !isDeleted(emp.id, emp.email, emp.name));
+
+        setEmployees(sanitizedEmployees);
+        localStorage.setItem('hr_employee_records', JSON.stringify(sanitizedEmployees));
+        if (sanitizedEmployees.length > 0) {
+          setSelectedEmpId(prev => prev && sanitizedEmployees.some(e => e.id === prev) ? prev : sanitizedEmployees[0].id);
         }
       } catch (err) {
         console.error('Failed to load live employees:', err);
@@ -811,8 +828,18 @@ export default function HREmployees() {
       });
     }
 
-    // 3. Clean up all local storage caches
+    // 3. Clean up all local storage caches & add to deleted blacklist
     try {
+      const deletedList: string[] = JSON.parse(localStorage.getItem('maisarah_deleted_employees') || '[]');
+      if (id && !deletedList.includes(id)) deletedList.push(id);
+      if (emp?.email && !deletedList.includes(emp.email.trim().toLowerCase())) deletedList.push(emp.email.trim().toLowerCase());
+      if (empName && !deletedList.includes(empName.trim().toLowerCase())) deletedList.push(empName.trim().toLowerCase());
+      localStorage.setItem('maisarah_deleted_employees', JSON.stringify(deletedList));
+
+      deleteLocalRecruit(id);
+      if (emp?.email) deleteLocalRecruit(emp.email);
+      if (empName) deleteLocalRecruit(empName);
+
       const rawCache = localStorage.getItem('hr_employee_records');
       if (rawCache) {
         const parsed = JSON.parse(rawCache);
@@ -825,11 +852,11 @@ export default function HREmployees() {
         const filteredPlaced = parsedPlaced.filter((e: any) => e.id !== id && e.email !== emp?.email);
         localStorage.setItem('maisarah_placed_employees', JSON.stringify(filteredPlaced));
       }
-      const rawRecruits = localStorage.getItem('maisarah_recruits_v1');
+      const rawRecruits = localStorage.getItem('maisarah_hr_recruits_v1');
       if (rawRecruits) {
         const parsedRecruits = JSON.parse(rawRecruits);
         const filteredRecruits = parsedRecruits.filter((e: any) => e.id !== id && e.email !== emp?.email);
-        localStorage.setItem('maisarah_recruits_v1', JSON.stringify(filteredRecruits));
+        localStorage.setItem('maisarah_hr_recruits_v1', JSON.stringify(filteredRecruits));
       }
     } catch (cErr) {
       console.warn('Cache cleanup error:', cErr);
