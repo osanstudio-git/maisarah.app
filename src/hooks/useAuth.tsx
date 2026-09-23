@@ -224,7 +224,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(null);
       setRole(null);
       setSecondaryRoles([]);
-      window.location.href = '/login';
+      window.location.replace('/login');
     }
   };
 

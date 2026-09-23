@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
   syncRecruitsFromSupabase,
   getLocalRecruits,
+  saveLocalRecruits,
   updateRecruitStatus,
   deleteLocalRecruit,
   DEFAULT_OFFERED_RECRUITS
@@ -247,15 +248,15 @@ const EmployeeManagement = () => {
         const nameLower = (empName || '').trim().toLowerCase();
         return deletedBlacklist.some(d => {
           const dLower = d.trim().toLowerCase();
-          return (idLower && dLower === idLower) || 
-                 (emailLower && dLower === emailLower) || 
-                 (nameLower && dLower === nameLower);
+          return (idLower && dLower === idLower) ||
+            (emailLower && dLower === emailLower) ||
+            (nameLower && dLower === nameLower);
         });
       };
 
       const dbData = await syncRecruitsFromSupabase();
       const localData = getLocalRecruits();
-      
+
       const map = new Map<string, any>();
       (DEFAULT_OFFERED_RECRUITS || []).forEach(r => {
         if (!isDeleted(r.id, r.email, r.name)) map.set(r.id || r.email, r);
@@ -509,13 +510,13 @@ const EmployeeManagement = () => {
     if (isUuid) {
       try {
         // 1. Unassign foreign keys safely
-        try { await supabase.from('services').update({ employee_id: null }).eq('employee_id', id); } catch {}
-        try { await supabase.from('clients').update({ assigned_employee_id: null }).eq('assigned_employee_id', id); } catch {}
+        try { await supabase.from('services').update({ employee_id: null }).eq('employee_id', id); } catch { }
+        try { await supabase.from('clients').update({ assigned_employee_id: null }).eq('assigned_employee_id', id); } catch { }
 
         // 2. Clean up child tables safely
-        try { await supabase.from('hr_leave_requests').delete().eq('employee_id', id); } catch {}
-        try { await supabase.from('hr_leave_balances').delete().eq('employee_id', id); } catch {}
-        try { await supabase.from('hr_attendance').delete().eq('employee_id', id); } catch {}
+        try { await supabase.from('hr_leave_requests').delete().eq('employee_id', id); } catch { }
+        try { await supabase.from('hr_leave_balances').delete().eq('employee_id', id); } catch { }
+        try { await supabase.from('hr_attendance').delete().eq('employee_id', id); } catch { }
 
         // 3. Delete from hr_employees & profiles
         try { await supabase.from('hr_employees').delete().eq('id', id); } catch (e) { console.warn('HR employee deletion notice:', e); }
@@ -527,7 +528,7 @@ const EmployeeManagement = () => {
             body: {
               action: 'delete',
               user_id: id,
-              email: emp?.email
+              email: employeeToDelete.email
             }
           });
         } catch (aErr) {
@@ -561,30 +562,30 @@ const EmployeeManagement = () => {
     try {
       const deletedList: string[] = JSON.parse(localStorage.getItem('maisarah_deleted_employees') || '[]');
       if (id && !deletedList.includes(id)) deletedList.push(id);
-      if (emp?.email && !deletedList.includes(emp.email.trim().toLowerCase())) deletedList.push(emp.email.trim().toLowerCase());
+      if (employeeToDelete.email && !deletedList.includes(employeeToDelete.email.trim().toLowerCase())) deletedList.push(employeeToDelete.email.trim().toLowerCase());
       if (empName && !deletedList.includes(empName.trim().toLowerCase())) deletedList.push(empName.trim().toLowerCase());
       localStorage.setItem('maisarah_deleted_employees', JSON.stringify(deletedList));
 
       deleteLocalRecruit(id);
-      if (emp?.email) deleteLocalRecruit(emp.email);
+      if (employeeToDelete.email) deleteLocalRecruit(employeeToDelete.email);
       if (empName) deleteLocalRecruit(empName);
 
       const rawCache = localStorage.getItem('hr_employee_records');
       if (rawCache) {
         const parsed = JSON.parse(rawCache);
-        const filtered = parsed.filter((e: any) => e.id !== id && e.name !== empName && e.name_en !== empName && e.email !== emp?.email);
+        const filtered = parsed.filter((e: any) => e.id !== id && e.name !== empName && e.name_en !== empName && e.email !== employeeToDelete.email);
         localStorage.setItem('hr_employee_records', JSON.stringify(filtered));
       }
       const rawPlaced = localStorage.getItem('maisarah_placed_employees');
       if (rawPlaced) {
         const parsedPlaced = JSON.parse(rawPlaced);
-        const filteredPlaced = parsedPlaced.filter((e: any) => e.id !== id && e.email !== emp?.email);
+        const filteredPlaced = parsedPlaced.filter((e: any) => e.id !== id && e.email !== employeeToDelete.email);
         localStorage.setItem('maisarah_placed_employees', JSON.stringify(filteredPlaced));
       }
       const rawRecruits = localStorage.getItem('maisarah_hr_recruits_v1');
       if (rawRecruits) {
         const parsedRecruits = JSON.parse(rawRecruits);
-        const filteredRecruits = parsedRecruits.filter((e: any) => e.id !== id && e.email !== emp?.email);
+        const filteredRecruits = parsedRecruits.filter((e: any) => e.id !== id && e.email !== employeeToDelete.email);
         localStorage.setItem('maisarah_hr_recruits_v1', JSON.stringify(filteredRecruits));
       }
     } catch (cErr) {
@@ -629,7 +630,7 @@ const EmployeeManagement = () => {
     const targetDeptKey = placementData.dept === 'custom' ? (placementData.customDept || 'Operations') : placementData.dept;
     const targetDeptName = targetDeptKey === 'tax_vat' ? 'Tax & VAT' : targetDeptKey === 'audit' ? 'Audit' : targetDeptKey === 'bookkeeping' ? 'Bookkeeping' : targetDeptKey;
     const finalRole = placementData.role === 'custom' ? (placementData.customRole || 'Staff Member') : placementData.role;
-    
+
     // Effective access role (if isHOD is true and accessRole is standard employee, assign department_head; otherwise preserve chosen portal access role)
     const effectiveRole = (placementData.isHOD && placementData.accessRole === 'employee')
       ? 'department_head'
@@ -799,7 +800,7 @@ const EmployeeManagement = () => {
     try {
       if (editingEmployee) {
         const cleanEmail = (formData.email || editingEmployee.email || '').trim().toLowerCase();
-        
+
         // 1. Sync Supabase Auth user metadata & profile via manage-auth
         try {
           await supabase.functions.invoke('manage-auth', {
@@ -842,15 +843,15 @@ const EmployeeManagement = () => {
           client_success: 'Client Success'
         };
 
-        const targetJobTitle = formData.role === 'department_head' 
-          ? 'Department Head (HOD)' 
-          : formData.role === 'accountant' 
-          ? 'Accountant' 
-          : formData.role === 'crm' 
-          ? 'CRM Coordinator' 
-          : formData.role === 'hr' 
-          ? 'HR Manager' 
-          : 'Audit Associate';
+        const targetJobTitle = formData.role === 'department_head'
+          ? 'Department Head (HOD)'
+          : formData.role === 'accountant'
+            ? 'Accountant'
+            : formData.role === 'crm'
+              ? 'CRM Coordinator'
+              : formData.role === 'hr'
+                ? 'HR Manager'
+                : 'Audit Associate';
 
         const hrEmployeeData = {
           id: editingEmployee.id,
@@ -918,12 +919,12 @@ const EmployeeManagement = () => {
         );
 
         // 6. Update local state
-        setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? { 
-          ...emp, 
-          name_en: formData.fullName, 
-          name_ar: formData.fullName, 
-          phone: formData.phone, 
-          role: formData.role, 
+        setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? {
+          ...emp,
+          name_en: formData.fullName,
+          name_ar: formData.fullName,
+          phone: formData.phone,
+          role: formData.role,
           department_id: formData.department_id,
           job_title: targetJobTitle
         } : emp));
@@ -1301,9 +1302,8 @@ const EmployeeManagement = () => {
                             <tr key={emp.id} className="group hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm relative shadow-inner ${
-                                    isHOD ? 'bg-red-50 text-[#A11212] border border-red-200' : 'bg-gray-100 text-gray-700'
-                                  }`}>
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm relative shadow-inner ${isHOD ? 'bg-red-50 text-[#A11212] border border-red-200' : 'bg-gray-100 text-gray-700'
+                                    }`}>
                                     {emp.name_en.charAt(0).toUpperCase()}
                                     {isOnline && <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />}
                                   </div>
@@ -1367,23 +1367,23 @@ const EmployeeManagement = () => {
                                 </div>
                               </td>
                               <td className="px-6 py-4 text-end space-x-2 space-x-reverse">
-                                <button 
-                                  onClick={() => handleIssueOrResetCredentials(emp)} 
+                                <button
+                                  onClick={() => handleIssueOrResetCredentials(emp)}
                                   title={isAr ? 'عرض / إعادة إصدار بيانات الدخول' : 'View / Issue Login Credentials'}
                                   className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                                 >
                                   <Key size={16} />
                                 </button>
-                                <button 
-                                  onClick={() => openEditModal(emp)} 
+                                <button
+                                  onClick={() => openEditModal(emp)}
                                   title={isAr ? 'تعديل الصلاحية والقسم' : 'Edit Role & Department'}
                                   className="p-2 text-gray-400 hover:text-[#A11212] hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                                 >
                                   <Pencil size={16} />
                                 </button>
                                 {emp.email !== 'manager@maisarah.om' && emp.email !== 'hr@maisarah.om' ? (
-                                  <button 
-                                    onClick={() => { setEmployeeToDelete(emp); setConfirmName(''); setDeleteModalOpen(true); }} 
+                                  <button
+                                    onClick={() => { setEmployeeToDelete(emp); setConfirmName(''); setDeleteModalOpen(true); }}
                                     title={isAr ? 'حذف الحساب' : 'Delete Account'}
                                     className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                                   >
@@ -1556,7 +1556,7 @@ const EmployeeManagement = () => {
                     <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'الاسم الكامل' : 'Full Name'}</label>
                     <input required type="text" value={formData.fullName} onChange={e => setFormData({ ...formData, fullName: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all" />
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'البريد الإلكتروني' : 'Email'}</label>
@@ -1599,8 +1599,8 @@ const EmployeeManagement = () => {
                           {isAr ? 'صلاحيات رئيس القسم (HOD Leadership)' : 'Head of Department Access Granted'}
                         </p>
                         <p className="text-[11px] text-gray-600 leading-relaxed font-medium">
-                          {isAr 
-                            ? 'سيتمكن الموظف من قيادة القسم، توجيه المهام، رقابة الجودة، ومعالجة التأخيرات عبر بوابة HOD.' 
+                          {isAr
+                            ? 'سيتمكن الموظف من قيادة القسم، توجيه المهام، رقابة الجودة، ومعالجة التأخيرات عبر بوابة HOD.'
                             : 'This employee will have full management control over work routing, QA approvals, and delay action logging in the HOD Portal.'}
                         </p>
                       </div>
@@ -1642,14 +1642,14 @@ const EmployeeManagement = () => {
             </div>
             <h3 className="text-lg font-black text-gray-900 mb-2">{isAr ? 'حذف الموظف نهائياً' : 'Delete Employee Permanently'}</h3>
             <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-              {isAr 
+              {isAr
                 ? `هل أنت متأكد من رغبتك في حذف الموظف "${employeeToDelete.name_ar || employeeToDelete.name_en}"؟ سيتم حذف جميع بيانات الملف وسجلات الحضور والإجازات وصلاحيات الدخول نهائياً من النظام.`
                 : `Are you sure you want to permanently delete "${employeeToDelete.name_en || employeeToDelete.name_ar}"? This will permanently erase their profile dossier, leave/attendance records, and portal credentials.`}
             </p>
             <div className="flex gap-3">
-              <button 
+              <button
                 type="button"
-                onClick={() => { setDeleteModalOpen(false); setEmployeeToDelete(null); }} 
+                onClick={() => { setDeleteModalOpen(false); setEmployeeToDelete(null); }}
                 className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors cursor-pointer"
               >
                 {isAr ? 'إلغاء' : 'Cancel'}
@@ -1774,8 +1774,8 @@ const EmployeeManagement = () => {
                   <option value="crm">{isAr ? '🤝 علاقات العملاء (عروض الأسعار والعملاء)' : '🤝 CRM Coordinator (Leads & Quotations)'}</option>
                 </select>
                 <p className="text-[10px] font-bold text-gray-500 mt-1 flex items-center gap-1">
-                  💡 {isAr 
-                    ? 'يقوم المحاسب بالربط بين رؤوس الأقسام والموظفين لإدارة الفواتير والإيصالات والمطالبات المالية للعملاء.' 
+                  💡 {isAr
+                    ? 'يقوم المحاسب بالربط بين رؤوس الأقسام والموظفين لإدارة الفواتير والإيصالات والمطالبات المالية للعملاء.'
                     : 'The Accountant acts as the operational bridge between HODs and employees to manage client invoices, payment receipts, and billing notifications.'}
                 </p>
 
@@ -1797,13 +1797,12 @@ const EmployeeManagement = () => {
                       return (
                         <label
                           key={sec.id}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                            isPrimary
-                              ? 'bg-brand-dark/10 border-brand-dark text-brand-dark opacity-90 cursor-not-allowed'
-                              : isChecked
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${isPrimary
+                            ? 'bg-brand-dark/10 border-brand-dark text-brand-dark opacity-90 cursor-not-allowed'
+                            : isChecked
                               ? 'bg-red-50 border-red-200 text-[#A11212]'
                               : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                          }`}
+                            }`}
                         >
                           <input
                             type="checkbox"
@@ -1823,8 +1822,8 @@ const EmployeeManagement = () => {
                     })}
                   </div>
                   <p className="text-[10px] text-gray-500 font-medium pt-0.5">
-                    ✨ {isAr 
-                      ? 'يمكن للموظف التنقل بين البوابات المحددة عبر زر "تبديل البوابة" أعلى الشاشة.' 
+                    ✨ {isAr
+                      ? 'يمكن للموظف التنقل بين البوابات المحددة عبر زر "تبديل البوابة" أعلى الشاشة.'
                       : 'The employee can switch between selected portals via the "Switch Portal" dropdown in top bar.'}
                   </p>
                 </div>
@@ -1891,7 +1890,7 @@ const EmployeeManagement = () => {
                         return isHead && (empDept.includes(newDept) || newDept.includes(empDept));
                       });
 
-                      const defaultHOD = matchingHOD 
+                      const defaultHOD = matchingHOD
                         ? `${matchingHOD.name_en} (${matchingHOD.job_title})`
                         : 'General Manager (Operations & Finance)';
 
@@ -1961,7 +1960,7 @@ const EmployeeManagement = () => {
                     >
                       <option value="Executive Management & Board of Directors">{isAr ? 'الإدارة التنفيذية ومجلس الإدارة' : 'Executive Board & Management'}</option>
                       <option value="General Manager (Operations & Finance)">{isAr ? 'المدير العام (العمليات والمالية)' : 'General Manager (Operations & Finance)'}</option>
-                      
+
                       {/* Real Dynamic Personnel from DB */}
                       {employees.length > 0 && (
                         <optgroup label={isAr ? 'الموظفون المعتمدون بالمؤسسة (من قاعدة البيانات)' : 'Real Active Company Personnel (From Database)'}>
@@ -2033,8 +2032,8 @@ const EmployeeManagement = () => {
                 {isAr ? '🎉 تم اعتماد التعيين وتفعيل حساب الموظف!' : '🎉 Employee Placement Finalized & Registered!'}
               </h3>
               <p className="text-xs text-emerald-100 font-medium mt-1">
-                {isAr 
-                  ? `تم تسجيل حساب الموظف لـ ${credentialsModal.name} بنجاح وإرسال تفاصيل الدخول إلى بريده الإلكتروني.` 
+                {isAr
+                  ? `تم تسجيل حساب الموظف لـ ${credentialsModal.name} بنجاح وإرسال تفاصيل الدخول إلى بريده الإلكتروني.`
                   : `Corporate portal access granted for ${credentialsModal.name}. Credentials generated and dispatched via email.`}
               </p>
             </div>
@@ -2154,9 +2153,8 @@ const EmployeeManagement = () => {
       {notification.show && (
         <div className="fixed top-20 end-6 z-[9999] max-w-md w-full animate-slide-down pointer-events-auto" dir={isAr ? 'rtl' : 'ltr'}>
           <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-2xl border border-gray-100/80 flex items-start gap-3.5 ring-1 ring-black/5">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-              notification.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-[#A11212]'
-            }`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${notification.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-[#A11212]'
+              }`}>
               {notification.type === 'success' ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
             </div>
             <div className="flex-1 min-w-0 pt-0.5">

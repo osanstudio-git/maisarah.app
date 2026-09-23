@@ -154,7 +154,12 @@ const InvoiceManagement = () => {
       ]);
 
       if (invRes.error) throw invRes.error;
-      setInvoices((invRes.data as Invoice[]) || []);
+      const formattedInvoices = (invRes.data || []).map((inv: any) => ({
+        ...inv,
+        clients: Array.isArray(inv.clients) ? inv.clients[0] || null : inv.clients || null,
+        profiles: Array.isArray(inv.profiles) ? inv.profiles[0] || null : inv.profiles || null,
+      })) as Invoice[];
+      setInvoices(formattedInvoices);
       setClients((clientRes.data as ClientRecord[]) || []);
     } catch (err) {
       console.error('InvoiceManagement fetch error:', err);
