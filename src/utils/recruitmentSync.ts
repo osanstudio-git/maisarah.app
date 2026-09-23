@@ -24,46 +24,7 @@ export interface RecruitCandidate {
 
 const STORAGE_KEY = 'maisarah_hr_recruits_v1';
 
-export const DEFAULT_OFFERED_RECRUITS: RecruitCandidate[] = [
-  {
-    id: 'rec-001',
-    name: 'Riyas',
-    role: 'Accountant',
-    dept: 'Tax & VAT',
-    stage: 'offered',
-    score: 80,
-    email: 'riyas.maisarah@gmail.com',
-    phone: '+968 9800 1234',
-    employment_type: 'Experienced',
-    placement_status: 'pending_placement',
-    onboarding_tasks: {
-      contract_signed: true,
-      bank_details_submitted: true,
-      documents_uploaded: true,
-      it_assets_ready: true
-    },
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 'rec-002',
-    name: 'hamid',
-    role: 'Audit Associate',
-    dept: 'Audit',
-    stage: 'offered',
-    score: 85,
-    email: 'hamid.maisarah@gmail.com',
-    phone: '+968 9587 4632',
-    employment_type: 'Experienced',
-    placement_status: 'pending_placement',
-    onboarding_tasks: {
-      contract_signed: true,
-      bank_details_submitted: true,
-      documents_uploaded: true,
-      it_assets_ready: true
-    },
-    created_at: new Date().toISOString()
-  }
-];
+export const DEFAULT_OFFERED_RECRUITS: RecruitCandidate[] = [];
 
 export function getLocalRecruits(): RecruitCandidate[] {
   try {
