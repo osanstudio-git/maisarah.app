@@ -1275,12 +1275,12 @@ export default function HRRecruitment() {
             </div>
             <div>
               <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">
-                {isAr ? 'تأكيد تقديم عرض العمل' : 'Confirm Job Offer'}
+                {isAr ? 'تأكيد تقديم عرض العمل' : 'Confirm Job Offer & Welcome'}
               </h3>
               <p className="text-xs text-gray-500 mt-2 leading-relaxed font-bold">
                 {isAr
-                  ? `هل أنت متأكد من تقديم عرض عمل لـ "${candidates.find(c => c.id === pendingMove.id)?.name}"؟ هذا الإجراء سيقوم بإنشاء حساب موظف وتفعيل وبوابة مباشرة العمل وتلقائياً إرسال رسالة ترحيبية بالبيانات إلى بريده.`
-                  : `Are you sure you want to offer the job to "${candidates.find(c => c.id === pendingMove.id)?.name}"? This will automatically provision their employee portal account and dispatch their welcome credentials email.`
+                  ? `هل ترغب في إرسال عرض العمل ورسالة الترحيب إلى "${candidates.find(c => c.id === pendingMove.id)?.name}"؟ سيتم إرسال بريد ترحيبي رسمي بالخطوات القادمة وإحالة الملف للاستكمال والاعتماد من قبل المدير لتحديد الصلاحيات والقسم بدقة.`
+                  : `Are you sure you want to extend a job offer to "${candidates.find(c => c.id === pendingMove.id)?.name}"? This will send an official Welcome & Offer Letter to their email and forward their profile to Onboarding and Manager Placement for role configuration.`
                 }
               </p>
             </div>
@@ -1300,7 +1300,7 @@ export default function HRRecruitment() {
                 onClick={executeConfirmMove}
                 className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] hover:shadow-lg transition-all cursor-pointer"
               >
-                {isAr ? 'تأكيد التوظيف' : 'Confirm & Offer'}
+                {isAr ? 'إرسال عرض العمل' : 'Send Job Offer'}
               </button>
             </div>
           </div>

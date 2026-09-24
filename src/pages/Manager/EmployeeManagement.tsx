@@ -257,9 +257,9 @@ const EmployeeManagement = () => {
 
       const dbData = await syncRecruitsFromSupabase();
       const recruits = Array.isArray(dbData) ? dbData : getLocalRecruits();
-      const filtered = recruits.filter((c: any) => 
-        (c.stage === 'offered' || c.placement_status === 'pending_placement') && 
-        c.placement_status !== 'placed' && 
+      const filtered = recruits.filter((c: any) =>
+        (c.stage === 'offered' || c.placement_status === 'pending_placement') &&
+        c.placement_status !== 'placed' &&
         !isDeleted(c.id, c.email, c.name)
       );
       setPendingPlacements(filtered);
@@ -776,10 +776,10 @@ const EmployeeManagement = () => {
   const openEditModal = (emp: Employee) => {
     setEditingEmployee(emp);
     const primaryRole = emp.role || 'employee';
-    const initialSec = Array.isArray(emp.secondaryRoles) && emp.secondaryRoles.length > 0 
-      ? emp.secondaryRoles 
+    const initialSec = Array.isArray(emp.secondaryRoles) && emp.secondaryRoles.length > 0
+      ? emp.secondaryRoles
       : [primaryRole];
-    
+
     setFormData({
       fullName: emp.name_en || emp.name_ar,
       email: emp.email,
@@ -920,40 +920,40 @@ const EmployeeManagement = () => {
 
       // Create Mode - using manage-auth edge function directly for seamless auth creation
       const { data: authData, error: authErr } = await supabase.functions.invoke('manage-auth', {
-          body: {
-            email: cleanEmail,
-            password: formData.password,
-            full_name: formData.fullName,
-            role: formData.role,
-            department_id: formData.department_id,
-            secondary_roles: effectiveSecondary
-          }
-        });
-
-        if (authErr) throw authErr;
-
-        const targetUserId = authData?.userId || crypto.randomUUID();
-
-        // Upsert into hr_employees
-        await supabase.from('hr_employees').upsert({
-          id: targetUserId,
+        body: {
+          email: cleanEmail,
+          password: formData.password,
           full_name: formData.fullName,
-          email: cleanEmail,
-          phone: formData.phone,
-          role: targetJobTitle,
-          dept: targetDeptName,
-          accessRole: formData.role,
-          secondary_roles: effectiveSecondary,
-          created_at: new Date().toISOString()
-        }, { onConflict: 'id' });
+          role: formData.role,
+          department_id: formData.department_id,
+          secondary_roles: effectiveSecondary
+        }
+      });
 
-        setCreatedCredentials({
-          email: cleanEmail,
-          password: formData.password
-        });
-        setShowCredentials(true);
-        setFormMessage({ type: 'success', text: isAr ? 'تم إضافة الموظف بنجاح' : 'Employee created successfully' });
-        fetchEmployees();
+      if (authErr) throw authErr;
+
+      const targetUserId = authData?.userId || crypto.randomUUID();
+
+      // Upsert into hr_employees
+      await supabase.from('hr_employees').upsert({
+        id: targetUserId,
+        full_name: formData.fullName,
+        email: cleanEmail,
+        phone: formData.phone,
+        role: targetJobTitle,
+        dept: targetDeptName,
+        accessRole: formData.role,
+        secondary_roles: effectiveSecondary,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+      setCreatedCredentials({
+        email: cleanEmail,
+        password: formData.password
+      });
+      setShowCredentials(true);
+      setFormMessage({ type: 'success', text: isAr ? 'تم إضافة الموظف بنجاح' : 'Employee created successfully' });
+      fetchEmployees();
     } catch (err: any) {
       setFormMessage({ type: 'error', text: err.message || 'Operation failed' });
     } finally {
@@ -1601,13 +1601,12 @@ const EmployeeManagement = () => {
                         return (
                           <label
                             key={sec.id}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                              isPrimary
+                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${isPrimary
                                 ? 'bg-[#A11212]/10 border-[#A11212] text-[#A11212] opacity-90 cursor-not-allowed'
                                 : isChecked
                                   ? 'bg-red-50 border-red-200 text-[#A11212]'
                                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                            }`}
+                              }`}
                           >
                             <input
                               type="checkbox"
