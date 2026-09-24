@@ -10,6 +10,7 @@ import {
   Copy, Check, Share2, Send, Lock, Mail, Key, Loader2, Sparkles
 } from 'lucide-react';
 import { getLocalRecruits, upsertLocalRecruit, deleteLocalRecruit } from '../../utils/recruitmentSync';
+import { getAllDepartments, getDepartmentById, getJobPositionsByDepartment } from '../../config/departments';
 
 interface Employee {
   id: string;
@@ -2210,10 +2211,35 @@ export default function HREmployees() {
                     onChange={(e) => setFormData({ ...formData, systemRole: e.target.value as any })}
                     className="w-full bg-red-50/50 border border-red-200 rounded-xl px-4 py-2.5 text-xs font-black text-[#A11212] outline-none focus:border-[#A11212] cursor-pointer"
                   >
-                    <option value="employee">{isAr ? 'موظف عادي (Employee)' : 'Standard Employee'}</option>
-                    <option value="accountant">{isAr ? 'محاسب (Accountant)' : 'Accountant (DSR & Invoices)'}</option>
-                    <option value="department_head">{isAr ? 'رئيس قسم (Dept Head)' : 'Department Head (HOD)'}</option>
-                    <option value="hr">{isAr ? 'موارد بشرية (HR Specialist)' : 'HR Specialist'}</option>
+                    <option value="employee">{isAr ? '👤 موظف قياسي (Standard Employee)' : '👤 Standard Employee'}</option>
+                    <option value="accountant">{isAr ? '💼 محاسب (Accountant)' : '💼 Accountant'}</option>
+                    <option value="department_head">{isAr ? '👑 رئيس قسم (Dept Head / HOD)' : '👑 Department Head (HOD)'}</option>
+                    <option value="hr">{isAr ? '📋 موارد بشرية (HR Specialist)' : '📋 HR Specialist'}</option>
+                    <option value="crm">{isAr ? '🤝 علاقات العملاء (CRM Coordinator)' : '🤝 CRM Coordinator'}</option>
+                    <option value="manager">{isAr ? '🏛️ مدير تنفيذي (Executive Manager)' : '🏛️ Executive Manager'}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'القسم' : 'Department'}
+                  </label>
+                  <select
+                    value={formData.dept}
+                    onChange={(e) => {
+                      const newDept = e.target.value;
+                      const deptObj = getAllDepartments().find(d => d.id === newDept || d.name.toLowerCase() === newDept.toLowerCase());
+                      const positions = getJobPositionsByDepartment(deptObj?.id || newDept);
+                      setFormData({
+                        ...formData,
+                        dept: deptObj ? deptObj.name : newDept,
+                        role: positions[0] || 'Staff Member'
+                      });
+                    }}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
+                  >
+                    {getAllDepartments().map(d => (
+                      <option key={d.id} value={d.name}>{d.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -2225,31 +2251,14 @@ export default function HREmployees() {
                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
-                    <option value="Senior Auditor">Senior Auditor</option>
-                    <option value="Tax Consultant">Tax Consultant</option>
-                    <option value="Accountant">Accountant</option>
-                    <option value="Risk Analyst">Risk Analyst</option>
+                    {getJobPositionsByDepartment(
+                      getAllDepartments().find(d => d.name.toLowerCase() === (formData.dept || '').toLowerCase() || d.id === formData.dept)?.id || formData.dept
+                    ).map(pos => (
+                      <option key={pos} value={pos}>{pos}</option>
+                    ))}
+                    <option value="Department Head">Department Head</option>
+                    <option value="Senior Associate">Senior Associate</option>
                     <option value="Junior Associate">Junior Associate</option>
-                    <option value="Department Head (HOD)">Department Head (HOD)</option>
-                    <option value="HR Specialist">HR Specialist</option>
-                    <option value="Operations Associate">Operations Associate</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'القسم' : 'Department'}
-                  </label>
-                  <select
-                    value={formData.dept}
-                    onChange={(e) => setFormData({ ...formData, dept: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
-                  >
-                    <option value="Audit">Audit</option>
-                    <option value="Tax & VAT">Tax & VAT</option>
-                    <option value="Accounting">Accounting</option>
-                    <option value="Business Advisory">Business Advisory</option>
-                    <option value="Client Success">Client Success</option>
-                    <option value="HR & Admin">HR & Admin</option>
                   </select>
                 </div>
                 <div>

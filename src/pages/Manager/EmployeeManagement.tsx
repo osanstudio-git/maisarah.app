@@ -44,6 +44,7 @@ interface Employee {
   phone: string;
   role: string; // System access role (e.g. employee, department_head)
   job_title: string; // Designated Job title (e.g. Senior Auditor)
+  secondaryRoles?: string[];
   status: string;
   tasksCompleted: number;
   activeJobs: number;
@@ -255,26 +256,17 @@ const EmployeeManagement = () => {
       };
 
       const dbData = await syncRecruitsFromSupabase();
-      const localData = getLocalRecruits();
-
-      const map = new Map<string, any>();
-      (DEFAULT_OFFERED_RECRUITS || []).forEach(r => {
-        if (!isDeleted(r.id, r.email, r.name)) map.set(r.id || r.email, r);
-      });
-      (localData || []).forEach(r => {
-        if (!isDeleted(r.id, r.email, r.name)) map.set(r.id || r.email, r);
-      });
-      (dbData || []).forEach(r => {
-        if (!isDeleted(r.id, r.email, r.name)) map.set(r.id || r.email, r);
-      });
-
-      const allRecruits = Array.from(map.values());
-      const filtered = allRecruits.filter((c: any) => c.stage === 'offered' && c.placement_status !== 'placed' && !isDeleted(c.id, c.email, c.name));
+      const recruits = Array.isArray(dbData) ? dbData : getLocalRecruits();
+      const filtered = recruits.filter((c: any) => 
+        (c.stage === 'offered' || c.placement_status === 'pending_placement') && 
+        c.placement_status !== 'placed' && 
+        !isDeleted(c.id, c.email, c.name)
+      );
       setPendingPlacements(filtered);
     } catch (err) {
       console.error('Error fetching pending placements:', err);
       const local = getLocalRecruits();
-      setPendingPlacements(local.filter((c: any) => c.stage === 'offered' && c.placement_status !== 'placed'));
+      setPendingPlacements(local.filter((c: any) => (c.stage === 'offered' || c.placement_status === 'pending_placement') && c.placement_status !== 'placed'));
     } finally {
       setLoadingPlacements(false);
     }
@@ -301,7 +293,9 @@ const EmployeeManagement = () => {
     phone: '',
     password: '',
     role: 'employee',
+    jobTitle: 'Auditor',
     department_id: 'audit',
+    secondaryRoles: ['employee'] as string[]
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -339,6 +333,7 @@ const EmployeeManagement = () => {
         else if (lowerDept.includes('audit')) normalizedDept = 'audit';
 
         const realPhone = hrEmp?.phone || p.phone || '';
+        const secRoles = Array.isArray(p.secondary_roles) ? p.secondary_roles : (Array.isArray(hrEmp?.secondary_roles) ? hrEmp.secondary_roles : []);
 
         return {
           id: p.id,
@@ -347,7 +342,8 @@ const EmployeeManagement = () => {
           email: p.email || hrEmp?.email || '',
           phone: realPhone,
           role: p.role || 'employee', // access role
-          job_title: hrEmp?.role || (p.role === 'department_head' ? 'Department Head (HOD)' : 'Senior Auditor'), // designated job position
+          job_title: hrEmp?.role || (p.role === 'department_head' ? 'Department Head (HOD)' : 'Auditor'), // designated job position
+          secondaryRoles: secRoles,
           status: hrEmp?.status || 'active',
           tasksCompleted: done,
           activeJobs: total - done,
@@ -475,21 +471,6 @@ const EmployeeManagement = () => {
   }, [fetchEmployees]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const openEditModal = (emp: Employee) => {
-    setEditingEmployee(emp);
-    setFormData({
-      fullName: emp.name_en || emp.name_ar || '',
-      email: emp.email || '',
-      phone: emp.phone || '',
-      password: '',
-      role: emp.role || 'employee',
-      department_id: emp.department_id || 'audit',
-    });
-    setIsModalOpen(true);
-    setFormMessage(null);
-    setShowCredentials(false);
-    setIsSubmitting(false);
-  };
 
   const handleDeleteEmployee = async () => {
     if (!employeeToDelete) return;
@@ -792,23 +773,50 @@ const EmployeeManagement = () => {
     }
   };
 
+  const openEditModal = (emp: Employee) => {
+    setEditingEmployee(emp);
+    const primaryRole = emp.role || 'employee';
+    const initialSec = Array.isArray(emp.secondaryRoles) && emp.secondaryRoles.length > 0 
+      ? emp.secondaryRoles 
+      : [primaryRole];
+    
+    setFormData({
+      fullName: emp.name_en || emp.name_ar,
+      email: emp.email,
+      phone: emp.phone,
+      password: '',
+      role: primaryRole,
+      jobTitle: emp.job_title || 'Auditor',
+      department_id: emp.department_id || 'audit',
+      secondaryRoles: Array.from(new Set([primaryRole, ...initialSec]))
+    });
+    setIsModalOpen(true);
+    setShowCredentials(false);
+    setFormMessage(null);
+  };
+
   const handleAddOrEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setFormMessage(null);
 
     try {
-      if (editingEmployee) {
-        const cleanEmail = (formData.email || editingEmployee.email || '').trim().toLowerCase();
+      const cleanEmail = (formData.email || editingEmployee?.email || '').trim().toLowerCase();
+      const deptConfig = getDepartmentById(formData.department_id);
+      const targetDeptName = deptConfig?.name || formData.department_id;
+      const targetJobTitle = formData.jobTitle || 'Staff Member';
+      const effectiveSecondary = Array.from(new Set([formData.role, ...(formData.secondaryRoles || [])]));
 
-        // 1. Sync Supabase Auth user metadata & profile via manage-auth
+      if (editingEmployee) {
+        // 1. Sync Supabase Auth user metadata & profile via manage-auth edge function
         try {
           await supabase.functions.invoke('manage-auth', {
             body: {
               email: cleanEmail,
               full_name: formData.fullName,
               role: formData.role,
-              department_id: formData.department_id
+              department_id: formData.department_id,
+              secondary_roles: effectiveSecondary
             }
           });
         } catch (authEdgeErr) {
@@ -820,7 +828,8 @@ const EmployeeManagement = () => {
           full_name: formData.fullName,
           phone: formData.phone,
           role: formData.role,
-          department_id: formData.department_id
+          department_id: formData.department_id,
+          secondary_roles: effectiveSecondary
         };
         try {
           await supabase
@@ -835,31 +844,15 @@ const EmployeeManagement = () => {
         }
 
         // 3. Upsert/Update core employee records table (hr_employees)
-        const deptNames: Record<string, string> = {
-          audit: 'Audit',
-          tax_vat: 'Tax & VAT',
-          bookkeeping: 'Bookkeeping',
-          business_advisory: 'Business Advisory',
-          client_success: 'Client Success'
-        };
-
-        const targetJobTitle = formData.role === 'department_head'
-          ? 'Department Head (HOD)'
-          : formData.role === 'accountant'
-            ? 'Accountant'
-            : formData.role === 'crm'
-              ? 'CRM Coordinator'
-              : formData.role === 'hr'
-                ? 'HR Manager'
-                : 'Audit Associate';
-
         const hrEmployeeData = {
           id: editingEmployee.id,
           full_name: formData.fullName,
           email: cleanEmail,
           phone: formData.phone,
-          dept: deptNames[formData.department_id] || 'Audit',
-          role: targetJobTitle
+          dept: targetDeptName,
+          role: targetJobTitle,
+          accessRole: formData.role,
+          secondary_roles: effectiveSecondary
         };
 
         try {
@@ -879,9 +872,10 @@ const EmployeeManagement = () => {
                 ...lp,
                 full_name: formData.fullName,
                 phone: formData.phone,
-                dept: deptNames[formData.department_id] || formData.department_id,
+                dept: targetDeptName,
                 role: targetJobTitle,
-                accessRole: formData.role
+                accessRole: formData.role,
+                secondary_roles: effectiveSecondary
               };
             }
             return lp;
@@ -891,31 +885,13 @@ const EmployeeManagement = () => {
           console.warn('Error updating local placed employees:', e);
         }
 
-        try {
-          const recruits = getLocalRecruits();
-          const updatedRecruits = recruits.map(r => {
-            if (r.email && r.email.toLowerCase() === cleanEmail) {
-              return {
-                ...r,
-                name: formData.fullName,
-                role: targetJobTitle,
-                dept: deptNames[formData.department_id] || formData.department_id
-              };
-            }
-            return r;
-          });
-          saveLocalRecruits(updatedRecruits);
-        } catch (e) {
-          console.warn('Error updating local recruits:', e);
-        }
-
         // 5. Log activity
         await logActivity(
           editingEmployee.id,
           formData.fullName,
           'service_updated',
-          `Manager updated employee '${formData.fullName}': Role -> '${formData.role}', Dept -> '${deptNames[formData.department_id] || formData.department_id}'`,
-          `قام المدير بتحديث بيانات الموظف '${formData.fullName}': الصلاحية -> '${formData.role}'، القسم -> '${deptNames[formData.department_id] || formData.department_id}'`
+          `Manager updated employee '${formData.fullName}': Role -> '${formData.role}', Dept -> '${targetDeptName}', Position -> '${targetJobTitle}'`,
+          `قام المدير بتحديث بيانات الموظف '${formData.fullName}': الصلاحية -> '${formData.role}'، القسم -> '${targetDeptName}'، المسمى -> '${targetJobTitle}'`
         );
 
         // 6. Update local state
@@ -926,13 +902,14 @@ const EmployeeManagement = () => {
           phone: formData.phone,
           role: formData.role,
           department_id: formData.department_id,
-          job_title: targetJobTitle
+          job_title: targetJobTitle,
+          secondaryRoles: effectiveSecondary
         } : emp));
 
         setNotification({
           show: true,
           title: isAr ? 'تم تحديث الموظف بنجاح' : 'Employee Updated',
-          message: isAr ? 'تم حفظ التعديلات وتحديث الصلاحيات والقسم بنجاح.' : 'Employee profile, department, and role updated successfully.',
+          message: isAr ? 'تم حفظ التعديلات وتحديث الصلاحيات والقسم بنجاح.' : 'Employee profile, department, and multi-portal roles updated successfully.',
           type: 'success'
         });
 
@@ -941,82 +918,42 @@ const EmployeeManagement = () => {
         return;
       }
 
-      // Create Mode - using a temp client to prevent session takeover
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-      });
-
-      const { data: authData, error: authError } = await tempClient.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
+      // Create Mode - using manage-auth edge function directly for seamless auth creation
+      const { data: authData, error: authErr } = await supabase.functions.invoke('manage-auth', {
+          body: {
+            email: cleanEmail,
+            password: formData.password,
             full_name: formData.fullName,
-            phone: formData.phone,
             role: formData.role,
-            department_id: formData.department_id
-          },
-        },
-      });
+            department_id: formData.department_id,
+            secondary_roles: effectiveSecondary
+          }
+        });
 
-      let targetUserId = authData?.user?.id;
+        if (authErr) throw authErr;
 
-      if (authError) {
-        const isExisting =
-          authError.status === 422 ||
-          authError.status === 400 ||
-          authError.message?.toLowerCase().includes('already registered') ||
-          authError.message?.toLowerCase().includes('already exists') ||
-          authError.message?.toLowerCase().includes('user');
+        const targetUserId = authData?.userId || crypto.randomUUID();
 
-        if (isExisting) {
-          const { data: existingProfile } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('email', formData.email.trim().toLowerCase())
-            .maybeSingle();
-
-          targetUserId = existingProfile ? existingProfile.id : crypto.randomUUID();
-        } else {
-          throw authError;
-        }
-      }
-
-      if (targetUserId) {
-        await new Promise(resolve => setTimeout(resolve, 300));
-        await supabase.from('profiles').upsert({
-          id: targetUserId,
-          full_name: formData.fullName,
-          email: formData.email,
-          phone: formData.phone,
-          role: formData.role,
-          department_id: formData.department_id
-        }, { onConflict: 'id' });
-
-        const deptNames: Record<string, string> = {
-          audit: 'Audit',
-          tax_vat: 'Tax & VAT',
-          bookkeeping: 'Bookkeeping',
-          business_advisory: 'Business Advisory',
-          client_success: 'Client Success'
-        };
-
+        // Upsert into hr_employees
         await supabase.from('hr_employees').upsert({
           id: targetUserId,
           full_name: formData.fullName,
-          email: formData.email,
+          email: cleanEmail,
           phone: formData.phone,
-          dept: deptNames[formData.department_id] || 'Audit',
-          role: formData.role === 'department_head' ? 'Department Head (HOD)' : 'Employee'
+          role: targetJobTitle,
+          dept: targetDeptName,
+          accessRole: formData.role,
+          secondary_roles: effectiveSecondary,
+          created_at: new Date().toISOString()
         }, { onConflict: 'id' });
-      }
 
-      setCreatedCredentials({ email: formData.email, password: formData.password });
-      setShowCredentials(true);
-      setFormMessage({ type: 'success', text: isAr ? 'تم إضافة الموظف بنجاح' : 'Employee created successfully' });
-      fetchEmployees();
+        setCreatedCredentials({
+          email: cleanEmail,
+          password: formData.password
+        });
+        setShowCredentials(true);
+        setFormMessage({ type: 'success', text: isAr ? 'تم إضافة الموظف بنجاح' : 'Employee created successfully' });
+        fetchEmployees();
     } catch (err: any) {
       setFormMessage({ type: 'error', text: err.message || 'Operation failed' });
     } finally {
@@ -1166,7 +1103,16 @@ const EmployeeManagement = () => {
         <button
           onClick={() => {
             setEditingEmployee(null);
-            setFormData({ fullName: '', email: '', phone: '', password: '', role: 'employee', department_id: 'audit' });
+            setFormData({
+              fullName: '',
+              email: '',
+              phone: '',
+              password: '',
+              role: 'employee',
+              jobTitle: 'Auditor',
+              department_id: 'audit',
+              secondaryRoles: ['employee']
+            });
             setIsModalOpen(true);
             setShowCredentials(false);
             setFormMessage(null);
@@ -1573,39 +1519,116 @@ const EmployeeManagement = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'القسم المسؤول عنه' : 'Department'}</label>
-                      <select value={formData.department_id} onChange={e => setFormData({ ...formData, department_id: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all cursor-pointer">
+                      <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'القسم' : 'Department'}</label>
+                      <select
+                        value={formData.department_id}
+                        onChange={e => {
+                          const newDept = e.target.value;
+                          const positions = getJobPositionsByDepartment(newDept);
+                          setFormData({
+                            ...formData,
+                            department_id: newDept,
+                            jobTitle: positions[0] || 'Staff Member'
+                          });
+                        }}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all cursor-pointer"
+                      >
                         {getAllDepartments().map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'صلاحية النظام' : 'System Role'}</label>
-                      <select value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all cursor-pointer">
-                        <option value="employee">{isAr ? 'موظف قياسي (Standard Employee)' : 'Standard Employee'}</option>
-                        <option value="department_head">{isAr ? '⭐ رئيس قسم (Head of Department / HOD)' : '⭐ Department Head (HOD)'}</option>
-                        <option value="accountant">{isAr ? 'محاسب (Accountant)' : 'Accountant'}</option>
-                        <option value="hr">{isAr ? 'إدارة الموارد البشرية (HR Manager)' : 'HR Manager'}</option>
-                        <option value="manager">{isAr ? 'مدير تنفيذي (Executive Manager)' : 'Executive Manager'}</option>
-                        <option value="crm">{isAr ? 'علاقات العملاء (CRM Coordinator)' : 'CRM Coordinator'}</option>
+                      <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'المسمى الوظيفي الفعلي' : 'Designated Job Position'}</label>
+                      <select
+                        value={formData.jobTitle}
+                        onChange={e => setFormData({ ...formData, jobTitle: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all cursor-pointer"
+                      >
+                        {getJobPositionsByDepartment(formData.department_id).map(pos => (
+                          <option key={pos} value={pos}>{pos}</option>
+                        ))}
+                        <option value="Department Head">Department Head</option>
+                        <option value="Senior Auditor">Senior Auditor</option>
+                        <option value="Tax Consultant">Tax Consultant</option>
+                        <option value="Accounting Consultant">Accounting Consultant</option>
                       </select>
                     </div>
                   </div>
 
-                  {formData.role === 'department_head' && (
-                    <div className="bg-red-50/70 border border-red-200/80 rounded-2xl p-4 flex items-start gap-3">
-                      <ShieldCheck size={20} className="text-[#A11212] flex-shrink-0 mt-0.5" />
-                      <div className="text-xs text-gray-800">
-                        <p className="font-black text-[#A11212] mb-0.5">
-                          {isAr ? 'صلاحيات رئيس القسم (HOD Leadership)' : 'Head of Department Access Granted'}
-                        </p>
-                        <p className="text-[11px] text-gray-600 leading-relaxed font-medium">
-                          {isAr
-                            ? 'سيتمكن الموظف من قيادة القسم، توجيه المهام، رقابة الجودة، ومعالجة التأخيرات عبر بوابة HOD.'
-                            : 'This employee will have full management control over work routing, QA approvals, and delay action logging in the HOD Portal.'}
-                        </p>
-                      </div>
+                  <div>
+                    <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-1.5">{isAr ? 'صلاحية البوابة الرئيسية' : 'Primary System Role'}</label>
+                    <select
+                      value={formData.role}
+                      onChange={e => {
+                        const newRole = e.target.value;
+                        setFormData({
+                          ...formData,
+                          role: newRole,
+                          secondaryRoles: Array.from(new Set([newRole, ...(formData.secondaryRoles || [])]))
+                        });
+                      }}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all cursor-pointer"
+                    >
+                      <option value="employee">{isAr ? '👤 موظف قياسي (Standard Employee)' : '👤 Standard Employee (Staff Portal)'}</option>
+                      <option value="department_head">{isAr ? '👑 رئيس قسم (Head of Department / HOD)' : '👑 Department Head (HOD Portal)'}</option>
+                      <option value="accountant">{isAr ? '💼 محاسب (Accountant)' : '💼 Accountant (Accounting & Invoicing)'}</option>
+                      <option value="hr">{isAr ? '📋 إدارة الموارد البشرية (HR Manager)' : '📋 HR Manager (HR Control Center)'}</option>
+                      <option value="crm">{isAr ? '🤝 علاقات العملاء (CRM Coordinator)' : '🤝 CRM Coordinator (Leads & Clients)'}</option>
+                      <option value="manager">{isAr ? '🏛️ مدير تنفيذي (Executive Manager)' : '🏛️ Executive Manager (Full System Oversight)'}</option>
+                    </select>
+                  </div>
+
+                  {/* Secondary Cross-Portal Access Checkboxes */}
+                  <div className="bg-gray-50/90 p-4 rounded-2xl border border-gray-200/80 space-y-2.5">
+                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                      {isAr ? 'صلاحيات البوابات الإضافية (تبديل البوابات بحساب واحد)' : 'Cross-Portal Multi-Role Access (Switch portals from TopNav)'}
+                    </label>
+                    <p className="text-[11px] text-gray-500 leading-normal">
+                      {isAr
+                        ? 'تتيح هذه الصلاحيات للموظف التبديل بين البوابات المعينة له (مثل: المحاسب، الموظف، رئيس القسم) مباشرة من القائمة العلوية دون الحاجة لتسجيل خروج.'
+                        : 'Enables this employee to switch between authorized portals (e.g. Staff Workspace, Accountant, HOD) directly from their portal navigation bar.'}
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {[
+                        { id: 'accountant', labelEn: '💼 Accountant Portal', labelAr: '💼 بوابة المحاسب' },
+                        { id: 'employee', labelEn: '👤 Staff Workspace', labelAr: '👤 مساحة الموظف' },
+                        { id: 'department_head', labelEn: '👑 HOD Leadership', labelAr: '👑 رئيس قسم' },
+                        { id: 'crm', labelEn: '🤝 CRM Portal', labelAr: '🤝 علاقات العملاء' },
+                        { id: 'hr', labelEn: '📋 HR Manager', labelAr: '📋 الموارد البشرية' },
+                        { id: 'manager', labelEn: '🏛️ Executive Manager', labelAr: '🏛️ المدير التنفيذي' }
+                      ].map(sec => {
+                        const isPrimary = formData.role === sec.id;
+                        const isChecked = isPrimary || formData.secondaryRoles?.includes(sec.id);
+                        return (
+                          <label
+                            key={sec.id}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                              isPrimary
+                                ? 'bg-[#A11212]/10 border-[#A11212] text-[#A11212] opacity-90 cursor-not-allowed'
+                                : isChecked
+                                  ? 'bg-red-50 border-red-200 text-[#A11212]'
+                                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              disabled={isPrimary}
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (isPrimary) return;
+                                const cur = formData.secondaryRoles || [];
+                                const updated = e.target.checked
+                                  ? Array.from(new Set([...cur, sec.id]))
+                                  : cur.filter(r => r !== sec.id);
+                                setFormData({ ...formData, secondaryRoles: updated });
+                              }}
+                              className="rounded text-[#A11212] focus:ring-[#A11212] h-3.5 w-3.5"
+                            />
+                            <span>{isAr ? sec.labelAr : sec.labelEn}</span>
+                          </label>
+                        );
+                      })}
                     </div>
-                  )}
+                  </div>
 
                   {!editingEmployee && (
                     <div>
