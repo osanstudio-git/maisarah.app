@@ -30,7 +30,7 @@ import {
   Copy,
   Check
 } from 'lucide-react';
-import { getAllDepartments, getDepartmentById } from '../../config/departments';
+import { getAllDepartments, getDepartmentById, getJobPositionsByDepartment } from '../../config/departments';
 import { logActivity } from '../../lib/activityLogger';
 
 // ---------------------------------------------------------------------------
@@ -2385,12 +2385,13 @@ const EmployeeManagement = () => {
                       <div>
                         <label className="block text-[9px] uppercase text-gray-400 mb-1">{isAr ? 'المسمى الوظيفي الفعلي:' : 'Designated Job Position:'}</label>
                         <select value={editFormData.jobTitle} onChange={e => setEditFormData({ ...editFormData, jobTitle: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark cursor-pointer">
+                          {getJobPositionsByDepartment(editFormData.department_id).map((pos) => (
+                            <option key={pos} value={pos}>{pos}</option>
+                          ))}
+                          <option value="Department Head">Department Head</option>
                           <option value="Senior Auditor">Senior Auditor</option>
                           <option value="Tax Consultant">Tax Consultant</option>
-                          <option value="Junior Associate">Junior Associate</option>
-                          <option value="Head of Audit">Head of Audit</option>
-                          <option value="Head of Tax & VAT">Head of Tax & VAT</option>
-                          <option value="Head of Bookkeeping">Head of Bookkeeping</option>
+                          <option value="Accounting Consultant">Accounting Consultant</option>
                         </select>
                       </div>
                       <div>
@@ -2399,20 +2400,19 @@ const EmployeeManagement = () => {
                           value={editFormData.department_id}
                           onChange={(e) => {
                             const newDept = e.target.value;
-                            let defaultHOD = 'Nasser Al-Riyami';
-                            if (newDept === 'tax_vat') defaultHOD = 'Khalfan Al-Abri';
-                            if (newDept === 'bookkeeping') defaultHOD = 'Mazis Al-Balushi';
+                            const deptPositions = getJobPositionsByDepartment(newDept);
+                            const defaultPos = deptPositions[0] || 'Staff Member';
                             setEditFormData({
                               ...editFormData,
                               department_id: newDept,
-                              immediateSupervisor: defaultHOD
+                              jobTitle: defaultPos
                             });
                           }}
                           className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-brand-dark cursor-pointer"
                         >
-                          <option value="audit">{isAr ? 'التدقيق (Audit)' : 'Audit'}</option>
-                          <option value="tax_vat">{isAr ? 'الضرائب وضريبة القيمة المضافة (Tax & VAT)' : 'Tax & VAT'}</option>
-                          <option value="bookkeeping">{isAr ? 'إمساك الدفاتر (Bookkeeping)' : 'Bookkeeping/Others'}</option>
+                          {getAllDepartments().map(d => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
                         </select>
                       </div>
                       <div>

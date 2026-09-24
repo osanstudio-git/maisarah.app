@@ -2,6 +2,8 @@ export interface DepartmentConfig {
   id: string;
   name: string;
   head_title: string;
+  duty: string;
+  job_positions: string[];
   services: string[];
   kpis: {
     id: string;
@@ -16,6 +18,13 @@ export const DEPARTMENTS: Record<string, DepartmentConfig> = {
     id: 'audit',
     name: 'Audit',
     head_title: 'Audit Head',
+    duty: 'Deliver high-quality audit services and generate revenue through professional audit work and compliance support.',
+    job_positions: [
+      'Auditor',
+      'Audit Assistant',
+      'Audit Trainee',
+      'Senior Auditor'
+    ],
     services: [
       'Internal Audit',
       'KSA Audit',
@@ -39,6 +48,12 @@ export const DEPARTMENTS: Record<string, DepartmentConfig> = {
     id: 'tax_vat',
     name: 'Tax & VAT',
     head_title: 'Tax Head',
+    duty: 'Deliver accurate tax and VAT services, ensure compliance, and generate revenue through quality service delivery.',
+    job_positions: [
+      'Tax Accountant',
+      'Tax Consultant',
+      'Tax & VAT Trainee'
+    ],
     services: [
       'Income Tax filing',
       'VAT filing',
@@ -65,6 +80,13 @@ export const DEPARTMENTS: Record<string, DepartmentConfig> = {
     id: 'bookkeeping',
     name: 'Bookkeeping',
     head_title: 'Bookkeeping Head',
+    duty: 'Maintain accurate financial records and provide quality bookkeeping services to clients.',
+    job_positions: [
+      'Accounting Consultant',
+      'Bookkeeper',
+      'Senior Accountant',
+      'Bookkeeping Trainee'
+    ],
     services: [
       'Bookkeeping'
     ],
@@ -81,7 +103,15 @@ export const DEPARTMENTS: Record<string, DepartmentConfig> = {
   business_advisory: {
     id: 'business_advisory',
     name: 'Business Advisory and Development',
-    head_title: 'Business Advisory',
+    head_title: 'Business Advisory Head',
+    duty: 'Deliver professional consultancy and business solutions to support client growth and generate revenue.',
+    job_positions: [
+      'Financial Analyst',
+      'Business Consulting and Development Officer',
+      'Legal and Business Liquidation Officer',
+      'Business Development Assistant',
+      'Business Advisory Trainee'
+    ],
     services: [
       'Consultancy',
       'Feasibility',
@@ -110,6 +140,13 @@ export const DEPARTMENTS: Record<string, DepartmentConfig> = {
     id: 'client_success',
     name: 'Client Success and Operations Coordination',
     head_title: 'Head of Client Success',
+    duty: 'Support service teams, coordinate work delivery, and ensure client satisfaction.',
+    job_positions: [
+      'Client Relationship Officer',
+      'Sales Executive',
+      'Public Relations Officer (PRO)',
+      'Operations Driver'
+    ],
     services: [
       'Client support and coordination'
     ],
@@ -126,7 +163,13 @@ export const DEPARTMENTS: Record<string, DepartmentConfig> = {
   innovation_dev: {
     id: 'innovation_dev',
     name: 'Innovation and Development',
-    head_title: 'Head of Business Development and Innovation',
+    head_title: 'Head of Innovation and Development',
+    duty: 'Drive strategic digital marketing initiatives and deliver innovative technology solutions.',
+    job_positions: [
+      'Digital Marketing Specialist',
+      'Technology Projects Specialist',
+      'Innovation Trainee'
+    ],
     services: [
       'Digital Marketing',
       'Technology Projects'
@@ -144,6 +187,13 @@ export const DEPARTMENTS: Record<string, DepartmentConfig> = {
     id: 'internal_support',
     name: 'Internal Support & Administration',
     head_title: 'Administration Manager',
+    duty: 'Manage human resources, ensure organizational compliance, and oversee administrative support operations.',
+    job_positions: [
+      'HR Specialist',
+      'HR Officer',
+      'Internal Accountant',
+      'Administrative Assistant'
+    ],
     services: [
       'HR Management',
       'Internal Accounting',
@@ -162,7 +212,13 @@ export const DEPARTMENTS: Record<string, DepartmentConfig> = {
   management: {
     id: 'management',
     name: 'Management',
-    head_title: 'CEO / GM',
+    head_title: 'CEO / General Manager',
+    duty: 'Provide executive leadership, strategic oversight, and overall governance across all service lines.',
+    job_positions: [
+      'Operations & Executive Manager',
+      'General Manager',
+      'Chief Executive Officer (CEO)'
+    ],
     services: [
       'Strategic Oversight'
     ],
@@ -184,4 +240,14 @@ export const getDepartmentById = (id: string): DepartmentConfig | undefined => {
 
 export const getAllDepartments = (): DepartmentConfig[] => {
   return Object.values(DEPARTMENTS);
+};
+
+export const getJobPositionsByDepartment = (deptId: string): string[] => {
+  const dept = DEPARTMENTS[deptId];
+  return dept?.job_positions || ['Staff Member', 'Trainee'];
+};
+
+export const getDepartmentDuty = (deptId: string): string => {
+  const dept = DEPARTMENTS[deptId];
+  return dept?.duty || '';
 };
