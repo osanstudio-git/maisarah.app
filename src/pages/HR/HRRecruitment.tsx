@@ -8,6 +8,8 @@ import {
 import {
   syncRecruitsFromSupabase,
   upsertLocalRecruit,
+  upsertRecruitToDatabase,
+  deleteRecruitFromDatabase,
   updateRecruitStatus,
   getLocalRecruits
 } from '../../utils/recruitmentSync';
@@ -102,12 +104,7 @@ export default function HRRecruitment() {
   const handleDeleteCandidate = async () => {
     if (!candidateToDelete) return;
     try {
-      const { error } = await supabase
-        .from('hr_recruits')
-        .delete()
-        .eq('id', candidateToDelete.id);
-
-      if (error) throw error;
+      await deleteRecruitFromDatabase(candidateToDelete.id);
 
       setCandidates(prev => prev.filter(c => c.id !== candidateToDelete.id));
       setCandidateToDelete(null);
@@ -197,24 +194,9 @@ export default function HRRecruitment() {
         created_at: new Date().toISOString()
       };
 
-      // Always save to shared store immediately so it's accessible across Manager & HR portals
-      upsertLocalRecruit(payload);
-      setCandidates(prev => [payload, ...prev.filter(c => c.id !== payload.id)]);
-
-      try {
-        const { data, error } = await supabase
-          .from('hr_recruits')
-          .insert([payload])
-          .select()
-          .single();
-
-        if (!error && data) {
-          upsertLocalRecruit(data);
-          setCandidates(prev => [data, ...prev.filter(c => c.id !== data.id && c.id !== newId)]);
-        }
-      } catch (dbErr) {
-        console.warn('Supabase recruits insert notice (cached locally):', dbErr);
-      }
+      // Persist to Supabase Database via Edge Function and update local state
+      const savedCandidate = await upsertRecruitToDatabase(payload);
+      setCandidates(prev => [savedCandidate, ...prev.filter(c => c.id !== payload.id && c.id !== savedCandidate.id)]);
 
       setShowModal(false);
       setCVFile(null); // Reset CV file selector

@@ -82,6 +82,16 @@ export function upsertLocalRecruit(candidate: RecruitCandidate) {
 
 export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
   try {
+    const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
+      body: { action: 'get_recruits' }
+    });
+
+    if (!edgeErr && edgeRes?.success && Array.isArray(edgeRes.data)) {
+      saveLocalRecruits(edgeRes.data);
+      return edgeRes.data;
+    }
+
+    // Direct fallback if edge function unavailable
     const { data, error } = await supabase
       .from('hr_recruits')
       .select('*')
@@ -97,6 +107,33 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
   return getLocalRecruits();
 }
 
+export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Promise<RecruitCandidate> {
+  upsertLocalRecruit(candidate);
+  try {
+    const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
+      body: { action: 'upsert_recruit', recruit: candidate }
+    });
+    if (!edgeErr && edgeRes?.success && edgeRes?.data) {
+      upsertLocalRecruit(edgeRes.data);
+      return edgeRes.data;
+    }
+  } catch (e) {
+    console.warn('Edge function upsert recruit notice:', e);
+  }
+  return candidate;
+}
+
+export async function deleteRecruitFromDatabase(idOrEmail: string) {
+  deleteLocalRecruit(idOrEmail);
+  try {
+    await supabase.functions.invoke('manage-auth', {
+      body: { action: 'delete_recruit', recruit_id: idOrEmail }
+    });
+  } catch (e) {
+    console.warn('Edge function delete recruit notice:', e);
+  }
+}
+
 export async function updateRecruitStatus(id: string, updates: Partial<RecruitCandidate>) {
   const current = getLocalRecruits();
   const candidate = current.find(c => c.id === id);
@@ -105,12 +142,11 @@ export async function updateRecruitStatus(id: string, updates: Partial<RecruitCa
     upsertLocalRecruit(updatedCandidate);
   }
 
-  const isValidUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
-  if (isValidUUID) {
-    try {
-      await supabase.from('hr_recruits').update(updates).eq('id', id);
-    } catch (e) {
-      console.warn('Supabase recruit update failed (cached locally):', e);
-    }
+  try {
+    await supabase.functions.invoke('manage-auth', {
+      body: { action: 'update_recruit', recruit_id: id, updates }
+    });
+  } catch (e) {
+    console.warn('Edge function update recruit notice:', e);
   }
 }

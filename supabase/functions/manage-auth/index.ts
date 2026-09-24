@@ -29,6 +29,67 @@ serve(async (req) => {
     const body = await req.json()
     const { action, email, password, full_name, role, department_id, secondary_roles, user_id } = body
 
+    if (action === 'get_recruits') {
+      const { data, error } = await supabaseAdmin
+        .from('hr_recruits')
+        .select('*')
+        .order('created_at', { ascending: false })
+      return new Response(
+        JSON.stringify({ success: !error, data: data || [], error: error?.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (action === 'upsert_recruit') {
+      const recruitData = body.recruit
+      if (!recruitData) {
+        return new Response(
+          JSON.stringify({ error: 'Recruit data is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      const { data, error } = await supabaseAdmin
+        .from('hr_recruits')
+        .upsert(recruitData, { onConflict: 'id' })
+        .select()
+        .single()
+      return new Response(
+        JSON.stringify({ success: !error, data, error: error?.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (action === 'update_recruit') {
+      const { recruit_id, updates } = body
+      if (!recruit_id || !updates) {
+        return new Response(
+          JSON.stringify({ error: 'recruit_id and updates are required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      const { data, error } = await supabaseAdmin
+        .from('hr_recruits')
+        .update(updates)
+        .eq('id', recruit_id)
+        .select()
+        .single()
+      return new Response(
+        JSON.stringify({ success: !error, data, error: error?.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (action === 'delete_recruit') {
+      const { recruit_id } = body
+      if (recruit_id) {
+        await supabaseAdmin.from('hr_recruits').delete().eq('id', recruit_id)
+      }
+      return new Response(
+        JSON.stringify({ success: true, message: 'Recruit deleted' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     if (action === 'delete' || body.delete === true) {
       let targetUserId = user_id
       const cleanEmail = (email || '').trim().toLowerCase()

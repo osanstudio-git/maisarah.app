@@ -6,7 +6,10 @@ import {
 import { supabase } from '../../lib/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
 import {
+  syncRecruitsFromSupabase,
   upsertLocalRecruit,
+  upsertRecruitToDatabase,
+  deleteRecruitFromDatabase,
   updateRecruitStatus,
   getLocalRecruits
 } from '../../utils/recruitmentSync';
@@ -77,15 +80,11 @@ export default function HROnboarding() {
   const fetchHires = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('hr_recruits')
-        .select('*')
-        .eq('stage', 'offered')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setNewHires(data || []);
-      if (data && data.length > 0 && !selectedHireId) {
-        setSelectedHireId(data[0].id);
+      const data = await syncRecruitsFromSupabase();
+      const offered = data.filter((c: any) => c.stage === 'offered' || c.stage === 'interview_done' || c.placement_status === 'pending_placement');
+      setNewHires(offered as Recruit[]);
+      if (offered.length > 0 && !selectedHireId) {
+        setSelectedHireId(offered[0].id);
       }
     } catch (err) {
       console.error('Error fetching onboarding roster:', err);
@@ -186,25 +185,10 @@ export default function HROnboarding() {
         created_at: new Date().toISOString()
       };
 
-      // Always save to shared recruitment store so candidate is instantly visible in Manager Placement portal
-      upsertLocalRecruit(payload);
-      setNewHires(prev => [payload, ...prev.filter(h => h.id !== payload.id)]);
-      setSelectedHireId(payload.id);
-
-      try {
-        const { data, error } = await supabase
-          .from('hr_recruits')
-          .insert([payload])
-          .select()
-          .single();
-
-        if (!error && data) {
-          upsertLocalRecruit(data);
-          setNewHires(prev => [data, ...prev.filter(h => h.id !== data.id && h.id !== newId)]);
-        }
-      } catch (dbErr) {
-        console.warn('Supabase recruits insert notice (cached locally):', dbErr);
-      }
+      // Persist to Supabase Database via Edge Function and update local state
+      const savedHire = await upsertRecruitToDatabase(payload);
+      setNewHires(prev => [savedHire, ...prev.filter(h => h.id !== payload.id && h.id !== savedHire.id)]);
+      setSelectedHireId(savedHire.id);
 
       setShowModal(false);
       
