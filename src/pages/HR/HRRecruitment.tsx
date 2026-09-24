@@ -11,6 +11,7 @@ import {
   updateRecruitStatus,
   getLocalRecruits
 } from '../../utils/recruitmentSync';
+import { getAllDepartments, getJobPositionsByDepartment } from '../../config/departments';
 
 interface Candidate {
   id: string;
@@ -1112,22 +1113,18 @@ export default function HRRecruitment() {
                     onChange={(e) => setNewCandidate({ ...newCandidate, role: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
-                    <option value="Senior Auditor">{isAr ? 'مدقق أول (Senior Auditor)' : 'Senior Auditor'}</option>
-                    <option value="Audit Associate">{isAr ? 'مساعد تدقيق (Audit Associate)' : 'Audit Associate'}</option>
-                    <option value="Tax Consultant">{isAr ? 'مستشار ضرائب (Tax Consultant)' : 'Tax Consultant'}</option>
-                    <option value="Tax Specialist">{isAr ? 'أخصائي ضرائب (Tax Specialist)' : 'Tax Specialist'}</option>
-                    <option value="Accountant">{isAr ? 'محاسب (Accountant)' : 'Accountant'}</option>
-                    <option value="Senior Accountant">{isAr ? 'محاسب أول (Senior Accountant)' : 'Senior Accountant'}</option>
-                    <option value="Bookkeeper">{isAr ? 'ماسِك دفاتر (Bookkeeper)' : 'Bookkeeper'}</option>
-                    <option value="Business Advisory Consultant">{isAr ? 'مستشار تطوير وتأسيس (Business Advisory)' : 'Business Advisory Consultant'}</option>
-                    <option value="Financial Analyst">{isAr ? 'محلل مالي (Financial Analyst)' : 'Financial Analyst'}</option>
-                    <option value="Client Relations Officer">{isAr ? 'مسؤول علاقات عملاء (Client Relations)' : 'Client Relations Officer'}</option>
-                    <option value="CRM Coordinator">{isAr ? 'منسق CRM (CRM Coordinator)' : 'CRM Coordinator'}</option>
-                    <option value="Junior Associate">{isAr ? 'مساعد مبتدئ (Junior Associate)' : 'Junior Associate'}</option>
-                    <option value="HR Specialist">{isAr ? 'أخصائي موارد بشرية (HR Specialist)' : 'HR Specialist'}</option>
-                    <option value="Operations Associate">{isAr ? 'منسق عمليات (Operations Associate)' : 'Operations Associate'}</option>
-                    <option value="Department Head (HOD)">{isAr ? 'رئيس قسم (Department Head)' : 'Department Head (HOD)'}</option>
-                    <option value="custom">{isAr ? '+ إضافة منصب مخصص...' : '+ Add Custom Position...'}</option>
+                    {(() => {
+                      const selectedDeptConfig = getAllDepartments().find(d => d.name === newCandidate.dept || d.id === newCandidate.dept) || getAllDepartments()[0];
+                      const positions = getJobPositionsByDepartment(selectedDeptConfig.id);
+                      return (
+                        <>
+                          {positions.map((pos) => (
+                            <option key={pos} value={pos}>{pos}</option>
+                          ))}
+                          <option value="custom">{isAr ? '+ إضافة منصب مخصص...' : '+ Add Custom Position...'}</option>
+                        </>
+                      );
+                    })()}
                   </select>
                   {newCandidate.role === 'custom' && (
                     <input
@@ -1144,16 +1141,21 @@ export default function HRRecruitment() {
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'القسم' : 'Department'}</label>
                   <select
                     value={newCandidate.dept}
-                    onChange={(e) => setNewCandidate({ ...newCandidate, dept: e.target.value })}
+                    onChange={(e) => {
+                      const newDeptName = e.target.value;
+                      const deptConfig = getAllDepartments().find(d => d.name === newDeptName || d.id === newDeptName);
+                      const defaultRole = deptConfig ? getJobPositionsByDepartment(deptConfig.id)[0] : 'Staff Member';
+                      setNewCandidate({
+                        ...newCandidate,
+                        dept: newDeptName,
+                        role: defaultRole
+                      });
+                    }}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
-                    <option value="Audit">{isAr ? 'التدقيق (Audit)' : 'Audit'}</option>
-                    <option value="Tax & VAT">{isAr ? 'الضرائب وضريبة القيمة المضافة (Tax & VAT)' : 'Tax & VAT'}</option>
-                    <option value="Bookkeeping">{isAr ? 'إمساك الدفاتر والمحاسبة (Bookkeeping / Accounting)' : 'Bookkeeping / Accounting'}</option>
-                    <option value="Business Advisory">{isAr ? 'الاستشارات وتطوير الأعمال (Business Advisory)' : 'Business Advisory and Development'}</option>
-                    <option value="Client Success">{isAr ? 'خدمة العملاء والعمليات (Client Success & CRM)' : 'Client Success & Operations (CRM)'}</option>
-                    <option value="Innovation & Tech">{isAr ? 'الابتكار والتطوير التقني (Innovation & Tech)' : 'Innovation & Development'}</option>
-                    <option value="HR & Admin">{isAr ? 'الدعم الإداري والموارد البشرية (HR & Admin)' : 'Internal Support & Administration (HR)'}</option>
+                    {getAllDepartments().map(d => (
+                      <option key={d.id} value={d.name}>{d.name}</option>
+                    ))}
                     <option value="custom">{isAr ? '+ إضافة قسم مخصص...' : '+ Add Custom Department...'}</option>
                   </select>
                   {newCandidate.dept === 'custom' && (

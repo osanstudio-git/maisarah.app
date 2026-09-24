@@ -10,6 +10,7 @@ import {
   updateRecruitStatus,
   getLocalRecruits
 } from '../../utils/recruitmentSync';
+import { getAllDepartments, getJobPositionsByDepartment } from '../../config/departments';
 
 interface Recruit {
   id: string;
@@ -451,22 +452,18 @@ export default function HROnboarding() {
                     onChange={(e) => setNewHireData({ ...newHireData, role: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
-                    <option value="Senior Auditor">Senior Auditor</option>
-                    <option value="Audit Associate">Audit Associate</option>
-                    <option value="Tax Consultant">Tax Consultant</option>
-                    <option value="Tax Specialist">Tax Specialist</option>
-                    <option value="Accountant">Accountant</option>
-                    <option value="Senior Accountant">Senior Accountant</option>
-                    <option value="Bookkeeper">Bookkeeper</option>
-                    <option value="Business Advisory Consultant">Business Advisory Consultant</option>
-                    <option value="Financial Analyst">Financial Analyst</option>
-                    <option value="Client Relations Officer">Client Relations Officer</option>
-                    <option value="CRM Coordinator">CRM Coordinator</option>
-                    <option value="Junior Associate">Junior Associate</option>
-                    <option value="HR Specialist">HR Specialist</option>
-                    <option value="Operations Associate">Operations Associate</option>
-                    <option value="Department Head (HOD)">Department Head (HOD)</option>
-                    <option value="custom">+ Add Custom Position...</option>
+                    {(() => {
+                      const selectedDeptConfig = getAllDepartments().find(d => d.name === newHireData.dept || d.id === newHireData.dept) || getAllDepartments()[0];
+                      const positions = getJobPositionsByDepartment(selectedDeptConfig.id);
+                      return (
+                        <>
+                          {positions.map((pos) => (
+                            <option key={pos} value={pos}>{pos}</option>
+                          ))}
+                          <option value="custom">+ Add Custom Position...</option>
+                        </>
+                      );
+                    })()}
                   </select>
                   {newHireData.role === 'custom' && (
                     <input
@@ -483,16 +480,21 @@ export default function HROnboarding() {
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Department</label>
                   <select
                     value={newHireData.dept}
-                    onChange={(e) => setNewHireData({ ...newHireData, dept: e.target.value })}
+                    onChange={(e) => {
+                      const newDeptName = e.target.value;
+                      const deptConfig = getAllDepartments().find(d => d.name === newDeptName || d.id === newDeptName);
+                      const defaultRole = deptConfig ? getJobPositionsByDepartment(deptConfig.id)[0] : 'Staff Member';
+                      setNewHireData({
+                        ...newHireData,
+                        dept: newDeptName,
+                        role: defaultRole
+                      });
+                    }}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
-                    <option value="Audit">Audit</option>
-                    <option value="Tax & VAT">Tax & VAT</option>
-                    <option value="Bookkeeping">Bookkeeping / Accounting</option>
-                    <option value="Business Advisory">Business Advisory and Development</option>
-                    <option value="Client Success">Client Success & Operations (CRM)</option>
-                    <option value="Innovation & Tech">Innovation & Development</option>
-                    <option value="HR & Admin">Internal Support & Administration (HR)</option>
+                    {getAllDepartments().map(d => (
+                      <option key={d.id} value={d.name}>{d.name}</option>
+                    ))}
                     <option value="custom">+ Add Custom Department...</option>
                   </select>
                   {newHireData.dept === 'custom' && (
