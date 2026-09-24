@@ -20,7 +20,7 @@ const Login = () => {
 
   // Redirect if already logged in
   useEffect(() => {
-    if (!loading && session) {
+    if (session && role) {
       if (role === 'manager') navigate('/manager');
       else if (role === 'hr') navigate('/hr/dashboard');
       else if (role === 'crm') navigate('/crm/dashboard');
@@ -28,8 +28,9 @@ const Login = () => {
       else if (role === 'employee') navigate('/employee');
       else if (role === 'client') navigate('/client');
       else if (role === 'department_head') navigate('/hod/dashboard');
-      else if (role) navigate('/dashboard');
-      else setError('No role assigned to this account. Please contact admin.');
+      else navigate('/dashboard');
+    } else if (!loading && session && !role) {
+      setError('No role assigned to this account. Please contact admin.');
     }
   }, [session, role, loading, navigate]);
 
@@ -47,11 +48,16 @@ const Login = () => {
       setError(t('auth.invalidCredentials'));
       setIsSubmitting(false);
     }
-    // If successful, the onAuthStateChange in AuthProvider will catch it and update the session, triggering the useEffect to redirect
+    // If successful, onAuthStateChange will fetch the role and redirect
   };
 
-  if (loading) {
-    return <div className="min-h-screen flex justify-center items-center bg-gray-50"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-dark"></div></div>;
+  if (loading || (session && !role && !error)) {
+    return (
+      <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 gap-4">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-dark"></div>
+        <p className="text-gray-500 text-sm font-medium animate-pulse">Authenticating...</p>
+      </div>
+    );
   }
 
   return (

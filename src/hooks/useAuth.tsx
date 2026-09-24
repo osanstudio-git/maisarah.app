@@ -97,9 +97,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(session?.user || null);
 
         if (session?.user) {
-          if (event === 'SIGNED_IN') {
-            await fetchRole(session.user, false);
-          } else if (!role) {
+          if (event === 'SIGNED_IN' || !role) {
             await fetchRole(session.user, true);
           }
         } else {
