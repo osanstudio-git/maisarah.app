@@ -305,15 +305,10 @@ export default function HRRecruitment() {
     setCandidates(prev => prev.map(c => c.id === id ? { ...c, stage: nextStage } : c));
 
     try {
-      const { error } = await supabase
-        .from('hr_recruits')
-        .update({
-          stage: nextStage,
-          ...(nextStage === 'offered' ? { placement_status: 'pending_placement' } : {})
-        })
-        .eq('id', id);
-
-      if (error) throw error;
+      await updateRecruitStatus(id, {
+        stage: nextStage,
+        ...(nextStage === 'offered' ? { placement_status: 'pending_placement' } : {})
+      });
 
       // Special action: if promoted to offered, trigger welcome offer email
       if (nextStage === 'offered') {
@@ -380,15 +375,10 @@ export default function HRRecruitment() {
     setCandidates(prev => prev.map(c => c.id === selectedCandidate.id ? updatedCandidate : c));
 
     try {
-      const { error } = await supabase
-        .from('hr_recruits')
-        .update({
-          onboarding_tasks: updatedTasks,
-          ...(isComplete ? { placement_status: 'pending_placement' } : {})
-        })
-        .eq('id', selectedCandidate.id);
-
-      if (error) throw error;
+      await updateRecruitStatus(selectedCandidate.id, {
+        onboarding_tasks: updatedTasks,
+        ...(isComplete ? { placement_status: 'pending_placement' } : {})
+      });
     } catch (err: any) {
       console.error('Error saving onboarding checklist:', err);
     }
@@ -803,10 +793,7 @@ export default function HRRecruitment() {
                           setCandidates(prev => prev.map(c => c.id === selectedCandidate.id ? updated : c));
 
                           // Save to Supabase
-                          await supabase
-                            .from('hr_recruits')
-                            .update({ employment_type: val })
-                            .eq('id', selectedCandidate.id);
+                          await updateRecruitStatus(selectedCandidate.id, { employment_type: val });
                         }}
                         className="mt-1 w-full bg-white border border-gray-200 rounded-lg px-2.5 py-0.5 text-xs font-black outline-none focus:border-[#A11212] cursor-pointer"
                       >
@@ -831,10 +818,7 @@ export default function HRRecruitment() {
                             setCandidates(prev => prev.map(c => c.id === selectedCandidate.id ? updated : c));
 
                             // Save to Supabase
-                            await supabase
-                              .from('hr_recruits')
-                              .update({ score: val })
-                              .eq('id', selectedCandidate.id);
+                            await updateRecruitStatus(selectedCandidate.id, { score: val });
                           }}
                           className={`w-14 bg-white border border-gray-200 rounded-lg px-1.5 py-0.5 text-xs font-black outline-none focus:border-[#A11212] text-center ${selectedCandidate.score >= 85 ? 'text-green-700' : selectedCandidate.score >= 70 ? 'text-orange-600' : selectedCandidate.score > 0 ? 'text-red-600' : 'text-gray-400'
                             }`}

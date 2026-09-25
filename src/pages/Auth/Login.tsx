@@ -9,7 +9,7 @@ import { Lock, Mail, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 const Login = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { session, role, loading } = useAuth();
+  const { session, role, loading, sessionReady } = useAuth();
   const isAr = i18n.language === 'ar';
   
   const [email, setEmail] = useState('');
@@ -29,10 +29,10 @@ const Login = () => {
       else if (role === 'client') navigate('/client');
       else if (role === 'department_head') navigate('/hod/dashboard');
       else navigate('/dashboard');
-    } else if (!loading && session && !role) {
+    } else if (!loading && sessionReady && session && !role) {
       setError('No role assigned to this account. Please contact admin.');
     }
-  }, [session, role, loading, navigate]);
+  }, [session, role, loading, sessionReady, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +51,9 @@ const Login = () => {
     // If successful, onAuthStateChange will fetch the role and redirect
   };
 
-  if (loading || (session && !role && !error)) {
+  // Wait for session to be fully resolved before showing login form
+  // This prevents the login page from flashing during refresh
+  if (!sessionReady || loading || (session && !role && !error)) {
     return (
       <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 gap-4">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-dark"></div>

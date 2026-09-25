@@ -8,6 +8,7 @@ type AuthContextType = {
   role: string | null;
   secondaryRoles: string[];
   loading: boolean;
+  sessionReady: boolean;
   signOut: () => Promise<void>;
   switchPortal: (targetRole: string) => void;
 };
@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthContextType>({
   role: null,
   secondaryRoles: [],
   loading: true,
+  sessionReady: false,
   signOut: async () => {},
   switchPortal: () => {},
 });
@@ -39,6 +41,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // If we already have a cached role, start loading as false for instant 0ms render
   const [loading, setLoading] = useState<boolean>(() => !localStorage.getItem('app_user_role'));
   
+  // Track whether the initial getSession() call has completed.
+  // This prevents ProtectedRoute from seeing session=null (not yet loaded)
+  // and prematurely redirecting to /login on page refresh.
+  const [sessionReady, setSessionReady] = useState(false);
+  
   // Track if we are already fetching the role to avoid race conditions
   const isFetchingRole = useRef(false);
 
@@ -53,6 +60,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (error) {
         console.error("Supabase session error:", error.message);
+        setSessionReady(true);
         setLoading(false);
         return;
       }
@@ -76,6 +84,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         if (immediateRole) {
           setRole(immediateRole);
+          setSessionReady(true);
           setLoading(false); 
         }
         
@@ -86,6 +95,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         localStorage.removeItem('app_user_secondary_roles');
         setRole(null);
         setSecondaryRoles([]);
+        setSessionReady(true);
         setLoading(false);
       }
 
@@ -190,6 +200,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     } finally {
       isFetchingRole.current = false;
+      setSessionReady(true);
       setLoading(false);
     }
   };
@@ -227,7 +238,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, role, secondaryRoles, loading, signOut, switchPortal }}>
+    <AuthContext.Provider value={{ session, user, role, secondaryRoles, loading, sessionReady, signOut, switchPortal }}>
       {children}
     </AuthContext.Provider>
   );

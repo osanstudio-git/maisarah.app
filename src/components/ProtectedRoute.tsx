@@ -7,13 +7,20 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
-  const { session, role, loading } = useAuth();
+  const { session, role, loading, sessionReady } = useAuth();
 
-  if (loading && !role) {
-    return <div className="min-h-screen flex justify-center items-center bg-gray-50"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-dark"></div></div>;
+  // CRITICAL: Wait until the initial session check is fully complete.
+  // Without this, on page refresh session is null while getSession() is still
+  // resolving, causing a premature redirect to /login.
+  if (!sessionReady || (loading && !role)) {
+    return (
+      <div className="min-h-screen flex justify-center items-center bg-gray-50">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-dark"></div>
+      </div>
+    );
   }
 
-  // Not logged in
+  // Not logged in (only after session is confirmed resolved)
   if (!session) {
     return <Navigate to="/login" replace />;
   }

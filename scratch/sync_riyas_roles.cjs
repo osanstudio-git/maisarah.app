@@ -24,7 +24,7 @@ async function syncAndCheck() {
       role: 'accountant',
       department_id: 'bookkeeping',
       secondary_roles: ['department_head', 'employee']
-    }
+    } 
   });
 
   console.log("manage-auth response:", data, error);

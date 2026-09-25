@@ -9,7 +9,7 @@ import {
   Download, UploadCloud, Plus, Edit, Trash2, CheckCircle2, X, PlusCircle, LayoutGrid, ListFilter, SlidersHorizontal, UserX, AlertCircle, ShieldAlert,
   Copy, Check, Share2, Send, Lock, Mail, Key, Loader2, Sparkles
 } from 'lucide-react';
-import { getLocalRecruits, upsertLocalRecruit, deleteLocalRecruit } from '../../utils/recruitmentSync';
+import { getLocalRecruits, upsertLocalRecruit, deleteLocalRecruit, upsertRecruitToDatabase } from '../../utils/recruitmentSync';
 import { getAllDepartments, getDepartmentById, getJobPositionsByDepartment } from '../../config/departments';
 
 interface Employee {
@@ -967,11 +967,14 @@ export default function HREmployees() {
           created_at: new Date().toISOString()
         };
 
-        upsertLocalRecruit(recruitPayload);
         try {
-          await supabase.from('hr_recruits').insert([recruitPayload]);
+          await Promise.race([
+            upsertRecruitToDatabase(recruitPayload),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Recruit sync timeout')), 3000))
+          ]);
         } catch (rErr) {
           console.warn('hr_recruits insert notice:', rErr);
+          upsertLocalRecruit(recruitPayload);
         }
 
         // Send Offer Welcome Email (Email A)
