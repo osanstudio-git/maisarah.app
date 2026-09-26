@@ -1033,41 +1033,79 @@ const EmployeeManagement = () => {
       }
 
       // Create Mode - using manage-auth edge function directly for seamless auth creation
-      const { data: authData, error: authErr } = await supabase.functions.invoke('manage-auth', {
-        body: {
-          email: cleanEmail,
-          password: formData.password,
-          full_name: formData.fullName,
-          role: formData.role,
-          department_id: formData.department_id,
-          secondary_roles: effectiveSecondary
+      try {
+        const authPromise = supabase.functions.invoke('manage-auth', {
+          body: {
+            email: cleanEmail,
+            password: formData.password,
+            full_name: formData.fullName,
+            role: formData.role,
+            department_id: formData.department_id,
+            secondary_roles: effectiveSecondary,
+            phone: formData.phone,
+            job_title: targetJobTitle,
+            dept: targetDeptName
+          }
+        });
+        const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
+          setTimeout(() => reject(new Error('Auth timeout')), 5000)
+        );
+        const { data: authData, error: authErr } = await Promise.race([authPromise, timeoutPromise]) as any;
+
+        if (authErr) console.warn('manage-auth create notice:', authErr);
+
+        const targetUserId = authData?.userId || authData?.user?.id || crypto.randomUUID();
+
+        // Upsert into hr_employees
+        try {
+          await supabase.from('hr_employees').upsert({
+            id: targetUserId,
+            full_name: formData.fullName,
+            email: cleanEmail,
+            phone: formData.phone,
+            role: targetJobTitle,
+            dept: targetDeptName,
+            accessRole: formData.role,
+            secondary_roles: effectiveSecondary,
+            created_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+        } catch (hrErr) {
+          console.warn('Client hr_employees upsert notice:', hrErr);
         }
-      });
 
-      if (authErr) throw authErr;
+        // Save locally to maisarah_placed_employees
+        try {
+          const placed = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+          const nextPlaced = [
+            {
+              id: targetUserId,
+              full_name: formData.fullName,
+              role: targetJobTitle,
+              dept: targetDeptName,
+              email: cleanEmail,
+              phone: formData.phone || '',
+              accessRole: formData.role,
+              secondary_roles: effectiveSecondary,
+              joined_date: new Date().toISOString().split('T')[0]
+            },
+            ...placed.filter((p: any) => p.email?.toLowerCase() !== cleanEmail && p.id !== targetUserId)
+          ];
+          localStorage.setItem('maisarah_placed_employees', JSON.stringify(nextPlaced));
+        } catch (lsErr) {
+          console.warn('Placed sync notice:', lsErr);
+        }
 
-      const targetUserId = authData?.userId || crypto.randomUUID();
-
-      // Upsert into hr_employees
-      await supabase.from('hr_employees').upsert({
-        id: targetUserId,
-        full_name: formData.fullName,
-        email: cleanEmail,
-        phone: formData.phone,
-        role: targetJobTitle,
-        dept: targetDeptName,
-        accessRole: formData.role,
-        secondary_roles: effectiveSecondary,
-        created_at: new Date().toISOString()
-      }, { onConflict: 'id' });
-
-      setCreatedCredentials({
-        email: cleanEmail,
-        password: formData.password
-      });
-      setShowCredentials(true);
-      setFormMessage({ type: 'success', text: isAr ? 'تم إضافة الموظف بنجاح' : 'Employee created successfully' });
-      fetchEmployees();
+        setCreatedCredentials({
+          email: cleanEmail,
+          password: formData.password
+        });
+        setShowCredentials(true);
+        setFormMessage({ type: 'success', text: isAr ? 'تم إضافة الموظف بنجاح' : 'Employee created successfully' });
+        fetchEmployees();
+        window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
+      } catch (createErr: any) {
+        setFormMessage({ type: 'error', text: createErr.message || (isAr ? 'فشلت إضافة الموظف' : 'Operation failed') });
+      }
     } catch (err: any) {
       setFormMessage({ type: 'error', text: err.message || 'Operation failed' });
     } finally {

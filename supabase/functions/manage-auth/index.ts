@@ -238,8 +238,30 @@ serve(async (req) => {
       console.warn('Profiles upsert warning:', profErr.message)
     }
 
+    // 3. Ensure hr_employees record is upserted with full info
+    const hrData: any = {
+      id: userId,
+      email: cleanEmail,
+      full_name: full_name || '',
+      phone: body.phone || '',
+      dept: body.dept || department_id || 'Audit',
+      role: body.job_title || role || 'Staff Member',
+      accessRole: role,
+      secondary_roles: secondary_roles || []
+    }
+    if (body.basic_salary) hrData.basic_salary = body.basic_salary
+    if (body.joined_date) hrData.joined_date = body.joined_date
+    if (body.immediate_supervisor) hrData.immediate_supervisor = body.immediate_supervisor
+    if (body.employee_type) hrData.employee_type = body.employee_type
+
+    try {
+      await supabaseAdmin.from('hr_employees').upsert(hrData, { onConflict: 'id' })
+    } catch (hrErr: any) {
+      console.warn('hr_employees upsert warning in manage-auth:', hrErr.message)
+    }
+
     return new Response(
-      JSON.stringify({ success: true, userId }),
+      JSON.stringify({ success: true, userId, user: { id: userId } }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (err: any) {

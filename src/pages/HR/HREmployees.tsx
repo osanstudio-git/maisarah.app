@@ -1058,15 +1058,22 @@ export default function HREmployees() {
               password: tempPassword,
               full_name: formData.name.trim(),
               role: accessRole,
-              department_id: departmentId
+              department_id: departmentId,
+              phone: formData.phone,
+              job_title: formData.role,
+              dept: formData.dept,
+              basic_salary: Number(formData.basicSalary || 0),
+              joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
+              immediate_supervisor: formData.immediateSupervisor || 'To Be Assigned by Executive Manager',
+              employee_type: formData.type || 'Experienced'
             }
           });
           const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
             setTimeout(() => reject(new Error('Auth timeout')), 5000)
           );
           const { data: authResult } = await Promise.race([authPromise, timeoutPromise]) as any;
-          if (authResult?.user?.id) {
-            targetId = authResult.user.id;
+          if (authResult?.userId || authResult?.user?.id) {
+            targetId = authResult.userId || authResult.user.id;
           }
         } catch (authErr) {
           console.warn('manage-auth invoke notice:', authErr);
