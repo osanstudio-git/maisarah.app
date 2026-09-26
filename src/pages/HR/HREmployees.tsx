@@ -1100,22 +1100,35 @@ export default function HREmployees() {
         if (f.file) {
           try {
             const filePath = `employees/${targetId}/${f.name}`;
-            const uploadPromise = supabase.storage
-              .from('documents')
-              .upload(filePath, f.file, {
-                cacheControl: '3600',
-                upsert: true
-              });
+
+            const reader = new FileReader();
+            const base64Promise = new Promise<string>((resolve, reject) => {
+              reader.onload = () => {
+                const res = reader.result as string;
+                const base64 = res.split(',')[1] || res;
+                resolve(base64);
+              };
+              reader.onerror = reject;
+            });
+            reader.readAsDataURL(f.file);
+            const base64Data = await base64Promise;
+
+            const uploadPromise = supabase.functions.invoke('manage-auth', {
+              body: {
+                action: 'upload_storage_file',
+                bucket: 'documents',
+                file_path: filePath,
+                file_base64: base64Data,
+                content_type: f.file.type || 'application/pdf'
+              }
+            });
             const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
               setTimeout(() => reject(new Error('Storage timeout')), 4000)
             );
-            const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]) as any;
+            const { data: edgeUpload, error: edgeErr } = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
-            if (!uploadError) {
-              const { data } = supabase.storage
-                .from('documents')
-                .getPublicUrl(filePath);
-              docUrl = data.publicUrl;
+            if (!edgeErr && edgeUpload?.success && edgeUpload?.url) {
+              docUrl = edgeUpload.url;
             } else {
               docUrl = URL.createObjectURL(f.file);
             }

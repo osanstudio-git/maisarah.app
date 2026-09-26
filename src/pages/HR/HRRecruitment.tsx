@@ -149,24 +149,35 @@ export default function HRRecruitment() {
           const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
           const filePath = `${fileName}`;
 
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('resumes')
-            .upload(filePath, cvFile, {
-              cacheControl: '3600',
-              upsert: false
-            });
+          // Convert file to Base64 for secure edge upload (bypasses storage RLS)
+          const reader = new FileReader();
+          const base64Promise = new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const res = reader.result as string;
+              const base64 = res.split(',')[1] || res;
+              resolve(base64);
+            };
+            reader.onerror = reject;
+          });
+          reader.readAsDataURL(cvFile);
+          const base64Data = await base64Promise;
 
-          if (uploadError) {
-            console.warn('Storage upload error (using local blob URL fallback):', uploadError);
-            uploadedUrl = URL.createObjectURL(cvFile);
+          const { data: edgeUpload, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
+            body: {
+              action: 'upload_storage_file',
+              bucket: 'resumes',
+              file_path: filePath,
+              file_base64: base64Data,
+              content_type: cvFile.type || 'application/pdf'
+            }
+          });
+
+          if (!edgeErr && edgeUpload?.success && edgeUpload?.url) {
+            uploadedUrl = edgeUpload.url;
           } else {
-            const { data } = supabase.storage
-              .from('resumes')
-              .getPublicUrl(filePath);
-            uploadedUrl = data.publicUrl;
+            uploadedUrl = URL.createObjectURL(cvFile);
           }
         } catch (storageErr) {
-          console.warn('Supabase storage upload failed, using local object URL fallback:', storageErr);
           uploadedUrl = URL.createObjectURL(cvFile);
         }
       }

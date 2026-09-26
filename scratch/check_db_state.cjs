@@ -12,9 +12,9 @@ envText.split('\n').forEach(line => {
 
 const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
 
-async function clean() {
-  await supabase.functions.invoke('manage-auth', { body: { action: 'delete_recruit', recruit_id: '11111111-2222-3333-4444-555555555555' } });
-  console.log('Cleaned up test recruit');
+async function checkStorage() {
+  const { data: buckets, error } = await supabase.storage.listBuckets();
+  console.log('Buckets:', buckets, 'Error:', error);
 }
 
-clean();
+checkStorage();

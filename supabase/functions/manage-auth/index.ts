@@ -79,6 +79,48 @@ serve(async (req) => {
       )
     }
 
+    if (action === 'upload_storage_file') {
+      const { bucket, file_path, file_base64, content_type } = body
+      if (!bucket || !file_path || !file_base64) {
+        return new Response(
+          JSON.stringify({ error: 'bucket, file_path and file_base64 are required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Ensure bucket exists
+      try {
+        await supabaseAdmin.storage.createBucket(bucket, { public: true })
+      } catch {}
+
+      const binaryStr = atob(file_base64)
+      const bytes = new Uint8Array(binaryStr.length)
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i)
+      }
+
+      const { data, error } = await supabaseAdmin.storage
+        .from(bucket)
+        .upload(file_path, bytes, {
+          contentType: content_type || 'application/octet-stream',
+          upsert: true
+        })
+
+      if (error) {
+        return new Response(
+          JSON.stringify({ success: false, error: error.message }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const { data: publicUrlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(file_path)
+
+      return new Response(
+        JSON.stringify({ success: true, url: publicUrlData.publicUrl }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     if (action === 'delete_recruit') {
       const { recruit_id } = body
       if (recruit_id) {
