@@ -1155,7 +1155,7 @@ export default function HREmployees() {
       if (isUuid) {
         // Sync profiles
         try {
-          await supabase.from('profiles').upsert({
+          const profPromise = supabase.from('profiles').upsert({
             id: targetId,
             full_name: formData.name.trim(),
             email: formData.email.trim().toLowerCase(),
@@ -1163,13 +1163,15 @@ export default function HREmployees() {
             role: accessRole,
             department_id: departmentId
           }, { onConflict: 'id' });
+          const timeoutP = new Promise((_, reject) => setTimeout(() => reject(new Error('Profile sync timeout')), 3000));
+          await Promise.race([profPromise, timeoutP]);
         } catch (pErr) {
           console.warn('Profile sync notice:', pErr);
         }
 
         // Sync hr_employees
         try {
-          await supabase.from('hr_employees').upsert({
+          const hrPromise = supabase.from('hr_employees').upsert({
             id: targetId,
             full_name: formData.name.trim(),
             email: formData.email.trim().toLowerCase(),
@@ -1220,6 +1222,8 @@ export default function HREmployees() {
             role: formData.role,
             dept: formData.dept
           }, { onConflict: 'id' });
+          const timeoutH = new Promise((_, reject) => setTimeout(() => reject(new Error('HR sync timeout')), 3000));
+          await Promise.race([hrPromise, timeoutH]);
         } catch (hErr) {
           console.warn('HR employees table sync notice:', hErr);
         }
@@ -2531,19 +2535,29 @@ export default function HREmployees() {
                       {isAr ? '👤 المدير العام (العمليات والمالية)' : '👤 General Manager (Operations & Finance)'}
                     </option>
 
-                    {/* Real Dynamic Personnel from Database */}
-                    {employees.length > 0 && (
-                      <optgroup label={isAr ? 'الموظفون والمشرفون المعتمدون (من قاعدة البيانات)' : 'Active Personnel (From Database)'}>
-                        {employees.map(emp => {
-                          const val = `${emp.name} (${emp.role || emp.dept})`;
-                          return (
-                            <option key={emp.id} value={val}>
-                              {emp.name} ({emp.role} - {emp.dept})
-                            </option>
-                          );
-                        })}
-                      </optgroup>
-                    )}
+                    {/* Real Dynamic HODs & Managers only */}
+                    {(() => {
+                      const validHODs = employees.filter(emp => {
+                        const roleLower = (emp.role || '').toLowerCase();
+                        const isHead = roleLower.includes('head') || roleLower.includes('hod') || roleLower.includes('رئيس');
+                        const isMgr = roleLower.includes('manager') || roleLower.includes('director') || roleLower.includes('executive') || roleLower.includes('مدير');
+                        const isNonSup = roleLower.includes('trainee') || roleLower.includes('intern') || roleLower.includes('specialist') || roleLower.includes('worker') || roleLower.includes('assistant');
+                        return (isHead || isMgr) && !isNonSup;
+                      });
+
+                      return validHODs.length > 0 ? (
+                        <optgroup label={isAr ? 'رؤساء الأقسام والمدراء المعتمدون (HODs)' : 'Department Heads & Managers (HODs)'}>
+                          {validHODs.map(emp => {
+                            const val = `${emp.name} (${emp.role || emp.dept})`;
+                            return (
+                              <option key={emp.id} value={val}>
+                                {emp.name} ({emp.role} - {emp.dept})
+                              </option>
+                            );
+                          })}
+                        </optgroup>
+                      ) : null;
+                    })()}
                   </select>
                 </div>
                 <div>

@@ -82,9 +82,13 @@ export function upsertLocalRecruit(candidate: RecruitCandidate) {
 
 export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
   try {
-    const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
+    const invokePromise = supabase.functions.invoke('manage-auth', {
       body: { action: 'get_recruits' }
     });
+    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
+      setTimeout(() => reject(new Error('Fetch timeout')), 4000)
+    );
+    const { data: edgeRes, error: edgeErr } = await Promise.race([invokePromise, timeoutPromise]) as any;
 
     if (!edgeErr && edgeRes?.success && Array.isArray(edgeRes.data)) {
       saveLocalRecruits(edgeRes.data);
@@ -102,7 +106,7 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
       return data;
     }
   } catch (e) {
-    console.warn('Supabase recruits fetch error, fallback to local storage:', e);
+    console.warn('Supabase recruits fetch notice, fallback to local storage:', e);
   }
   return getLocalRecruits();
 }
@@ -110,9 +114,13 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
 export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Promise<RecruitCandidate> {
   upsertLocalRecruit(candidate);
   try {
-    const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
+    const invokePromise = supabase.functions.invoke('manage-auth', {
       body: { action: 'upsert_recruit', recruit: candidate }
     });
+    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
+      setTimeout(() => reject(new Error('Upsert timeout')), 4000)
+    );
+    const { data: edgeRes, error: edgeErr } = await Promise.race([invokePromise, timeoutPromise]) as any;
     if (!edgeErr && edgeRes?.success && edgeRes?.data) {
       upsertLocalRecruit(edgeRes.data);
       return edgeRes.data;
@@ -126,9 +134,13 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
 export async function deleteRecruitFromDatabase(idOrEmail: string) {
   deleteLocalRecruit(idOrEmail);
   try {
-    await supabase.functions.invoke('manage-auth', {
+    const invokePromise = supabase.functions.invoke('manage-auth', {
       body: { action: 'delete_recruit', recruit_id: idOrEmail }
     });
+    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
+      setTimeout(() => reject(new Error('Delete timeout')), 4000)
+    );
+    await Promise.race([invokePromise, timeoutPromise]);
   } catch (e) {
     console.warn('Edge function delete recruit notice:', e);
   }
