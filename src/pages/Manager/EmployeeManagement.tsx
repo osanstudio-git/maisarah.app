@@ -376,6 +376,116 @@ const EmployeeManagement = () => {
         };
       });
 
+      // Also add any hr_employees that didn't have profiles
+      for (const h of hrEmployees || []) {
+        if (h.email && !mapped.some(m => m.id === h.id || (m.email && m.email.toLowerCase() === h.email.toLowerCase()))) {
+          let rawDept = h.department_id || h.dept || 'audit';
+          let normalizedDept = 'audit';
+          const lowerDept = String(rawDept).toLowerCase().trim();
+          if (lowerDept.includes('tax') || lowerDept.includes('vat')) normalizedDept = 'tax_vat';
+          else if (lowerDept.includes('book') || lowerDept.includes('ledger') || lowerDept.includes('account')) normalizedDept = 'bookkeeping';
+          else if (lowerDept.includes('advis') || lowerDept.includes('consult')) normalizedDept = 'business_advisory';
+          else if (lowerDept.includes('success') || lowerDept.includes('client') || lowerDept.includes('operat')) normalizedDept = 'client_success';
+          else if (lowerDept.includes('audit')) normalizedDept = 'audit';
+
+          const resolvedAccessRole = h.accessRole || h.role || 'employee';
+
+          mapped.push({
+            id: h.id || crypto.randomUUID(),
+            name_en: h.full_name || 'Staff Member',
+            name_ar: h.full_name || 'موظف',
+            email: h.email,
+            phone: h.phone || '',
+            role: resolvedAccessRole,
+            job_title: h.role || 'Auditor',
+            secondaryRoles: Array.isArray(h.secondary_roles) ? h.secondary_roles : [],
+            status: h.status || 'active',
+            tasksCompleted: 10,
+            activeJobs: 3,
+            delays: 0,
+            completionRate: 85,
+            joinedAt: h.joined_date || new Date().toISOString().split('T')[0],
+            department_id: normalizedDept,
+            civilId: h.civil_id || '',
+            passportNo: h.passport_no || '',
+            residencyNo: h.residency_no || '',
+            nationality: h.nationality || 'Omani',
+            dob: h.dob || '',
+            gender: h.gender || 'Male',
+            maritalStatus: h.marital_status || 'Single',
+            immediateSupervisor: h.immediate_supervisor || 'General Manager (Operations & Finance)',
+            basicSalary: Number(h.basic_salary || 1000),
+            type: h.employee_type || 'Experienced',
+            accommodationStatus: h.accommodation_status || 'Lives with family',
+            accommodationDetails: h.accommodation_details || '',
+            allowances: h.allowances || { transport: 150, housing: 250, other: 50 },
+            education: h.education || [],
+            experience: h.experience || [],
+            family: h.family || [],
+            emergencyContact: h.emergency_contact || { name: '', relation: '', phone: '' },
+            promotions: h.promotions || [],
+            disciplinaries: h.disciplinaries || [],
+            bonuses: h.bonuses || []
+          });
+        }
+      }
+
+      // Also merge hr_employee_records from localStorage (instant HR registration sync)
+      try {
+        const hrRecords: any[] = JSON.parse(localStorage.getItem('hr_employee_records') || '[]');
+        hrRecords.forEach(hr => {
+          if (hr.email && !mapped.some(m => m.id === hr.id || (m.email && m.email.toLowerCase() === hr.email.toLowerCase()))) {
+            let rawDept = hr.dept || 'audit';
+            let normalizedDept = 'audit';
+            const lowerDept = String(rawDept).toLowerCase().trim();
+            if (lowerDept.includes('tax') || lowerDept.includes('vat')) normalizedDept = 'tax_vat';
+            else if (lowerDept.includes('book') || lowerDept.includes('ledger') || lowerDept.includes('account')) normalizedDept = 'bookkeeping';
+            else if (lowerDept.includes('advis') || lowerDept.includes('consult')) normalizedDept = 'business_advisory';
+            else if (lowerDept.includes('success') || lowerDept.includes('client') || lowerDept.includes('operat')) normalizedDept = 'client_success';
+            else if (lowerDept.includes('audit')) normalizedDept = 'audit';
+
+            mapped.push({
+              id: hr.id || crypto.randomUUID(),
+              name_en: hr.name || 'Staff Member',
+              name_ar: hr.name || 'موظف',
+              email: hr.email,
+              phone: hr.phone || '',
+              role: hr.systemRole || 'employee',
+              job_title: hr.role || 'Auditor',
+              status: 'active',
+              tasksCompleted: 10,
+              activeJobs: 3,
+              delays: 0,
+              completionRate: 85,
+              joinedAt: hr.joinedDate || new Date().toISOString().split('T')[0],
+              department_id: normalizedDept,
+              civilId: hr.civilId || '',
+              passportNo: hr.passportNo || '',
+              residencyNo: hr.residencyNo || '',
+              nationality: hr.nationality || 'Omani',
+              dob: hr.dob || '',
+              gender: hr.gender || 'Male',
+              maritalStatus: hr.maritalStatus || 'Single',
+              immediateSupervisor: hr.immediateSupervisor || 'General Manager (Operations & Finance)',
+              basicSalary: Number(hr.basicSalary || 1000),
+              type: hr.type || 'Experienced',
+              accommodationStatus: hr.accommodationStatus || 'Lives with family',
+              accommodationDetails: hr.accommodationDetails || '',
+              allowances: hr.allowances || { transport: 150, housing: 250, other: 50 },
+              education: hr.education || [],
+              experience: hr.experience || [],
+              family: hr.family || [],
+              emergencyContact: hr.emergencyContact || { name: '', relation: '', phone: '' },
+              promotions: hr.promotions || [],
+              disciplinaries: hr.disciplinaries || [],
+              bonuses: hr.bonuses || []
+            });
+          }
+        });
+      } catch (hrRecErr) {
+        console.warn('Error reading hr_employee_records:', hrRecErr);
+      }
+
       // Merge locally placed employees if not already in mapped array
       try {
         const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
@@ -446,6 +556,9 @@ const EmployeeManagement = () => {
   useEffect(() => {
     fetchEmployees();
 
+    const handleEmpUpdated = () => fetchEmployees(true);
+    window.addEventListener('maisarah_employees_updated', handleEmpUpdated);
+
     // ── Supabase Realtime Subscription ─────────────────────────────────────────
     const channel = supabase
       .channel('manager-workforce-realtime')
@@ -466,6 +579,7 @@ const EmployeeManagement = () => {
       .subscribe();
 
     return () => {
+      window.removeEventListener('maisarah_employees_updated', handleEmpUpdated);
       supabase.removeChannel(channel);
     };
   }, [fetchEmployees]);
@@ -1602,10 +1716,10 @@ const EmployeeManagement = () => {
                           <label
                             key={sec.id}
                             className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${isPrimary
-                                ? 'bg-[#A11212]/10 border-[#A11212] text-[#A11212] opacity-90 cursor-not-allowed'
-                                : isChecked
-                                  ? 'bg-red-50 border-red-200 text-[#A11212]'
-                                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                              ? 'bg-[#A11212]/10 border-[#A11212] text-[#A11212] opacity-90 cursor-not-allowed'
+                              : isChecked
+                                ? 'bg-red-50 border-red-200 text-[#A11212]'
+                                : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
                               }`}
                           >
                             <input
