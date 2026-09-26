@@ -12,7 +12,7 @@ export interface RecruitCandidate {
   resume_name?: string;
   resume_url?: string;
   employment_type?: 'Experienced' | 'Trainee' | 'Worker';
-  placement_status?: 'pending_placement' | 'placed' | 'none';
+  placement_status?: 'pending_placement' | 'placed' | null;
   onboarding_tasks?: {
     contract_signed: boolean;
     bank_details_submitted: boolean;

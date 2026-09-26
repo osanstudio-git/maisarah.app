@@ -48,6 +48,12 @@ serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
+
+      // Defensively sanitize placement_status against check constraints
+      if (recruitData.placement_status !== 'pending_placement' && recruitData.placement_status !== 'placed') {
+        recruitData.placement_status = null
+      }
+
       const { data, error } = await supabaseAdmin
         .from('hr_recruits')
         .upsert(recruitData, { onConflict: 'id' })
@@ -67,6 +73,12 @@ serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
+
+      // Defensively sanitize placement_status against check constraints
+      if (updates.placement_status !== undefined && updates.placement_status !== 'pending_placement' && updates.placement_status !== 'placed') {
+        updates.placement_status = null
+      }
+
       const { data, error } = await supabaseAdmin
         .from('hr_recruits')
         .update(updates)

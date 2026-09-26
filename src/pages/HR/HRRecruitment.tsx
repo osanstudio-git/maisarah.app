@@ -195,7 +195,7 @@ export default function HRRecruitment() {
         resume_name: cvFile ? cvFile.name : null,
         resume_url: uploadedUrl,
         employment_type: newCandidate.employment_type,
-        placement_status: newCandidate.stage === 'offered' ? 'pending_placement' : 'none',
+        placement_status: newCandidate.stage === 'offered' ? 'pending_placement' : null,
         onboarding_tasks: {
           contract_signed: false,
           bank_details_submitted: false,
