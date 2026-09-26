@@ -968,10 +968,7 @@ export default function HREmployees() {
         };
 
         try {
-          await Promise.race([
-            upsertRecruitToDatabase(recruitPayload),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Recruit sync timeout')), 3000))
-          ]);
+          await upsertRecruitToDatabase(recruitPayload);
         } catch (rErr) {
           console.warn('hr_recruits insert notice:', rErr);
           upsertLocalRecruit(recruitPayload);
