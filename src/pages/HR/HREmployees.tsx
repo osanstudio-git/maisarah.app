@@ -622,7 +622,7 @@ export default function HREmployees() {
     gender: 'Male',
     maritalStatus: 'Single',
     joinedDate: '',
-    immediateSupervisor: 'Fatma Al-Harthy',
+    immediateSupervisor: 'To Be Assigned by Executive Manager',
     basicSalary: 1000,
     type: 'Experienced' as Employee['type'],
     accommodationStatus: 'Lives with family',
@@ -671,7 +671,7 @@ export default function HREmployees() {
       gender: 'Male',
       maritalStatus: 'Single',
       joinedDate: new Date().toISOString().split('T')[0],
-      immediateSupervisor: 'Fatma Al-Harthy',
+      immediateSupervisor: 'To Be Assigned by Executive Manager',
       basicSalary: 1000,
       type: 'Experienced',
       accommodationStatus: 'Lives with family',
@@ -728,7 +728,7 @@ export default function HREmployees() {
       gender: emp.gender,
       maritalStatus: emp.maritalStatus,
       joinedDate: emp.joinedDate,
-      immediateSupervisor: emp.immediateSupervisor || 'Fatma Al-Harthy',
+      immediateSupervisor: emp.immediateSupervisor || 'To Be Assigned by Executive Manager',
       basicSalary: emp.basicSalary,
       type: emp.type || 'Experienced',
       accommodationStatus: emp.accommodationStatus || 'Lives with family',
@@ -956,7 +956,7 @@ export default function HREmployees() {
           stage: 'offered',
           placement_status: 'pending_placement',
           employment_type: formData.type || 'Experienced',
-          supervisor: formData.immediateSupervisor || 'Fatma Al-Harthy',
+          supervisor: formData.immediateSupervisor || 'To Be Assigned by Executive Manager',
           score: 0,
           onboarding_tasks: {
             contract_signed: false,
@@ -1166,7 +1166,7 @@ export default function HREmployees() {
             gender: formData.gender || 'Male',
             marital_status: formData.maritalStatus || 'Single',
             joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
-            immediate_supervisor: formData.immediateSupervisor || 'Fatma Al-Harthy',
+            immediate_supervisor: formData.immediateSupervisor || 'To Be Assigned by Executive Manager',
             basic_salary: Number(formData.basicSalary || 0),
             employee_type: formData.type || 'Experienced',
             accommodation_status: formData.accommodationStatus || 'Lives with family',
@@ -2504,11 +2504,29 @@ export default function HREmployees() {
                     onChange={(e) => setFormData({ ...formData, immediateSupervisor: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
                   >
-                    <option value="Fatma Al-Harthy">Fatma Al-Harthy (Audit Head - رئيس قسم التدقيق)</option>
-                    <option value="Nasser Al-Amri">Nasser Al-Amri (Tax Head - رئيس قسم الضرائب)</option>
-                    <option value="Salim Al-Harthy">Salim Al-Harthy (Accounting Head - رئيس قسم المحاسبة)</option>
-                    <option value="Hamid">Hamid (Audit & Assurance Lead - مشرف التدقيق)</option>
-                    <option value="Riyas">Riyas (Finance & Bookkeeping Lead - مشرف الحسابات)</option>
+                    <option value="To Be Assigned by Executive Manager">
+                      {isAr ? '📋 يتم تعيينه بواسطة المدير التنفيذي (عند الاعتماد)' : '📋 To Be Assigned by Executive Manager'}
+                    </option>
+                    <option value="Executive Board & Management">
+                      {isAr ? '🏛️ الإدارة التنفيذية ومجلس الإدارة' : '🏛️ Executive Board & Management'}
+                    </option>
+                    <option value="General Manager (Operations & Finance)">
+                      {isAr ? '👤 المدير العام (العمليات والمالية)' : '👤 General Manager (Operations & Finance)'}
+                    </option>
+
+                    {/* Real Dynamic Personnel from Database */}
+                    {employees.length > 0 && (
+                      <optgroup label={isAr ? 'الموظفون والمشرفون المعتمدون (من قاعدة البيانات)' : 'Active Personnel (From Database)'}>
+                        {employees.map(emp => {
+                          const val = `${emp.name} (${emp.role || emp.dept})`;
+                          return (
+                            <option key={emp.id} value={val}>
+                              {emp.name} ({emp.role} - {emp.dept})
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
                 <div>
