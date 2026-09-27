@@ -315,6 +315,29 @@ const EmployeeManagement = () => {
       if (profErr) throw profErr;
       if (hrErr) throw hrErr;
 
+      // Helper for robust department normalization
+      const getNormalizedDepartmentId = (rawDept: any, role: string = '', jobTitle: string = ''): string => {
+        const d = String(rawDept || '').toLowerCase().trim();
+        const r = String(role || '').toLowerCase().trim();
+        const t = String(jobTitle || '').toLowerCase().trim();
+
+        if (d.includes('manage') || d.includes('execut') || r === 'manager' || t.includes('executive') || t.includes('manager')) return 'management';
+        if (d.includes('hr') || d.includes('human') || d.includes('support') || d.includes('admin') || r === 'hr' || t.includes('hr')) return 'internal_support';
+        if (d.includes('innovat') || d.includes('tech') || d.includes('dev')) return 'innovation_dev';
+        if (d.includes('crm') || d.includes('client') || d.includes('success')) return 'client_success';
+        if (d.includes('tax') || d.includes('vat')) return 'tax_vat';
+        if (d.includes('book') || d.includes('ledger') || d.includes('account')) return 'bookkeeping';
+        if (d.includes('advis') || d.includes('consult')) return 'business_advisory';
+        if (d.includes('audit')) return 'audit';
+
+        if (r === 'manager' || t.includes('executive')) return 'management';
+        if (r === 'hr' || t.includes('hr')) return 'internal_support';
+        if (r === 'crm' || t.includes('client')) return 'client_success';
+        if (r === 'accountant') return 'bookkeeping';
+
+        return 'audit';
+      };
+
       // Map DB profiles to Employee interface, joining with hr_employees details
       const mapped: Employee[] = (profiles || []).map(p => {
         const hrEmp = (hrEmployees || []).find(h => h.id === p.id || (h.email && p.email && h.email.toLowerCase() === p.email.toLowerCase()));
@@ -322,29 +345,6 @@ const EmployeeManagement = () => {
         // Mock stats for completion rate if not present
         const total = Math.floor(Math.random() * 40 + 10);
         const done = Math.floor(total * (0.5 + Math.random() * 0.5));
-
-        // Helper for robust department normalization
-        const getNormalizedDepartmentId = (rawDept: any, role: string = '', jobTitle: string = ''): string => {
-          const d = String(rawDept || '').toLowerCase().trim();
-          const r = String(role || '').toLowerCase().trim();
-          const t = String(jobTitle || '').toLowerCase().trim();
-
-          if (d.includes('manage') || d.includes('execut') || r === 'manager' || t.includes('executive') || t.includes('manager')) return 'management';
-          if (d.includes('hr') || d.includes('human') || d.includes('support') || d.includes('admin') || r === 'hr' || t.includes('hr')) return 'internal_support';
-          if (d.includes('innovat') || d.includes('tech') || d.includes('dev')) return 'innovation_dev';
-          if (d.includes('crm') || d.includes('client') || d.includes('success')) return 'client_success';
-          if (d.includes('tax') || d.includes('vat')) return 'tax_vat';
-          if (d.includes('book') || d.includes('ledger') || d.includes('account')) return 'bookkeeping';
-          if (d.includes('advis') || d.includes('consult')) return 'business_advisory';
-          if (d.includes('audit')) return 'audit';
-
-          if (r === 'manager' || t.includes('executive')) return 'management';
-          if (r === 'hr' || t.includes('hr')) return 'internal_support';
-          if (r === 'crm' || t.includes('client')) return 'client_success';
-          if (r === 'accountant') return 'bookkeeping';
-
-          return 'audit';
-        };
 
         // Normalize department
         let rawDept = p.department_id || p.department || hrEmp?.department_id || hrEmp?.dept || '';
