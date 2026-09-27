@@ -789,8 +789,7 @@ const EmployeeManagement = () => {
           full_name: selectedPlacement.name,
           email: selectedPlacement.email,
           role: effectiveRole,
-          department_id: targetDeptKey,
-          secondary_roles: assignedSecondary
+          department_id: targetDeptKey
         }, { onConflict: 'id' });
         if (profileError) console.warn('Profiles upsert warning:', profileError.message);
       } catch (pErr) {
@@ -822,7 +821,8 @@ const EmployeeManagement = () => {
       };
 
       try {
-        const { error: employeeUpsertError } = await supabase.from('hr_employees').upsert(newEmployeeRecord, { onConflict: 'id' });
+        const { accessRole: _accRole, ...dbEmployeeRecord } = newEmployeeRecord;
+        const { error: employeeUpsertError } = await supabase.from('hr_employees').upsert(dbEmployeeRecord, { onConflict: 'id' });
         if (employeeUpsertError) console.warn('HR Employees upsert warning:', employeeUpsertError.message);
       } catch (eErr) {
         console.warn('HR Employees upsert caught exception:', eErr);
@@ -963,10 +963,8 @@ const EmployeeManagement = () => {
         // 2. Update security access profiles table
         const profileUpdate: any = {
           full_name: formData.fullName,
-          phone: formData.phone,
           role: formData.role,
-          department_id: formData.department_id,
-          secondary_roles: effectiveSecondary
+          department_id: formData.department_id
         };
         try {
           await supabase
@@ -987,9 +985,7 @@ const EmployeeManagement = () => {
           email: cleanEmail,
           phone: formData.phone,
           dept: targetDeptName,
-          role: targetJobTitle,
-          accessRole: formData.role,
-          secondary_roles: effectiveSecondary
+          role: targetJobTitle
         };
 
         try {
@@ -1088,8 +1084,6 @@ const EmployeeManagement = () => {
             phone: formData.phone,
             role: targetJobTitle,
             dept: targetDeptName,
-            accessRole: formData.role,
-            secondary_roles: effectiveSecondary,
             created_at: new Date().toISOString()
           }, { onConflict: 'id' });
         } catch (hrErr) {

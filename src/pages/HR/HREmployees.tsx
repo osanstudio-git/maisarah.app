@@ -502,8 +502,7 @@ export default function HREmployees() {
         try {
           // 1. Update profiles table
           await supabase.from('profiles').update({
-            full_name: emp.name,
-            phone: emp.phone,
+            full_name: emp.name
           }).eq('id', emp.id);
 
           // 2. Upsert hr_employees table
@@ -1302,7 +1301,6 @@ export default function HREmployees() {
                 id: finalTargetId,
                 full_name: formData.name.trim(),
                 email: formData.email.trim().toLowerCase(),
-                phone: formData.phone || '',
                 role: accessRole,
                 department_id: departmentId
               }, { onConflict: 'id' });
