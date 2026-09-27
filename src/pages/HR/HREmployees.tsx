@@ -967,19 +967,18 @@ export default function HREmployees() {
           created_at: new Date().toISOString()
         };
 
-        try {
-          await upsertRecruitToDatabase(recruitPayload);
-        } catch (rErr) {
-          console.warn('hr_recruits insert notice:', rErr);
-          upsertLocalRecruit(recruitPayload);
-        }
+        // Fire-and-forget: save to DB in background — never block the UI
+        upsertLocalRecruit(recruitPayload);
+        upsertRecruitToDatabase(recruitPayload).catch(rErr =>
+          console.warn('hr_recruits background save notice:', rErr)
+        );
 
-        // Send Offer Welcome Email (Email A)
+        // Send Offer Welcome Email (non-blocking)
         supabase.functions.invoke('send-email', {
           body: {
             to: formData.email.trim().toLowerCase(),
-            subject: isAr 
-              ? 'مرحباً بك في مجموعة ميسرة - عرض العمل والخطوات القادمة' 
+            subject: isAr
+              ? 'مرحباً بك في مجموعة ميسرة - عرض العمل والخطوات القادمة'
               : 'Welcome to Maisarah Group - Job Offer & Next Steps',
             html: `
               <div style="font-family: sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px;">
@@ -988,8 +987,8 @@ export default function HREmployees() {
                 </h2>
                 <p>${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${formData.name}</strong>,</p>
                 <p>
-                  ${isAr 
-                    ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تفعيل عرض العمل الخاص بك وتوجيهه للمدير التنفيذي لوضع اللمسات الأخيرة وتعيين المشرف المباشر واعتماد الصلاحيات.' 
+                  ${isAr
+                    ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تفعيل عرض العمل الخاص بك وتوجيهه للمدير التنفيذي لوضع اللمسات الأخيرة وتعيين المشرف المباشر واعتماد الصلاحيات.'
                     : 'We are thrilled to welcome you to the Maisarah family. Your job offer has been submitted and forwarded to the Executive Manager for final department placement and role configuration.'}
                 </p>
                 <div style="background-color: #fcfcfc; border: 1px solid #f0f0f0; padding: 15px; border-radius: 10px; margin: 20px 0;">
@@ -999,8 +998,8 @@ export default function HREmployees() {
                   <p style="margin: 4px 0;"><strong>${isAr ? 'المشرف المقترح:' : 'Designated Supervisor:'}</strong> ${formData.immediateSupervisor}</p>
                 </div>
                 <p>
-                  ${isAr 
-                    ? 'ستصلك رسالة ثانية تحتوي على بيانات الدخول إلى منصة الموظفين فور اعتماد المدير التنفيذي.' 
+                  ${isAr
+                    ? 'ستصلك رسالة ثانية تحتوي على بيانات الدخول إلى منصة الموظفين فور اعتماد المدير التنفيذي.'
                     : 'You will receive your portal login credentials as soon as executive placement review is completed.'}
                 </p>
                 <br/>
@@ -1013,17 +1012,18 @@ export default function HREmployees() {
 
         window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
 
+        // Show success and close modal IMMEDIATELY — no waiting for DB
         setNotification({
           show: true,
           title: isAr ? 'تم إرسال الملف للاعتماد' : 'Forwarded to Manager',
-          message: isAr 
-            ? `تم إرسال ملف ${formData.name} إلى قائمة التعيينات والاعتماد لدى المدير التنفيذي بنجاح.` 
+          message: isAr
+            ? `تم إرسال ملف ${formData.name} إلى قائمة التعيينات والاعتماد لدى المدير التنفيذي بنجاح.`
             : `Candidate ${formData.name} forwarded to Executive Manager Placements queue.`,
           type: 'success'
         });
 
-        setShowModal(false);
         setIsSubmitting(false);
+        setShowModal(false);
         return;
       }
 
@@ -1044,10 +1044,8 @@ export default function HREmployees() {
         departmentId = 'client_success';
       }
 
-      let emailDispatched = false;
-
       if (!isEditMode) {
-        // 1. Create or update user in Supabase Auth via manage-auth Edge Function
+        // Call manage-auth edge function with a strict 8s timeout to create the auth user
         try {
           const authPromise = supabase.functions.invoke('manage-auth', {
             body: {
@@ -1066,7 +1064,7 @@ export default function HREmployees() {
             }
           });
           const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-            setTimeout(() => reject(new Error('Auth timeout')), 5000)
+            setTimeout(() => reject(new Error('Auth timeout')), 8000)
           );
           const { data: authResult } = await Promise.race([authPromise, timeoutPromise]) as any;
           if (authResult?.userId || authResult?.user?.id) {
@@ -1096,210 +1094,59 @@ export default function HREmployees() {
         }
       }
 
-      // 2. Upload actual files to Supabase Storage (non-blocking safe timeout)
-      const uploadedDocs: Array<{ name: string; type: string; expiry: string; status: 'active' | 'warning' | 'expired'; url?: string }> = [];
+      // Build new employee record for immediate local state
+      const newEmp: Employee = {
+        id: targetId,
+        name: formData.name,
+        role: formData.role,
+        dept: formData.dept,
+        email: formData.email,
+        phone: formData.phone,
+        companyPhone: formData.companyPhone,
+        civilId: formData.civilId,
+        passportNo: formData.passportNo,
+        residencyNo: formData.residencyNo,
+        nationality: formData.nationality,
+        dob: formData.dob,
+        gender: formData.gender,
+        maritalStatus: formData.maritalStatus,
+        joinedDate: formData.joinedDate || new Date().toISOString().split('T')[0],
+        immediateSupervisor: formData.immediateSupervisor,
+        basicSalary: Number(formData.basicSalary),
+        type: formData.type,
+        accommodationStatus: formData.accommodationStatus,
+        accommodationDetails: formData.accommodationDetails,
+        allowances: {
+          transport: Number(formData.transportAllowance),
+          housing: Number(formData.housingAllowance),
+          other: Number(formData.otherAllowance)
+        },
+        education: formData.degree ? [{
+          degree: formData.degree,
+          field: formData.field,
+          institution: formData.institution,
+          year: formData.year
+        }] : [],
+        experience: formData.prevRole ? [{
+          role: formData.prevRole,
+          company: formData.prevCompany,
+          duration: formData.prevDuration
+        }] : [],
+        family: [],
+        emergencyContact: {
+          name: formData.emergencyName,
+          relation: formData.emergencyRelation,
+          phone: formData.emergencyPhone
+        },
+        documents: [{ name: 'Civil ID Card', type: 'civil_id', expiry: '2028-12-31', status: 'active' as const }],
+        promotions: [],
+        disciplinaries: [],
+        bonuses: [],
+        transfers: []
+      };
 
-      for (const f of formData.uploadedFiles) {
-        let docUrl: string | undefined = undefined;
-        if (f.file) {
-          try {
-            const filePath = `employees/${targetId}/${f.name}`;
-
-            const reader = new FileReader();
-            const base64Promise = new Promise<string>((resolve, reject) => {
-              reader.onload = () => {
-                const res = reader.result as string;
-                const base64 = res.split(',')[1] || res;
-                resolve(base64);
-              };
-              reader.onerror = reject;
-            });
-            reader.readAsDataURL(f.file);
-            const base64Data = await base64Promise;
-
-            const uploadPromise = supabase.functions.invoke('manage-auth', {
-              body: {
-                action: 'upload_storage_file',
-                bucket: 'documents',
-                file_path: filePath,
-                file_base64: base64Data,
-                content_type: f.file.type || 'application/pdf'
-              }
-            });
-            const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-              setTimeout(() => reject(new Error('Storage timeout')), 4000)
-            );
-            const { data: edgeUpload, error: edgeErr } = await Promise.race([uploadPromise, timeoutPromise]) as any;
-
-            if (!edgeErr && edgeUpload?.success && edgeUpload?.url) {
-              docUrl = edgeUpload.url;
-            } else {
-              docUrl = URL.createObjectURL(f.file);
-            }
-          } catch {
-            docUrl = URL.createObjectURL(f.file);
-          }
-        }
-
-        uploadedDocs.push({
-          name: f.name,
-          type: f.type,
-          expiry: '2029-12-31',
-          status: 'active',
-          url: docUrl
-        });
-      }
-
-      // 3. Update or Insert profiles and hr_employees in DB
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
-      if (isUuid) {
-        // Sync profiles
-        try {
-          const profPromise = supabase.from('profiles').upsert({
-            id: targetId,
-            full_name: formData.name.trim(),
-            email: formData.email.trim().toLowerCase(),
-            phone: formData.phone || '',
-            role: accessRole,
-            department_id: departmentId
-          }, { onConflict: 'id' });
-          const timeoutP = new Promise((_, reject) => setTimeout(() => reject(new Error('Profile sync timeout')), 3000));
-          await Promise.race([profPromise, timeoutP]);
-        } catch (pErr) {
-          console.warn('Profile sync notice:', pErr);
-        }
-
-        // Sync hr_employees
-        try {
-          const hrPromise = supabase.from('hr_employees').upsert({
-            id: targetId,
-            full_name: formData.name.trim(),
-            email: formData.email.trim().toLowerCase(),
-            phone: formData.phone || '',
-            company_phone: formData.companyPhone || '',
-            civil_id: formData.civilId || '',
-            passport_no: formData.passportNo || '',
-            residency_no: formData.residencyNo || '',
-            nationality: formData.nationality || 'Omani',
-            dob: formData.dob || null,
-            gender: formData.gender || 'Male',
-            marital_status: formData.maritalStatus || 'Single',
-            joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
-            immediate_supervisor: formData.immediateSupervisor || 'To Be Assigned by Executive Manager',
-            basic_salary: Number(formData.basicSalary || 0),
-            employee_type: formData.type || 'Experienced',
-            accommodation_status: formData.accommodationStatus || 'Lives with family',
-            accommodation_details: formData.accommodationDetails || '',
-            allowances: {
-              transport: Number(formData.transportAllowance || 0),
-              housing: Number(formData.housingAllowance || 0),
-              other: Number(formData.otherAllowance || 0)
-            },
-            education: formData.degree ? [{
-              degree: formData.degree,
-              field: formData.field,
-              institution: formData.institution,
-              year: formData.year
-            }] : [],
-            experience: formData.prevRole ? [{
-              role: formData.prevRole,
-              company: formData.prevCompany,
-              duration: formData.prevDuration
-            }] : [],
-            family: [],
-            emergency_contact: {
-              name: formData.emergencyName || '',
-              relation: formData.emergencyRelation || 'Parent',
-              phone: formData.emergencyPhone || ''
-            },
-            documents: uploadedDocs.length > 0 ? uploadedDocs : [
-              { name: 'Civil ID Card', type: 'civil_id', expiry: '2028-12-31', status: 'active' }
-            ],
-            promotions: [],
-            disciplinaries: [],
-            bonuses: [],
-            transfers: [],
-            role: formData.role,
-            dept: formData.dept
-          }, { onConflict: 'id' });
-          const timeoutH = new Promise((_, reject) => setTimeout(() => reject(new Error('HR sync timeout')), 3000));
-          await Promise.race([hrPromise, timeoutH]);
-        } catch (hErr) {
-          console.warn('HR employees table sync notice:', hErr);
-        }
-      }
-
-      // Also sync to maisarah_placed_employees for Manager and HOD portals
-      try {
-        const placed = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
-        const nextPlaced = [
-          {
-            id: targetId,
-            full_name: formData.name.trim(),
-            role: formData.role,
-            dept: formData.dept,
-            email: formData.email.trim().toLowerCase(),
-            phone: formData.phone || '',
-            basic_salary: Number(formData.basicSalary || 0),
-            employee_type: formData.type || 'Experienced',
-            joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
-          },
-          ...placed.filter((p: any) => p.email?.toLowerCase() !== formData.email.trim().toLowerCase() && p.id !== targetId)
-        ];
-        localStorage.setItem('maisarah_placed_employees', JSON.stringify(nextPlaced));
-      } catch (e) {
-        console.warn('Placed sync notice:', e);
-      }
-
-      // 4. Send Welcome credentials email in background (non-blocking)
-      if (!isEditMode) {
-        supabase.functions.invoke('send-email', {
-          body: {
-            to: formData.email.trim().toLowerCase(),
-            subject: isAr
-              ? 'مرحباً بك في مجموعة ميسرة - حساب الموظف الخاص بك جاهز!'
-              : 'Welcome to Maisarah - Your Employee Portal is Active!',
-            html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; color: #1f2937; background-color: #ffffff;">
-                <div style="text-align: center; margin-bottom: 24px;">
-                  <h2 style="color: #A11212; margin: 0; font-size: 22px;">Welcome to Maisarah Group!</h2>
-                  <p style="color: #6b7280; font-size: 13px; margin-top: 4px;">Employee Onboarding & Portal Activation</p>
-                </div>
-                
-                <p style="font-size: 14px; line-height: 1.6;">Dear <strong>${formData.name}</strong>,</p>
-                <p style="font-size: 14px; line-height: 1.6;">
-                  ${isAr
-                    ? 'يسعدنا إبلاغك بأنه قد تم تسجيلك بنجاح في المنصة الرقمية لمجموعة ميسرة. تم إنشاء وتفعيل حساب الموظف الخاص بك.'
-                    : 'We are pleased to inform you that your employee record has been registered in the Maisarah platform. Your portal account is now active.'}
-                </p>
-
-                <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; margin: 24px 0;">
-                  <h4 style="margin: 0 0 12px 0; color: #111827; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Your Access Credentials:</h4>
-                  <p style="margin: 6px 0; font-size: 13px;"><strong>Portal URL:</strong> <a href="${window.location.origin}/login" style="color: #A11212; text-decoration: underline;">${window.location.origin}/login</a></p>
-                  <p style="margin: 6px 0; font-size: 13px;"><strong>Email Address:</strong> <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${formData.email.trim().toLowerCase()}</code></p>
-                  <p style="margin: 6px 0; font-size: 13px;"><strong>Temporary Password:</strong> <code style="background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${tempPassword}</code></p>
-                  <p style="margin: 6px 0; font-size: 13px;"><strong>Designated Role:</strong> ${formData.role}</p>
-                  <p style="margin: 6px 0; font-size: 13px;"><strong>Department:</strong> ${formData.dept}</p>
-                </div>
-
-                <p style="font-size: 13px; color: #4b5563; line-height: 1.5;">
-                  ${isAr
-                    ? 'يرجى تسجيل الدخول لتحديث ملفك وتغيير كلمة المرور المؤقتة لضمان أمان حسابك.'
-                    : 'Please sign in to access your employee workspace and change your temporary password upon initial login.'}
-                </p>
-
-                <div style="margin-top: 30px; border-top: 1px solid #f3f4f6; padding-top: 16px; font-size: 12px; color: #9ca3af; text-align: center;">
-                  <p style="margin: 0;">Maisarah Corporate Platform • Human Resources Department</p>
-                </div>
-              </div>
-            `
-          }
-        }).catch(mailErr => console.warn('Welcome credentials email notice:', mailErr));
-        emailDispatched = true;
-      }
-
-      // 5. Update local state
       if (isEditMode) {
+        // Edit mode: update in place
         const updatedList = employees.map(emp => {
           if (emp.id === formData.id) {
             return {
@@ -1343,92 +1190,131 @@ export default function HREmployees() {
                 name: formData.emergencyName,
                 relation: formData.emergencyRelation,
                 phone: formData.emergencyPhone
-              },
-              documents: [...emp.documents, ...uploadedDocs.filter(d => !emp.documents.some(ed => ed.name === d.name))]
+              }
             };
           }
           return emp;
         });
         setEmployees(updatedList);
         localStorage.setItem('hr_employee_records', JSON.stringify(updatedList));
-
         setNotification({
           show: true,
           title: isAr ? 'تم تحديث الملف' : 'Dossier Updated',
           message: isAr ? 'تم حفظ التعديلات على ملف الموظف بنجاح.' : 'Employee dossier updated successfully.',
           type: 'success'
         });
+        setIsSubmitting(false);
         setShowModal(false);
       } else {
-        const newEmp: Employee = {
-          id: targetId,
-          name: formData.name,
-          role: formData.role,
-          dept: formData.dept,
-          email: formData.email,
-          phone: formData.phone,
-          companyPhone: formData.companyPhone,
-          civilId: formData.civilId,
-          passportNo: formData.passportNo,
-          residencyNo: formData.residencyNo,
-          nationality: formData.nationality,
-          dob: formData.dob,
-          gender: formData.gender,
-          maritalStatus: formData.maritalStatus,
-          joinedDate: formData.joinedDate || new Date().toISOString().split('T')[0],
-          immediateSupervisor: formData.immediateSupervisor,
-          basicSalary: Number(formData.basicSalary),
-          type: formData.type,
-          accommodationStatus: formData.accommodationStatus,
-          accommodationDetails: formData.accommodationDetails,
-          allowances: {
-            transport: Number(formData.transportAllowance),
-            housing: Number(formData.housingAllowance),
-            other: Number(formData.otherAllowance)
-          },
-          education: formData.degree ? [{
-            degree: formData.degree,
-            field: formData.field,
-            institution: formData.institution,
-            year: formData.year
-          }] : [],
-          experience: formData.prevRole ? [{
-            role: formData.prevRole,
-            company: formData.prevCompany,
-            duration: formData.prevDuration
-          }] : [],
-          family: [],
-          emergencyContact: {
-            name: formData.emergencyName,
-            relation: formData.emergencyRelation,
-            phone: formData.emergencyPhone
-          },
-          documents: uploadedDocs.length > 0 ? uploadedDocs : [
-            { name: 'Civil ID Card', type: 'civil_id', expiry: '2028-12-31', status: 'active' as const }
-          ],
-          promotions: [],
-          disciplinaries: [],
-          bonuses: [],
-          transfers: []
-        };
+        // New employee: add to list immediately and show credentials modal
         const nextList = [newEmp, ...employees.filter(e => e.id !== targetId)];
         setEmployees(nextList);
         localStorage.setItem('hr_employee_records', JSON.stringify(nextList));
         setSelectedEmpId(newEmp.id);
 
+        // Sync maisarah_placed_employees for Manager/HOD portals
+        try {
+          const placed = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+          const nextPlaced = [
+            {
+              id: targetId,
+              full_name: formData.name.trim(),
+              role: formData.role,
+              dept: formData.dept,
+              email: formData.email.trim().toLowerCase(),
+              phone: formData.phone || '',
+              basic_salary: Number(formData.basicSalary || 0),
+              employee_type: formData.type || 'Experienced',
+              joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
+            },
+            ...placed.filter((p: any) => p.email?.toLowerCase() !== formData.email.trim().toLowerCase() && p.id !== targetId)
+          ];
+          localStorage.setItem('maisarah_placed_employees', JSON.stringify(nextPlaced));
+          window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
+        } catch (lsErr) {
+          console.warn('Placed sync notice:', lsErr);
+        }
+
+        // Send Welcome credentials email (fire-and-forget)
+        supabase.functions.invoke('send-email', {
+          body: {
+            to: formData.email.trim().toLowerCase(),
+            subject: isAr ? 'مرحباً بك في مجموعة ميسرة - حساب الموظف الخاص بك جاهز!' : 'Welcome to Maisarah - Your Employee Portal is Active!',
+            html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; direction: ${isAr ? 'rtl' : 'ltr'};">
+              <h2 style="color: #A11212;">Welcome to Maisarah Group!</h2>
+              <p>Dear <strong>${formData.name}</strong>,</p>
+              <p>Your employee portal account is now active.</p>
+              <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:18px;margin:24px 0;">
+                <p><strong>Portal:</strong> <a href="${window.location.origin}/login">${window.location.origin}/login</a></p>
+                <p><strong>Email:</strong> <code>${formData.email.trim().toLowerCase()}</code></p>
+                <p><strong>Temp Password:</strong> <code style="background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:4px;">${tempPassword}</code></p>
+                <p><strong>Role:</strong> ${formData.role}</p>
+                <p><strong>Department:</strong> ${formData.dept}</p>
+              </div>
+              <p style="color:#6b7280;font-size:13px;">Please sign in and change your temporary password upon first login.</p>
+              <p style="color:#9ca3af;font-size:12px;margin-top:20px;">Maisarah Corporate Platform • HR Department</p>
+            </div>`
+          }
+        }).catch(mailErr => console.warn('Welcome email notice:', mailErr));
+
+        // Background DB sync (non-blocking — never hangs the UI)
+        const finalTargetId = targetId;
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalTargetId);
+        if (isUuid) {
+          (async () => {
+            try {
+              await supabase.from('profiles').upsert({
+                id: finalTargetId,
+                full_name: formData.name.trim(),
+                email: formData.email.trim().toLowerCase(),
+                phone: formData.phone || '',
+                role: accessRole,
+                department_id: departmentId
+              }, { onConflict: 'id' });
+            } catch (e) { console.warn('Profile bg sync:', e); }
+
+            try {
+              await supabase.from('hr_employees').upsert({
+                id: finalTargetId,
+                full_name: formData.name.trim(),
+                email: formData.email.trim().toLowerCase(),
+                phone: formData.phone || '',
+                company_phone: formData.companyPhone || '',
+                civil_id: formData.civilId || '',
+                passport_no: formData.passportNo || '',
+                residency_no: formData.residencyNo || '',
+                nationality: formData.nationality || 'Omani',
+                dob: formData.dob || null,
+                gender: formData.gender || 'Male',
+                marital_status: formData.maritalStatus || 'Single',
+                joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
+                immediate_supervisor: formData.immediateSupervisor || 'To Be Assigned by Executive Manager',
+                basic_salary: Number(formData.basicSalary || 0),
+                employee_type: formData.type || 'Experienced',
+                accommodation_status: formData.accommodationStatus || 'Lives with family',
+                role: formData.role,
+                dept: formData.dept,
+                accessRole: accessRole
+              }, { onConflict: 'id' });
+            } catch (e) { console.warn('HR employees bg sync:', e); }
+          })();
+        }
+
+        // Show credentials modal IMMEDIATELY
         setCreatedCredentials({
           name: formData.name,
           email: formData.email,
           password: tempPassword,
           role: formData.role,
           dept: formData.dept,
-          emailDispatched
+          emailDispatched: true
         });
+        setIsSubmitting(false);
         setShowCredentialsModal(true);
         setShowModal(false);
       }
     } catch (err: any) {
-      console.error("Employee registration error:", err);
+      console.error('Employee registration error:', err);
       setFormError(err.message || (isAr ? 'فشل تسجيل الموظف. يرجى المحاولة مجدداً.' : 'Failed to register employee. Please try again.'));
     } finally {
       setIsSubmitting(false);
