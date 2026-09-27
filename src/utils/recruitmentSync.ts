@@ -86,6 +86,33 @@ function sanitizePlacementStatus(status?: string | null): 'pending_placement' | 
   return null;
 }
 
+function getDeletedBlacklist(): string[] {
+  try {
+    const raw = localStorage.getItem('maisarah_deleted_employees');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export function isRecruitDeleted(id?: string, email?: string, name?: string): boolean {
+  const list = getDeletedBlacklist();
+  if (list.length === 0) return false;
+
+  const idLower = (id || '').trim().toLowerCase();
+  const emailLower = (email || '').trim().toLowerCase();
+  const nameLower = (name || '').trim().toLowerCase();
+
+  return list.some(d => {
+    const dLower = d.trim().toLowerCase();
+    return (idLower && dLower === idLower) ||
+           (emailLower && dLower === emailLower) ||
+           (nameLower && dLower === nameLower);
+  });
+}
+
 /**
  * Sync all recruits from Supabase DB directly (no edge function needed for reads).
  * Falls back to localStorage if the DB is unreachable.
@@ -99,26 +126,12 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
       .order('created_at', { ascending: false });
 
     if (!error && Array.isArray(data)) {
-      const local = getLocalRecruits();
-      const mergedMap = new Map<string, RecruitCandidate>();
+      // Filter out deleted/blacklisted candidates
+      const cleanDbData = data.filter(item => !isRecruitDeleted(item.id, item.email, item.name));
 
-      // First add DB records
-      data.forEach(item => {
-        if (item.id) mergedMap.set(item.id, item);
-      });
-
-      // Preserve local items that are not in DB yet (unsynced or pending local items)
-      local.forEach(item => {
-        if (item.id && !mergedMap.has(item.id)) {
-          mergedMap.set(item.id, item);
-          // Retry background upsert to DB
-          upsertRecruitToDatabase(item).catch(err => console.warn('Retry DB upsert notice:', err));
-        }
-      });
-
-      const mergedList = Array.from(mergedMap.values());
-      saveLocalRecruits(mergedList);
-      return mergedList;
+      // Save database state directly to localStorage so deletions are synced
+      saveLocalRecruits(cleanDbData);
+      return cleanDbData;
     }
 
     console.warn('Direct hr_recruits read error:', error?.message);
