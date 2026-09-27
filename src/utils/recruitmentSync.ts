@@ -203,6 +203,27 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
   return candidate;
 }
 
+export async function invokeEdgeFunctionWithTimeout(
+  functionName: string,
+  payload: any,
+  timeoutMs: number = 3000
+): Promise<any> {
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`Edge function ${functionName} timed out after ${timeoutMs}ms`)), timeoutMs)
+  );
+
+  try {
+    const res = await Promise.race([
+      supabase.functions.invoke(functionName, { body: payload }),
+      timeoutPromise
+    ]);
+    return res;
+  } catch (err) {
+    console.warn(`Edge function ${functionName} notice:`, err);
+    return { data: null, error: err };
+  }
+}
+
 /**
  * Delete a recruit from the DB.
  * Always removes from localStorage immediately.
@@ -218,9 +239,9 @@ export async function deleteRecruitFromDatabase(idOrEmail: string) {
 
     if (error) {
       console.warn('Direct delete failed, trying edge function:', error.message);
-      await supabase.functions.invoke('manage-auth', {
-        body: { action: 'delete_recruit', recruit_id: idOrEmail }
-      });
+      await invokeEdgeFunctionWithTimeout('manage-auth', {
+        action: 'delete_recruit', recruit_id: idOrEmail
+      }, 3000);
     }
   } catch (e) {
     console.warn('Recruit delete notice:', e);
@@ -253,9 +274,9 @@ export async function updateRecruitStatus(id: string, updates: Partial<RecruitCa
 
     if (error) {
       console.warn('Direct update failed, trying edge function:', error.message);
-      await supabase.functions.invoke('manage-auth', {
-        body: { action: 'update_recruit', recruit_id: id, updates: sanitizedUpdates }
-      });
+      await invokeEdgeFunctionWithTimeout('manage-auth', {
+        action: 'update_recruit', recruit_id: id, updates: sanitizedUpdates
+      }, 3000);
     }
   } catch (e) {
     console.warn('Recruit update notice:', e);

@@ -8,6 +8,7 @@ import {
   saveLocalRecruits,
   updateRecruitStatus,
   deleteLocalRecruit,
+  invokeEdgeFunctionWithTimeout,
   DEFAULT_OFFERED_RECRUITS
 } from '../../utils/recruitmentSync';
 import {
@@ -763,24 +764,22 @@ const EmployeeManagement = () => {
       const cleanEmail = selectedPlacement.email.trim().toLowerCase();
       const assignedSecondary = (placementData.secondaryRoles || []).filter((r: string) => r !== effectiveRole);
 
-      // 1. Synchronize Supabase Auth Account and Password via Admin Auth API (Edge Function)
+      // 1. Synchronize Supabase Auth Account and Password via Admin Auth API (Edge Function with 3s non-blocking timeout)
       try {
-        const { data: authResult, error: authErr } = await supabase.functions.invoke('manage-auth', {
-          body: {
-            email: cleanEmail,
-            password: tempPassword,
-            full_name: selectedPlacement.name,
-            role: effectiveRole,
-            department_id: targetDeptKey,
-            secondary_roles: assignedSecondary
-          }
-        });
+        const authRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
+          email: cleanEmail,
+          password: tempPassword,
+          full_name: selectedPlacement.name,
+          role: effectiveRole,
+          department_id: targetDeptKey,
+          secondary_roles: assignedSecondary
+        }, 3000);
 
-        if (!authErr && authResult?.userId) {
-          userId = authResult.userId;
+        if (authRes?.data?.userId) {
+          userId = authRes.data.userId;
         }
       } catch (authEdgeErr) {
-        console.warn('manage-auth edge function notice:', authEdgeErr);
+        console.warn('manage-auth edge function non-blocking notice:', authEdgeErr);
       }
 
       // 2. Insert/Upsert profile record (safely catch RLS/FK warnings)
