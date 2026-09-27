@@ -640,7 +640,7 @@ export default function HREmployees() {
     emergencyName: '',
     emergencyRelation: 'Parent',
     emergencyPhone: '',
-    activationMode: 'direct_activate' as 'direct_activate' | 'manager_placement',
+    activationMode: 'manager_placement' as 'direct_activate' | 'manager_placement',
     uploadedFiles: [] as Array<{ name: string; type: string; file?: File }>
   });
 
@@ -689,7 +689,7 @@ export default function HREmployees() {
       emergencyName: '',
       emergencyRelation: 'Parent',
       emergencyPhone: '',
-      activationMode: 'direct_activate',
+      activationMode: 'manager_placement',
       uploadedFiles: []
     });
     setShowModal(true);
@@ -746,7 +746,7 @@ export default function HREmployees() {
       emergencyName: emp.emergencyContact?.name || '',
       emergencyRelation: emp.emergencyContact?.relation || 'Parent',
       emergencyPhone: emp.emergencyContact?.phone || '',
-      activationMode: 'direct_activate',
+      activationMode: 'manager_placement',
       uploadedFiles: []
     });
     setShowModal(true);
@@ -1012,13 +1012,48 @@ export default function HREmployees() {
 
         window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
 
+        // Also add to local HR employee list (status: pending) so it shows in HR portal
+        const pendingEmp: any = {
+          id: recruitId,
+          name: formData.name.trim(),
+          role: 'Pending Assignment',
+          dept: 'Pending Department',
+          email: formData.email.trim().toLowerCase(),
+          phone: formData.phone || '',
+          companyPhone: formData.companyPhone || '',
+          civilId: formData.civilId || '',
+          passportNo: formData.passportNo || '',
+          residencyNo: formData.residencyNo || '',
+          nationality: formData.nationality || 'Omani',
+          dob: formData.dob || '',
+          gender: formData.gender || 'Male',
+          maritalStatus: formData.maritalStatus || 'Single',
+          joinedDate: formData.joinedDate || new Date().toISOString().split('T')[0],
+          immediateSupervisor: 'To Be Assigned by Executive Manager',
+          basicSalary: 0,
+          type: 'Experienced',
+          status: 'pending_placement',
+          accommodationStatus: formData.accommodationStatus || 'Lives with family',
+          accommodationDetails: formData.accommodationDetails || '',
+          allowances: { transport: 0, housing: 0, other: 0 },
+          education: formData.degree ? [{ degree: formData.degree, field: formData.field, institution: formData.institution, year: formData.year }] : [],
+          experience: formData.prevRole ? [{ role: formData.prevRole, company: formData.prevCompany, duration: formData.prevDuration }] : [],
+          family: [],
+          emergencyContact: { name: formData.emergencyName || '', relation: formData.emergencyRelation || 'Parent', phone: formData.emergencyPhone || '' },
+          documents: [{ name: 'Civil ID Card', type: 'civil_id', expiry: '2028-12-31', status: 'active' }],
+          promotions: [], disciplinaries: [], bonuses: [], transfers: []
+        };
+        const updatedEmpList = [pendingEmp, ...employees.filter(e => e.email?.toLowerCase() !== pendingEmp.email && e.id !== recruitId)];
+        setEmployees(updatedEmpList);
+        localStorage.setItem('hr_employee_records', JSON.stringify(updatedEmpList));
+
         // Show success and close modal IMMEDIATELY — no waiting for DB
         setNotification({
           show: true,
           title: isAr ? 'تم إرسال الملف للاعتماد' : 'Forwarded to Manager',
           message: isAr
             ? `تم إرسال ملف ${formData.name} إلى قائمة التعيينات والاعتماد لدى المدير التنفيذي بنجاح.`
-            : `Candidate ${formData.name} forwarded to Executive Manager Placements queue.`,
+            : `${formData.name} added to Manager's New Hire Placements queue for review.`,
           type: 'success'
         });
 
@@ -2023,61 +2058,23 @@ export default function HREmployees() {
             )}
 
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              {/* Onboarding Workflow Selection (When registering new employee) */}
+              {/* All new hires always go to Manager for placement — no activation mode picker */}
               {!isEditMode && (
-                <div className="bg-gradient-to-r from-red-50/70 via-gray-50 to-red-50/70 border border-red-100/80 rounded-2xl p-3.5 mb-2">
-                  <label className="block text-[10px] font-black text-[#A11212] uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                    <Sparkles size={13} className="text-[#A11212]" />
-                    {isAr ? 'مسار التسجيل والاعتماد' : 'Onboarding & Activation Mode'}
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, activationMode: 'direct_activate' })}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
-                        formData.activationMode === 'direct_activate'
-                          ? 'bg-white border-[#A11212] shadow-sm ring-2 ring-[#A11212]/20'
-                          : 'bg-white/60 border-gray-200 hover:bg-white opacity-70'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-gray-900 flex items-center gap-1.5">
-                          ⚡ {isAr ? 'تفعيل فوري وإصدار بيانات الدخول' : 'Direct Activation'}
-                        </span>
-                        {formData.activationMode === 'direct_activate' && (
-                          <span className="h-2 w-2 rounded-full bg-[#A11212]"></span>
-                        )}
-                      </div>
-                      <p className="text-[9px] text-gray-500 font-bold leading-tight">
-                        {isAr
-                          ? 'إنشاء الحساب فوراً وتوليد كلمة المرور وإرسال بريد الدخول للموظف'
-                          : 'Creates login account, generates password & emails credentials immediately'}
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, activationMode: 'manager_placement' })}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
-                        formData.activationMode === 'manager_placement'
-                          ? 'bg-white border-[#A11212] shadow-sm ring-2 ring-[#A11212]/20'
-                          : 'bg-white/60 border-gray-200 hover:bg-white opacity-70'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-gray-900 flex items-center gap-1.5">
-                          📋 {isAr ? 'إحالة للمدير التنفيذي للاعتماد' : 'Forward to Manager'}
-                        </span>
-                        {formData.activationMode === 'manager_placement' && (
-                          <span className="h-2 w-2 rounded-full bg-[#A11212]"></span>
-                        )}
-                      </div>
-                      <p className="text-[9px] text-gray-500 font-bold leading-tight">
-                        {isAr
-                          ? 'إرسال عرض عمل وإحالة المرشح للمدير التنفيذي لاعتماد القسم والمشرف'
-                          : 'Sends job offer email & queues in Manager Placements for final review'}
-                      </p>
-                    </button>
+                <div className="flex items-center gap-3 bg-gradient-to-r from-red-50 to-orange-50 border border-red-100 rounded-2xl px-4 py-3 mb-1">
+                  <div className="h-8 w-8 rounded-xl bg-[#A11212]/10 flex items-center justify-center shrink-0">
+                    <span className="text-base">📋</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-gray-900">{isAr ? 'إحالة للمدير التنفيذي للاعتماد' : 'Forward to Manager for Placement'}</p>
+                    <p className="text-[9px] text-gray-500 font-bold leading-tight mt-0.5">
+                      {isAr
+                        ? 'سيتولى المدير التنفيذي تعيين المسمى الوظيفي والقسم والمشرف المباشر'
+                        : 'Manager will assign role, department & supervisor upon review'}
+                    </p>
+                  </div>
+                  <div className="ml-auto flex items-center gap-1.5 text-[#A11212] bg-white border border-red-100 rounded-lg px-2.5 py-1 shadow-sm">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#A11212] animate-pulse"></span>
+                    <span className="text-[9px] font-black uppercase tracking-wide">{isAr ? 'نشط' : 'Active'}</span>
                   </div>
                 </div>
               )}
@@ -2111,81 +2108,7 @@ export default function HREmployees() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-[#A11212] uppercase tracking-widest mb-1.5">
-                    {isAr ? 'صلاحية النظام (System Role)' : 'System Access Role'}
-                  </label>
-                  <select
-                    value={formData.systemRole}
-                    onChange={(e) => setFormData({ ...formData, systemRole: e.target.value as any })}
-                    className="w-full bg-red-50/50 border border-red-200 rounded-xl px-4 py-2.5 text-xs font-black text-[#A11212] outline-none focus:border-[#A11212] cursor-pointer"
-                  >
-                    <option value="employee">{isAr ? '👤 موظف قياسي (Standard Employee)' : '👤 Standard Employee'}</option>
-                    <option value="accountant">{isAr ? '💼 محاسب (Accountant)' : '💼 Accountant'}</option>
-                    <option value="department_head">{isAr ? '👑 رئيس قسم (Dept Head / HOD)' : '👑 Department Head (HOD)'}</option>
-                    <option value="hr">{isAr ? '📋 موارد بشرية (HR Specialist)' : '📋 HR Specialist'}</option>
-                    <option value="crm">{isAr ? '🤝 علاقات العملاء (CRM Coordinator)' : '🤝 CRM Coordinator'}</option>
-                    <option value="manager">{isAr ? '🏛️ مدير تنفيذي (Executive Manager)' : '🏛️ Executive Manager'}</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'القسم' : 'Department'}
-                  </label>
-                  <select
-                    value={formData.dept}
-                    onChange={(e) => {
-                      const newDept = e.target.value;
-                      const deptObj = getAllDepartments().find(d => d.id === newDept || d.name.toLowerCase() === newDept.toLowerCase());
-                      const positions = getJobPositionsByDepartment(deptObj?.id || newDept);
-                      setFormData({
-                        ...formData,
-                        dept: deptObj ? deptObj.name : newDept,
-                        role: positions[0] || 'Staff Member'
-                      });
-                    }}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
-                  >
-                    {getAllDepartments().map(d => (
-                      <option key={d.id} value={d.name}>{d.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'المسمى الوظيفي' : 'Designated Position'}
-                  </label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
-                  >
-                    {getJobPositionsByDepartment(
-                      getAllDepartments().find(d => d.name.toLowerCase() === (formData.dept || '').toLowerCase() || d.id === formData.dept)?.id || formData.dept
-                    ).map(pos => (
-                      <option key={pos} value={pos}>{pos}</option>
-                    ))}
-                    <option value="Department Head">Department Head</option>
-                    <option value="Senior Associate">Senior Associate</option>
-                    <option value="Junior Associate">Junior Associate</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'فئة الموظف' : 'Category Type'}
-                  </label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
-                  >
-                    <option value="Experienced">Experienced (خبير)</option>
-                    <option value="Trainee">Trainee (متدرب)</option>
-                    <option value="Worker">Worker (عامل)</option>
-                  </select>
-                </div>
-              </div>
+              {/* Role/Dept/Category are assigned by Manager — HR does not set these */}
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
@@ -2390,72 +2313,15 @@ export default function HREmployees() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 border-t border-gray-100 pt-4">
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'تاريخ مباشرة العمل' : 'Joined Date'}
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.joinedDate}
-                    onChange={(e) => setFormData({ ...formData, joinedDate: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-[#A11212] uppercase tracking-widest mb-1.5">
-                    {isAr ? 'المشرف المباشر / رئيس القسم (HOD)' : 'Immediate Supervisor / HOD'}
-                  </label>
-                  <select
-                    value={formData.immediateSupervisor}
-                    onChange={(e) => setFormData({ ...formData, immediateSupervisor: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] cursor-pointer"
-                  >
-                    <option value="To Be Assigned by Executive Manager">
-                      {isAr ? '📋 يتم تعيينه بواسطة المدير التنفيذي (عند الاعتماد)' : '📋 To Be Assigned by Executive Manager'}
-                    </option>
-                    <option value="Executive Board & Management">
-                      {isAr ? '🏛️ الإدارة التنفيذية ومجلس الإدارة' : '🏛️ Executive Board & Management'}
-                    </option>
-                    <option value="General Manager (Operations & Finance)">
-                      {isAr ? '👤 المدير العام (العمليات والمالية)' : '👤 General Manager (Operations & Finance)'}
-                    </option>
-
-                    {/* Real Dynamic HODs & Managers only */}
-                    {(() => {
-                      const validHODs = employees.filter(emp => {
-                        const roleLower = (emp.role || '').toLowerCase();
-                        const isHead = roleLower.includes('head') || roleLower.includes('hod') || roleLower.includes('رئيس');
-                        const isMgr = roleLower.includes('manager') || roleLower.includes('director') || roleLower.includes('executive') || roleLower.includes('مدير');
-                        const isNonSup = roleLower.includes('trainee') || roleLower.includes('intern') || roleLower.includes('specialist') || roleLower.includes('worker') || roleLower.includes('assistant');
-                        return (isHead || isMgr) && !isNonSup;
-                      });
-
-                      return validHODs.length > 0 ? (
-                        <optgroup label={isAr ? 'رؤساء الأقسام والمدراء المعتمدون (HODs)' : 'Department Heads & Managers (HODs)'}>
-                          {validHODs.map(emp => {
-                            const val = `${emp.name} (${emp.role || emp.dept})`;
-                            return (
-                              <option key={emp.id} value={val}>
-                                {emp.name} ({emp.role} - {emp.dept})
-                              </option>
-                            );
-                          })}
-                        </optgroup>
-                      ) : null;
-                    })()}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'الراتب الأساسي (ر.ع)' : 'Basic Salary (OMR)'}
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.basicSalary}
-                    onChange={(e) => setFormData({ ...formData, basicSalary: Number(e.target.value) })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                  />
+              {/* Joined Date only — Supervisor & Salary assigned by Manager */}
+              <div className="grid grid-cols-1 gap-4 border-t border-gray-100 pt-4">
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5">
+                  <span className="text-xs">ℹ️</span>
+                  <p className="text-[9px] font-bold text-amber-700">
+                    {isAr
+                      ? 'سيتم تعيين القسم والمسمى الوظيفي والمشرف والراتب من قِبل المدير التنفيذي عند مراجعة الملف'
+                      : 'Department, role, supervisor & salary will be assigned by the Executive Manager upon review.'}
+                  </p>
                 </div>
               </div>
 
@@ -2673,19 +2539,13 @@ export default function HREmployees() {
                 {isSubmitting ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    <span>
-                      {formData.activationMode === 'manager_placement' && !isEditMode
-                        ? (isAr ? 'جاري إحالة المرشح للمدير...' : 'Forwarding to Manager...')
-                        : (isAr ? 'جاري التسجيل وتفعيل الحساب...' : 'Registering & Activating...')}
-                    </span>
+                    <span>{isAr ? 'جاري الإرسال للمدير...' : 'Forwarding to Manager...'}</span>
                   </>
                 ) : (
                   <span>
                     {isEditMode
                       ? (isAr ? 'حفظ التعديلات' : 'Save Modifications')
-                      : formData.activationMode === 'manager_placement'
-                        ? (isAr ? '📋 إحالة للمدير التنفيذي للاعتماد' : '📋 Forward for Manager Review')
-                        : (isAr ? '⚡ تسجيل وتفعيل الحساب فوراً' : '⚡ Register & Activate Credentials')}
+                      : (isAr ? '📋 إرسال للمدير للاعتماد' : '📋 Forward to Manager')}
                   </span>
                 )}
               </button>
