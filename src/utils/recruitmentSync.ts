@@ -128,6 +128,22 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
   return getLocalRecruits();
 }
 
+function sanitizeRecruitForDb(candidate: any): any {
+  const allowedKeys = [
+    'id', 'name', 'role', 'dept', 'stage', 'score', 'email', 'phone',
+    'resume_name', 'resume_url', 'employment_type', 'placement_status',
+    'onboarding_tasks', 'created_at'
+  ];
+  const sanitized: any = {};
+  for (const key of allowedKeys) {
+    if (key in candidate && candidate[key] !== undefined) {
+      sanitized[key] = candidate[key];
+    }
+  }
+  sanitized.placement_status = sanitizePlacementStatus(candidate.placement_status);
+  return sanitized;
+}
+
 /**
  * Save a recruit to the DB directly.
  * Always updates localStorage immediately for instant UI response.
@@ -137,10 +153,7 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
   // 1. Always save to localStorage first (instant, cross-page)
   upsertLocalRecruit(candidate);
 
-  const sanitized = {
-    ...candidate,
-    placement_status: sanitizePlacementStatus(candidate.placement_status),
-  };
+  const sanitized = sanitizeRecruitForDb(candidate);
 
   // 2. Try direct Supabase upsert (no edge function cold-start)
   try {
