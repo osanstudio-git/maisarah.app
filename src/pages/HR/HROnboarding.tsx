@@ -113,20 +113,13 @@ export default function HROnboarding() {
               <p>${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${c.name}</strong>,</p>
               <p>
                 ${isAr 
-                  ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تفعيل عرض العمل الخاص بك وتوجيهه للمدير التنفيذي المسؤول لوضع اللمسات الأخيرة وتعيين القسم والمشرف المباشر.' 
+                  ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تفعيل عرض العمل الخاص بك وتوجيهه للمدير التنفيذي المسؤول لوضع اللمسات الأخيرة وتعيين القسم وتحديد الصلاحيات والمشرف المباشر.' 
                   : 'We are absolutely thrilled to welcome you to the Maisarah Group family. We would like to inform you that your job offer has been successfully processed and forwarded to the Executive Operations Manager for final department and supervisor placement allocation.'}
               </p>
-              <div style="background-color: #fcfcfc; border: 1px solid #f0f0f0; padding: 15px; border-radius: 10px; margin: 20px 0;">
-                <h3 style="margin-top: 0; color: #555;">${isAr ? 'تفاصيل التوظيف الأولية:' : 'Initial Employment Details:'}</h3>
-                <p><strong>${isAr ? 'الاسم الكامل:' : 'Full Name:'}</strong> ${c.name}</p>
-                <p><strong>${isAr ? 'المسمى الوظيفي المقترح:' : 'Designated Position:'}</strong> ${c.role}</p>
-                <p><strong>${isAr ? 'القسم المقترح:' : 'Department:'}</strong> ${c.dept}</p>
-                <p><strong>${isAr ? 'نوع التوظيف:' : 'Employment Type:'}</strong> ${c.employment_type || 'Experienced'}</p>
-              </div>
               <p>
                 ${isAr 
-                  ? 'بمجرد أن يقوم المدير المسؤول باعتماد تفاصيل التعيين، ستصلك رسالة بريد إلكتروني ثانية تحتوي على رابط تفعيل الحساب وبيانات تسجيل الدخول الخاصة بك لبدء مهام قائمة مباشرة العمل.' 
-                  : 'As soon as the responsible manager confirms your final placement, you will receive a second email containing your portal activation link and secure temporary credentials to access your Employee Dashboard and begin your onboarding checklist.'}
+                  ? 'بمجرد أن يقوم المدير المسؤول باعتماد تفاصيل التعيين، ستصلك رسالة بريد إلكتروني ثانية تحتوي على رابط تفعيل الحساب وبيانات تسجيل الدخول وتفاصيل التعيين النهائية.' 
+                  : 'As soon as the responsible manager confirms your final placement, you will receive a second email containing your portal activation link, final placement details, and secure temporary credentials to access your Employee Dashboard.'}
               </p>
               <br/>
               <p>${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>

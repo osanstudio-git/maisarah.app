@@ -323,18 +323,43 @@ const EmployeeManagement = () => {
         const total = Math.floor(Math.random() * 40 + 10);
         const done = Math.floor(total * (0.5 + Math.random() * 0.5));
 
+        // Helper for robust department normalization
+        const getNormalizedDepartmentId = (rawDept: any, role: string = '', jobTitle: string = ''): string => {
+          const d = String(rawDept || '').toLowerCase().trim();
+          const r = String(role || '').toLowerCase().trim();
+          const t = String(jobTitle || '').toLowerCase().trim();
+
+          if (d.includes('manage') || d.includes('execut') || r === 'manager' || t.includes('executive') || t.includes('manager')) return 'management';
+          if (d.includes('hr') || d.includes('human') || d.includes('support') || d.includes('admin') || r === 'hr' || t.includes('hr')) return 'internal_support';
+          if (d.includes('innovat') || d.includes('tech') || d.includes('dev')) return 'innovation_dev';
+          if (d.includes('crm') || d.includes('client') || d.includes('success')) return 'client_success';
+          if (d.includes('tax') || d.includes('vat')) return 'tax_vat';
+          if (d.includes('book') || d.includes('ledger') || d.includes('account')) return 'bookkeeping';
+          if (d.includes('advis') || d.includes('consult')) return 'business_advisory';
+          if (d.includes('audit')) return 'audit';
+
+          if (r === 'manager' || t.includes('executive')) return 'management';
+          if (r === 'hr' || t.includes('hr')) return 'internal_support';
+          if (r === 'crm' || t.includes('client')) return 'client_success';
+          if (r === 'accountant') return 'bookkeeping';
+
+          return 'audit';
+        };
+
         // Normalize department
-        let rawDept = p.department_id || p.department || hrEmp?.department_id || hrEmp?.dept || 'audit';
-        let normalizedDept = 'audit';
-        const lowerDept = String(rawDept).toLowerCase().trim();
-        if (lowerDept.includes('tax') || lowerDept.includes('vat')) normalizedDept = 'tax_vat';
-        else if (lowerDept.includes('book') || lowerDept.includes('ledger') || lowerDept.includes('account')) normalizedDept = 'bookkeeping';
-        else if (lowerDept.includes('advis') || lowerDept.includes('consult')) normalizedDept = 'business_advisory';
-        else if (lowerDept.includes('success') || lowerDept.includes('client') || lowerDept.includes('operat')) normalizedDept = 'client_success';
-        else if (lowerDept.includes('audit')) normalizedDept = 'audit';
+        let rawDept = p.department_id || p.department || hrEmp?.department_id || hrEmp?.dept || '';
+        let normalizedDept = getNormalizedDepartmentId(rawDept, p.role || hrEmp?.role, hrEmp?.role);
 
         const realPhone = hrEmp?.phone || p.phone || '';
         const secRoles = Array.isArray(p.secondary_roles) ? p.secondary_roles : (Array.isArray(hrEmp?.secondary_roles) ? hrEmp.secondary_roles : []);
+
+        const resolvedJobTitle = hrEmp?.role || (
+          p.role === 'manager' ? 'Operations & Executive Manager' :
+          p.role === 'hr' ? 'HR Specialist' :
+          p.role === 'crm' ? 'Client Relationship Officer' :
+          p.role === 'department_head' ? 'Department Head (HOD)' :
+          p.role === 'accountant' ? 'Senior Accountant' : 'Staff Member'
+        );
 
         return {
           id: p.id,
@@ -343,7 +368,7 @@ const EmployeeManagement = () => {
           email: p.email || hrEmp?.email || '',
           phone: realPhone,
           role: p.role || 'employee', // access role
-          job_title: hrEmp?.role || (p.role === 'department_head' ? 'Department Head (HOD)' : 'Auditor'), // designated job position
+          job_title: resolvedJobTitle,
           secondaryRoles: secRoles,
           status: hrEmp?.status || 'active',
           tasksCompleted: done,
@@ -380,16 +405,16 @@ const EmployeeManagement = () => {
       // Also add any hr_employees that didn't have profiles
       for (const h of hrEmployees || []) {
         if (h.email && !mapped.some(m => m.id === h.id || (m.email && m.email.toLowerCase() === h.email.toLowerCase()))) {
-          let rawDept = h.department_id || h.dept || 'audit';
-          let normalizedDept = 'audit';
-          const lowerDept = String(rawDept).toLowerCase().trim();
-          if (lowerDept.includes('tax') || lowerDept.includes('vat')) normalizedDept = 'tax_vat';
-          else if (lowerDept.includes('book') || lowerDept.includes('ledger') || lowerDept.includes('account')) normalizedDept = 'bookkeeping';
-          else if (lowerDept.includes('advis') || lowerDept.includes('consult')) normalizedDept = 'business_advisory';
-          else if (lowerDept.includes('success') || lowerDept.includes('client') || lowerDept.includes('operat')) normalizedDept = 'client_success';
-          else if (lowerDept.includes('audit')) normalizedDept = 'audit';
-
+          let rawDept = h.department_id || h.dept || '';
           const resolvedAccessRole = h.accessRole || h.role || 'employee';
+          let normalizedDept = getNormalizedDepartmentId(rawDept, resolvedAccessRole, h.role);
+
+          const resolvedJobTitle = h.role || (
+            resolvedAccessRole === 'manager' ? 'Operations & Executive Manager' :
+            resolvedAccessRole === 'hr' ? 'HR Specialist' :
+            resolvedAccessRole === 'crm' ? 'Client Relationship Officer' :
+            resolvedAccessRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
+          );
 
           mapped.push({
             id: h.id || crypto.randomUUID(),
@@ -398,7 +423,7 @@ const EmployeeManagement = () => {
             email: h.email,
             phone: h.phone || '',
             role: resolvedAccessRole,
-            job_title: h.role || 'Auditor',
+            job_title: resolvedJobTitle,
             secondaryRoles: Array.isArray(h.secondary_roles) ? h.secondary_roles : [],
             status: h.status || 'active',
             tasksCompleted: 10,
@@ -436,14 +461,16 @@ const EmployeeManagement = () => {
         const hrRecords: any[] = JSON.parse(localStorage.getItem('hr_employee_records') || '[]');
         hrRecords.forEach(hr => {
           if (hr.email && !mapped.some(m => m.id === hr.id || (m.email && m.email.toLowerCase() === hr.email.toLowerCase()))) {
-            let rawDept = hr.dept || 'audit';
-            let normalizedDept = 'audit';
-            const lowerDept = String(rawDept).toLowerCase().trim();
-            if (lowerDept.includes('tax') || lowerDept.includes('vat')) normalizedDept = 'tax_vat';
-            else if (lowerDept.includes('book') || lowerDept.includes('ledger') || lowerDept.includes('account')) normalizedDept = 'bookkeeping';
-            else if (lowerDept.includes('advis') || lowerDept.includes('consult')) normalizedDept = 'business_advisory';
-            else if (lowerDept.includes('success') || lowerDept.includes('client') || lowerDept.includes('operat')) normalizedDept = 'client_success';
-            else if (lowerDept.includes('audit')) normalizedDept = 'audit';
+            let rawDept = hr.dept || '';
+            const resolvedRole = hr.systemRole || 'employee';
+            let normalizedDept = getNormalizedDepartmentId(rawDept, resolvedRole, hr.role);
+
+            const resolvedJobTitle = hr.role || (
+              resolvedRole === 'manager' ? 'Operations & Executive Manager' :
+              resolvedRole === 'hr' ? 'HR Specialist' :
+              resolvedRole === 'crm' ? 'Client Relationship Officer' :
+              resolvedRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
+            );
 
             mapped.push({
               id: hr.id || crypto.randomUUID(),
@@ -451,8 +478,8 @@ const EmployeeManagement = () => {
               name_ar: hr.name || 'موظف',
               email: hr.email,
               phone: hr.phone || '',
-              role: hr.systemRole || 'employee',
-              job_title: hr.role || 'Auditor',
+              role: resolvedRole,
+              job_title: resolvedJobTitle,
               status: 'active',
               tasksCompleted: 10,
               activeJobs: 3,
@@ -492,16 +519,16 @@ const EmployeeManagement = () => {
         const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
         localPlaced.forEach(lp => {
           if (lp.email && !mapped.some(m => m.email.toLowerCase() === lp.email.toLowerCase())) {
-            let rawDept = lp.dept || 'audit';
-            let normalizedDept = 'audit';
-            const lowerDept = String(rawDept).toLowerCase().trim();
-            if (lowerDept.includes('tax') || lowerDept.includes('vat')) normalizedDept = 'tax_vat';
-            else if (lowerDept.includes('book') || lowerDept.includes('ledger') || lowerDept.includes('account')) normalizedDept = 'bookkeeping';
-            else if (lowerDept.includes('advis') || lowerDept.includes('consult')) normalizedDept = 'business_advisory';
-            else if (lowerDept.includes('success') || lowerDept.includes('client') || lowerDept.includes('operat')) normalizedDept = 'client_success';
-            else if (lowerDept.includes('audit')) normalizedDept = 'audit';
-
+            let rawDept = lp.dept || '';
             const resolvedAccessRole = lp.accessRole || (lp.role?.toLowerCase()?.includes('head') || lp.role?.toLowerCase()?.includes('hod') ? 'department_head' : lp.role?.toLowerCase() === 'accountant' ? 'accountant' : lp.role?.toLowerCase() === 'crm' ? 'crm' : lp.role?.toLowerCase() === 'hr' ? 'hr' : 'employee');
+            let normalizedDept = getNormalizedDepartmentId(rawDept, resolvedAccessRole, lp.job_title || lp.role);
+
+            const resolvedJobTitle = lp.job_title || lp.role || (
+              resolvedAccessRole === 'manager' ? 'Operations & Executive Manager' :
+              resolvedAccessRole === 'hr' ? 'HR Specialist' :
+              resolvedAccessRole === 'crm' ? 'Client Relationship Officer' :
+              resolvedAccessRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
+            );
 
             mapped.push({
               id: lp.id || crypto.randomUUID(),
@@ -510,7 +537,7 @@ const EmployeeManagement = () => {
               email: lp.email,
               phone: lp.phone || '',
               role: resolvedAccessRole,
-              job_title: lp.job_title || lp.role || (resolvedAccessRole === 'department_head' ? 'Department Head (HOD)' : resolvedAccessRole === 'accountant' ? 'Accountant' : 'Audit Associate'),
+              job_title: resolvedJobTitle,
               status: 'active',
               tasksCompleted: 12,
               activeJobs: 4,

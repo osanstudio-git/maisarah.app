@@ -249,29 +249,46 @@ export default function HREmployees() {
         const rawProfiles = (profiles || []).filter(p => p.role !== 'client');
         const rawHr = dbEmployees || [];
 
+        const getNormalizedDeptName = (rawDept: any, role: string = '', jobTitle: string = ''): string => {
+          const d = String(rawDept || '').toLowerCase().trim();
+          const r = String(role || '').toLowerCase().trim();
+          const t = String(jobTitle || '').toLowerCase().trim();
+
+          if (d.includes('manage') || d.includes('execut') || r === 'manager' || t.includes('executive') || t.includes('manager')) return 'Management';
+          if (d.includes('hr') || d.includes('human') || d.includes('support') || d.includes('admin') || r === 'hr' || t.includes('hr')) return 'Internal Support & Administration';
+          if (d.includes('innovat') || d.includes('tech') || d.includes('dev')) return 'Innovation & Development';
+          if (d.includes('crm') || d.includes('client') || d.includes('success')) return 'Client Success';
+          if (d.includes('tax') || d.includes('vat')) return 'Tax & VAT';
+          if (d.includes('book') || d.includes('ledger') || d.includes('account')) return 'Bookkeeping';
+          if (d.includes('advis') || d.includes('consult')) return 'Business Advisory';
+          if (d.includes('audit')) return 'Audit';
+
+          if (r === 'manager' || t.includes('executive')) return 'Management';
+          if (r === 'hr' || t.includes('hr')) return 'Internal Support & Administration';
+          if (r === 'crm' || t.includes('client')) return 'Client Success';
+          if (r === 'accountant') return 'Bookkeeping';
+
+          if (rawDept && rawDept.toLowerCase() !== 'audit') return rawDept;
+          return 'Audit';
+        };
+
         // Build unified list from Supabase profiles + hr_employees
         const liveEmployees: Employee[] = rawProfiles.map(p => {
           const hrEmp = rawHr.find((h: any) => h.id === p.id || (h.email && p.email && h.email.toLowerCase() === p.email.toLowerCase()));
 
           // Map department
-          let rawDept = hrEmp?.dept || p.department || p.department_id || 'Audit';
-          let dept = 'Audit';
-          const lowerDept = String(rawDept).toLowerCase();
-          if (lowerDept.includes('tax') || lowerDept.includes('vat')) dept = 'Tax & VAT';
-          else if (lowerDept.includes('book') || lowerDept.includes('account')) dept = 'Bookkeeping';
-          else if (lowerDept.includes('advis') || lowerDept.includes('consult')) dept = 'Business Advisory';
-          else if (lowerDept.includes('success') || lowerDept.includes('client') || lowerDept.includes('operat')) dept = 'Client Success';
-          else if (lowerDept.includes('audit')) dept = 'Audit';
+          let rawDept = hrEmp?.dept || p.department || p.department_id || '';
+          let dept = getNormalizedDeptName(rawDept, p.role || hrEmp?.role, hrEmp?.role);
 
           // Map role
           let role = hrEmp?.role;
           if (!role) {
             if (p.role === 'department_head') role = `Head of ${dept}`;
             else if (p.role === 'accountant') role = 'Senior Accountant';
-            else if (p.role === 'hr') role = 'HR Manager';
-            else if (p.role === 'manager') role = 'Executive Manager';
-            else if (p.role === 'crm') role = 'CRM Coordinator';
-            else role = 'Senior Auditor';
+            else if (p.role === 'hr') role = 'HR Specialist';
+            else if (p.role === 'manager') role = 'Operations & Executive Manager';
+            else if (p.role === 'crm') role = 'Client Relationship Officer';
+            else role = 'Staff Member';
           }
 
           const phone = hrEmp?.phone || p.phone || '+968 98745632';
@@ -321,11 +338,13 @@ export default function HREmployees() {
         // Also add any hr_employees that didn't have profiles
         for (const h of rawHr) {
           if (!liveEmployees.some(e => e.id === h.id || (h.email && e.email && h.email.toLowerCase() === e.email.toLowerCase()))) {
+            const hDept = getNormalizedDeptName(h.dept || h.department_id, h.role, h.role);
+            const hRole = h.role || 'Staff Member';
             liveEmployees.push({
               id: h.id,
               name: h.full_name || 'Employee',
-              role: h.role || 'Senior Auditor',
-              dept: h.dept || 'Audit',
+              role: hRole,
+              dept: hDept,
               email: h.email || '',
               phone: h.phone || '',
               companyPhone: h.company_phone || '',
@@ -656,9 +675,9 @@ export default function HREmployees() {
     setFormData({
       id: `EMP-00${employees.length + 1}`,
       name: '',
-      role: 'Senior Auditor',
+      role: 'Client Relationship Officer',
       systemRole: 'employee',
-      dept: 'Audit',
+      dept: 'CRM & Client Success',
       email: '',
       phone: '',
       companyPhone: '',
@@ -987,19 +1006,13 @@ export default function HREmployees() {
                 <p>${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${formData.name}</strong>,</p>
                 <p>
                   ${isAr
-                    ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تفعيل عرض العمل الخاص بك وتوجيهه للمدير التنفيذي لوضع اللمسات الأخيرة وتعيين المشرف المباشر واعتماد الصلاحيات.'
-                    : 'We are thrilled to welcome you to the Maisarah family. Your job offer has been submitted and forwarded to the Executive Manager for final department placement and role configuration.'}
+                    ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تفعيل عرض العمل الخاص بك وتوجيهه للمدير التنفيذي لوضع اللمسات الأخيرة وتعيين القسم وتحديد الصلاحيات والمشرف المباشر.'
+                    : 'We are thrilled to welcome you to the Maisarah family. Your job offer has been submitted and forwarded to Executive Management for final department placement and role configuration.'}
                 </p>
-                <div style="background-color: #fcfcfc; border: 1px solid #f0f0f0; padding: 15px; border-radius: 10px; margin: 20px 0;">
-                  <h4 style="margin-top: 0; color: #555;">${isAr ? 'تفاصيل التوظيف المقترحة:' : 'Designated Details:'}</h4>
-                  <p style="margin: 4px 0;"><strong>${isAr ? 'المسمى الوظيفي:' : 'Position:'}</strong> ${formData.role}</p>
-                  <p style="margin: 4px 0;"><strong>${isAr ? 'القسم:' : 'Department:'}</strong> ${formData.dept}</p>
-                  <p style="margin: 4px 0;"><strong>${isAr ? 'المشرف المقترح:' : 'Designated Supervisor:'}</strong> ${formData.immediateSupervisor}</p>
-                </div>
                 <p>
                   ${isAr
-                    ? 'ستصلك رسالة ثانية تحتوي على بيانات الدخول إلى منصة الموظفين فور اعتماد المدير التنفيذي.'
-                    : 'You will receive your portal login credentials as soon as executive placement review is completed.'}
+                    ? 'ستصلك رسالة إلكترونية ثانية تحتوي على بيانات تفعيل الحساب وتفاصيل التعيين فور اعتماد المدير التنفيذي.'
+                    : 'You will receive your portal login credentials and final placement details as soon as executive placement review is completed.'}
                 </p>
                 <br/>
                 <p>${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
@@ -1068,14 +1081,22 @@ export default function HREmployees() {
       let departmentId = 'audit';
 
       const normalizedDept = (formData.dept || '').toLowerCase();
-      if (normalizedDept.includes('tax') || normalizedDept.includes('vat')) {
+      if (normalizedDept.includes('manage') || normalizedDept.includes('execut') || accessRole === 'manager') {
+        departmentId = 'management';
+      } else if (normalizedDept.includes('hr') || normalizedDept.includes('human') || normalizedDept.includes('support') || normalizedDept.includes('admin') || accessRole === 'hr') {
+        departmentId = 'internal_support';
+      } else if (normalizedDept.includes('innovat') || normalizedDept.includes('tech') || normalizedDept.includes('dev')) {
+        departmentId = 'innovation_dev';
+      } else if (normalizedDept.includes('crm') || normalizedDept.includes('client') || normalizedDept.includes('success')) {
+        departmentId = 'client_success';
+      } else if (normalizedDept.includes('tax') || normalizedDept.includes('vat')) {
         departmentId = 'tax_vat';
       } else if (normalizedDept.includes('book') || normalizedDept.includes('ledger') || normalizedDept.includes('account')) {
         departmentId = 'bookkeeping';
       } else if (normalizedDept.includes('advis') || normalizedDept.includes('consult')) {
         departmentId = 'business_advisory';
-      } else if (normalizedDept.includes('success') || normalizedDept.includes('client') || normalizedDept.includes('operat')) {
-        departmentId = 'client_success';
+      } else if (normalizedDept.includes('audit')) {
+        departmentId = 'audit';
       }
 
       if (!isEditMode) {
