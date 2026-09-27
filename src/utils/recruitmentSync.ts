@@ -53,8 +53,8 @@ export function deleteLocalRecruit(idOrEmail: string) {
   try {
     const current = getLocalRecruits();
     const cleanTarget = (idOrEmail || '').trim().toLowerCase();
-    const filtered = current.filter(r => 
-      r.id !== idOrEmail && 
+    const filtered = current.filter(r =>
+      r.id !== idOrEmail &&
       r.name?.toLowerCase() !== cleanTarget &&
       r.email?.toLowerCase() !== cleanTarget
     );
@@ -67,7 +67,7 @@ export function deleteLocalRecruit(idOrEmail: string) {
 export function upsertLocalRecruit(candidate: RecruitCandidate) {
   const current = getLocalRecruits();
   const index = current.findIndex(c => c.id === candidate.id || (c.email && c.email.toLowerCase() === candidate.email.toLowerCase()));
-  
+
   let updated: RecruitCandidate[];
   if (index >= 0) {
     updated = [...current];
@@ -75,27 +75,24 @@ export function upsertLocalRecruit(candidate: RecruitCandidate) {
   } else {
     updated = [candidate, ...current];
   }
-  
+
   saveLocalRecruits(updated);
   return updated;
 }
 
+/** Sanitize placement_status to only what Postgres check constraint allows */
+function sanitizePlacementStatus(status?: string | null): 'pending_placement' | 'placed' | null {
+  if (status === 'pending_placement' || status === 'placed') return status;
+  return null;
+}
+
+/**
+ * Sync all recruits from Supabase DB directly (no edge function needed for reads).
+ * Falls back to localStorage if the DB is unreachable.
+ */
 export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
   try {
-    const invokePromise = supabase.functions.invoke('manage-auth', {
-      body: { action: 'get_recruits' }
-    });
-    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-      setTimeout(() => reject(new Error('Fetch timeout')), 4000)
-    );
-    const { data: edgeRes, error: edgeErr } = await Promise.race([invokePromise, timeoutPromise]) as any;
-
-    if (!edgeErr && edgeRes?.success && Array.isArray(edgeRes.data)) {
-      saveLocalRecruits(edgeRes.data);
-      return edgeRes.data;
-    }
-
-    // Direct fallback if edge function unavailable
+    // Primary: direct table read — fast and no cold-start delay
     const { data, error } = await supabase
       .from('hr_recruits')
       .select('*')
@@ -105,47 +102,91 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
       saveLocalRecruits(data);
       return data;
     }
+
+    console.warn('Direct hr_recruits read error:', error?.message);
   } catch (e) {
-    console.warn('Supabase recruits fetch notice, fallback to local storage:', e);
+    console.warn('Supabase recruits fetch notice, using local storage:', e);
   }
   return getLocalRecruits();
 }
 
+/**
+ * Save a recruit to the DB directly.
+ * Always updates localStorage immediately for instant UI response.
+ * DB write happens concurrently (fire-and-forget style with logging).
+ */
 export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Promise<RecruitCandidate> {
+  // 1. Always save to localStorage first (instant, cross-page)
   upsertLocalRecruit(candidate);
+
+  const sanitized = {
+    ...candidate,
+    placement_status: sanitizePlacementStatus(candidate.placement_status),
+  };
+
+  // 2. Try direct Supabase upsert (no edge function cold-start)
   try {
-    const invokePromise = supabase.functions.invoke('manage-auth', {
-      body: { action: 'upsert_recruit', recruit: candidate }
-    });
-    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-      setTimeout(() => reject(new Error('Upsert timeout')), 4000)
-    );
-    const { data: edgeRes, error: edgeErr } = await Promise.race([invokePromise, timeoutPromise]) as any;
-    if (!edgeErr && edgeRes?.success && edgeRes?.data) {
-      upsertLocalRecruit(edgeRes.data);
-      return edgeRes.data;
+    const { data, error } = await supabase
+      .from('hr_recruits')
+      .upsert(sanitized, { onConflict: 'id' })
+      .select()
+      .single();
+
+    if (!error && data) {
+      upsertLocalRecruit(data);
+      return data;
+    }
+
+    // If direct upsert fails (e.g. RLS), fall back to edge function
+    if (error) {
+      console.warn('Direct hr_recruits upsert failed, trying edge function:', error.message);
+      try {
+        const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
+          body: { action: 'upsert_recruit', recruit: sanitized }
+        });
+        if (!edgeErr && edgeRes?.success && edgeRes?.data) {
+          upsertLocalRecruit(edgeRes.data);
+          return edgeRes.data;
+        }
+      } catch (edgeE) {
+        console.warn('Edge function fallback upsert recruit notice:', edgeE);
+      }
     }
   } catch (e) {
-    console.warn('Edge function upsert recruit notice:', e);
+    console.warn('Recruit DB upsert notice:', e);
   }
+
   return candidate;
 }
 
+/**
+ * Delete a recruit from the DB.
+ * Always removes from localStorage immediately.
+ */
 export async function deleteRecruitFromDatabase(idOrEmail: string) {
   deleteLocalRecruit(idOrEmail);
   try {
-    const invokePromise = supabase.functions.invoke('manage-auth', {
-      body: { action: 'delete_recruit', recruit_id: idOrEmail }
-    });
-    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-      setTimeout(() => reject(new Error('Delete timeout')), 4000)
-    );
-    await Promise.race([invokePromise, timeoutPromise]);
+    // Try direct delete first
+    const { error } = await supabase
+      .from('hr_recruits')
+      .delete()
+      .or(`id.eq.${idOrEmail},email.eq.${idOrEmail}`);
+
+    if (error) {
+      console.warn('Direct delete failed, trying edge function:', error.message);
+      await supabase.functions.invoke('manage-auth', {
+        body: { action: 'delete_recruit', recruit_id: idOrEmail }
+      });
+    }
   } catch (e) {
-    console.warn('Edge function delete recruit notice:', e);
+    console.warn('Recruit delete notice:', e);
   }
 }
 
+/**
+ * Update a recruit's status fields.
+ * Always updates localStorage immediately.
+ */
 export async function updateRecruitStatus(id: string, updates: Partial<RecruitCandidate>) {
   const current = getLocalRecruits();
   const candidate = current.find(c => c.id === id);
@@ -154,11 +195,25 @@ export async function updateRecruitStatus(id: string, updates: Partial<RecruitCa
     upsertLocalRecruit(updatedCandidate);
   }
 
+  const sanitizedUpdates = { ...updates };
+  if ('placement_status' in sanitizedUpdates) {
+    sanitizedUpdates.placement_status = sanitizePlacementStatus(sanitizedUpdates.placement_status);
+  }
+
   try {
-    await supabase.functions.invoke('manage-auth', {
-      body: { action: 'update_recruit', recruit_id: id, updates }
-    });
+    // Try direct update first
+    const { error } = await supabase
+      .from('hr_recruits')
+      .update(sanitizedUpdates)
+      .eq('id', id);
+
+    if (error) {
+      console.warn('Direct update failed, trying edge function:', error.message);
+      await supabase.functions.invoke('manage-auth', {
+        body: { action: 'update_recruit', recruit_id: id, updates: sanitizedUpdates }
+      });
+    }
   } catch (e) {
-    console.warn('Edge function update recruit notice:', e);
+    console.warn('Recruit update notice:', e);
   }
 }
