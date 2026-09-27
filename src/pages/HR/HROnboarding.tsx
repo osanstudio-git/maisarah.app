@@ -95,6 +95,28 @@ export default function HROnboarding() {
 
   useEffect(() => {
     fetchHires();
+
+    // ── Supabase Realtime Subscription for Onboarding Roster ───────────────
+    const channel = supabase
+      .channel('hr_onboarding_live_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hr_recruits' },
+        () => {
+          fetchHires();
+        }
+      )
+      .subscribe();
+
+    const handleLocalSync = () => {
+      fetchHires();
+    };
+    window.addEventListener('maisarah_recruits_updated', handleLocalSync);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('maisarah_recruits_updated', handleLocalSync);
+    };
   }, []);
 
   const sendOfferWelcomeEmail = async (c: Recruit) => {

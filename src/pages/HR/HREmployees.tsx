@@ -503,10 +503,19 @@ export default function HREmployees() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_employees' }, () => {
         loadEmployeesAndSync();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_recruits' }, () => {
+        loadEmployeesAndSync();
+      })
       .subscribe();
+
+    const handleLocalSync = () => {
+      loadEmployeesAndSync();
+    };
+    window.addEventListener('maisarah_recruits_updated', handleLocalSync);
 
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener('maisarah_recruits_updated', handleLocalSync);
     };
   }, []);
 
@@ -627,7 +636,7 @@ export default function HREmployees() {
     id: '',
     name: '',
     role: 'Senior Auditor',
-    systemRole: 'employee' as 'employee' | 'accountant' | 'department_head' | 'hr',
+    systemRole: 'employee' as 'employee' | 'accountant' | 'department_head' | 'hr' | 'manager' | 'crm',
     dept: 'Audit',
     email: '',
     phone: '',
@@ -718,15 +727,19 @@ export default function HREmployees() {
     setFormError(null);
     setIsSubmitting(false);
 
-    let initialSysRole: 'employee' | 'accountant' | 'department_head' | 'hr' = 'employee';
+    let initialSysRole: 'employee' | 'accountant' | 'department_head' | 'hr' | 'manager' | 'crm' = 'employee';
     const rLower = (emp.role || '').toLowerCase();
     const dLower = (emp.dept || '').toLowerCase();
-    if (rLower.includes('head') || rLower.includes('hod') || rLower.includes('director')) {
+    if (rLower.includes('manager') || dLower.includes('manage') || dLower.includes('execut')) {
+      initialSysRole = 'manager';
+    } else if (rLower.includes('head') || rLower.includes('hod') || rLower.includes('director')) {
       initialSysRole = 'department_head';
     } else if (rLower.includes('accountant') || dLower.includes('account') || dLower.includes('finance')) {
       initialSysRole = 'accountant';
     } else if (rLower.includes('hr') || dLower.includes('hr')) {
       initialSysRole = 'hr';
+    } else if (rLower.includes('crm') || dLower.includes('crm') || dLower.includes('client')) {
+      initialSysRole = 'crm';
     }
 
     setFormData({

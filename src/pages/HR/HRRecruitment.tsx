@@ -129,6 +129,28 @@ export default function HRRecruitment() {
 
   useEffect(() => {
     fetchCandidates();
+
+    // ── Supabase Realtime Subscription for Recruitment Pipeline ───────────
+    const channel = supabase
+      .channel('hr_recruits_live_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hr_recruits' },
+        () => {
+          fetchCandidates();
+        }
+      )
+      .subscribe();
+
+    const handleLocalSync = () => {
+      fetchCandidates();
+    };
+    window.addEventListener('maisarah_recruits_updated', handleLocalSync);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('maisarah_recruits_updated', handleLocalSync);
+    };
   }, []);
 
   // Sync tab selection with candidate changes

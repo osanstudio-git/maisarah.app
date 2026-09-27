@@ -372,10 +372,10 @@ const EmployeeManagement = () => {
 
         const resolvedJobTitle = hrEmp?.role || (
           p.role === 'manager' ? 'Operations & Executive Manager' :
-          p.role === 'hr' ? 'HR Specialist' :
-          p.role === 'crm' ? 'Client Relationship Officer' :
-          p.role === 'department_head' ? 'Department Head (HOD)' :
-          p.role === 'accountant' ? 'Senior Accountant' : 'Staff Member'
+            p.role === 'hr' ? 'HR Specialist' :
+              p.role === 'crm' ? 'Client Relationship Officer' :
+                p.role === 'department_head' ? 'Department Head (HOD)' :
+                  p.role === 'accountant' ? 'Senior Accountant' : 'Staff Member'
         );
 
         return {
@@ -428,9 +428,9 @@ const EmployeeManagement = () => {
 
           const resolvedJobTitle = h.role || (
             resolvedAccessRole === 'manager' ? 'Operations & Executive Manager' :
-            resolvedAccessRole === 'hr' ? 'HR Specialist' :
-            resolvedAccessRole === 'crm' ? 'Client Relationship Officer' :
-            resolvedAccessRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
+              resolvedAccessRole === 'hr' ? 'HR Specialist' :
+                resolvedAccessRole === 'crm' ? 'Client Relationship Officer' :
+                  resolvedAccessRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
           );
 
           mapped.push({
@@ -484,9 +484,9 @@ const EmployeeManagement = () => {
 
             const resolvedJobTitle = hr.role || (
               resolvedRole === 'manager' ? 'Operations & Executive Manager' :
-              resolvedRole === 'hr' ? 'HR Specialist' :
-              resolvedRole === 'crm' ? 'Client Relationship Officer' :
-              resolvedRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
+                resolvedRole === 'hr' ? 'HR Specialist' :
+                  resolvedRole === 'crm' ? 'Client Relationship Officer' :
+                    resolvedRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
             );
 
             mapped.push({
@@ -542,9 +542,9 @@ const EmployeeManagement = () => {
 
             const resolvedJobTitle = lp.job_title || lp.role || (
               resolvedAccessRole === 'manager' ? 'Operations & Executive Manager' :
-              resolvedAccessRole === 'hr' ? 'HR Specialist' :
-              resolvedAccessRole === 'crm' ? 'Client Relationship Officer' :
-              resolvedAccessRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
+                resolvedAccessRole === 'hr' ? 'HR Specialist' :
+                  resolvedAccessRole === 'crm' ? 'Client Relationship Officer' :
+                    resolvedAccessRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
             );
 
             mapped.push({
@@ -740,13 +740,13 @@ const EmployeeManagement = () => {
 
   const handleOpenPlacementModal = (placement: any) => {
     setSelectedPlacement(placement);
-    
+
     const rawDept = String(placement.dept || '').toLowerCase();
     const allDepts = getAllDepartments();
-    const matched = allDepts.find(d => 
-      d.id.toLowerCase() === rawDept || 
-      d.name.toLowerCase() === rawDept || 
-      rawDept.includes(d.id.toLowerCase()) || 
+    const matched = allDepts.find(d =>
+      d.id.toLowerCase() === rawDept ||
+      d.name.toLowerCase() === rawDept ||
+      rawDept.includes(d.id.toLowerCase()) ||
       rawDept.includes(d.name.toLowerCase()) ||
       (rawDept.includes('client') && d.id === 'client_success') ||
       (rawDept.includes('crm') && d.id === 'client_success') ||
@@ -1962,7 +1962,7 @@ const EmployeeManagement = () => {
                       const newDept = e.target.value;
                       const deptPositions = getJobPositionsByDepartment(newDept);
                       const defaultPos = deptPositions[0] || selectedPlacement.role || 'Staff Member';
-                      
+
                       const matchingHOD = employees.find(emp => {
                         const isHead = emp.role === 'department_head' || emp.job_title?.toLowerCase().includes('head');
                         const empDept = String(emp.department_id || '').toLowerCase();

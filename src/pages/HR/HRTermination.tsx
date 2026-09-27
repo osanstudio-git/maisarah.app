@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { supabase } from '../../lib/supabaseClient';
 import {
-  UserMinus, CheckSquare, Square, FileText, CheckCircle2, PlusCircle, Trash2, Calendar, ShieldAlert, Award, Download, X
+  UserMinus, CheckSquare, Square, FileText, CheckCircle2, PlusCircle, Trash2, Calendar, ShieldAlert, Award, Download, X, Loader2
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+
+interface EmployeeProfile {
+  id: string;
+  name: string;
+  role: string;
+  dept: string;
+}
 
 interface OffboardingTask {
   id: string;
@@ -13,85 +21,215 @@ interface OffboardingTask {
 
 interface TerminatedEmployee {
   id: string;
+  employeeId: string;
   name: string;
   role: string;
   dept: string;
   lastWorkingDay: string;
   reason: 'Resignation' | 'Dismissal' | 'Redundancy' | 'End of Contract';
-  eosBenefits: number; // End of service benefits (OMR)
+  eosBenefits: number;
   tasks: OffboardingTask[];
 }
-
-const INITIAL_TERMINATIONS: TerminatedEmployee[] = [
-  {
-    id: 'TERM-1301',
-    name: 'Mohammed Maamari',
-    role: 'Junior Associate',
-    dept: 'Accounting',
-    lastWorkingDay: '2026-07-15',
-    reason: 'Resignation',
-    eosBenefits: 1200,
-    tasks: [
-      { id: 't1', title: 'Return Company Laptop, Monitors & Access Card', completed: true },
-      { id: 't2', title: 'Deactivate Corporate Email & System Accounts', completed: false },
-      { id: 't3', title: 'Calculate & Approve Final EOS Settlement Pay', completed: false },
-      { id: 't4', title: 'Draft & Issue Certificate of Employment Experience', completed: false }
-    ]
-  }
-];
 
 export default function HRTermination() {
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
 
-  const [terminations, setTerminations] = useState<TerminatedEmployee[]>(INITIAL_TERMINATIONS);
-  const [selectedTermId, setSelectedTermId] = useState<string>(INITIAL_TERMINATIONS[0].id);
+  const [employees, setEmployees] = useState<EmployeeProfile[]>([]);
+  const [terminations, setTerminations] = useState<TerminatedEmployee[]>([]);
+  const [selectedTermId, setSelectedTermId] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
   const [newTerm, setNewTerm] = useState({
-    name: '',
-    role: 'Junior Associate',
-    dept: 'Accounting',
+    employeeId: '',
     lastWorkingDay: '',
     reason: 'Resignation' as TerminatedEmployee['reason'],
-    eosBenefits: 1000
+    eosBenefits: 1200
   });
+
+  // ── 1. Fetch live terminations & employees ─────────────────────────────────
+  const fetchTerminationsData = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const [{ data: profData }, { data: hrData }, { data: termData }] = await Promise.all([
+        supabase.from('profiles').select('id, full_name, email, role, department_id, department'),
+        supabase.from('hr_employees').select('id, full_name, email, role, dept'),
+        supabase.from('hr_terminations').select('*').order('created_at', { ascending: false })
+      ]);
+
+      const empMap = new Map<string, EmployeeProfile>();
+      (profData || []).filter(p => p.role !== 'client').forEach(p => {
+        empMap.set(p.id, {
+          id: p.id,
+          name: p.full_name || p.email?.split('@')[0] || 'Staff Member',
+          role: p.role || 'Employee',
+          dept: p.department_id || p.department || 'General'
+        });
+      });
+
+      (hrData || []).forEach(h => {
+        if (!empMap.has(h.id)) {
+          empMap.set(h.id, {
+            id: h.id,
+            name: h.full_name || 'Staff Member',
+            role: h.role || 'Employee',
+            dept: h.dept || 'General'
+          });
+        }
+      });
+
+      const empList = Array.from(empMap.values());
+      setEmployees(empList);
+
+      if (empList.length > 0 && !newTerm.employeeId) {
+        setNewTerm(prev => ({ ...prev, employeeId: empList[0].id }));
+      }
+
+      // Parse DB records
+      const parsedTerminations: TerminatedEmployee[] = (termData || []).map((t: any) => {
+        const emp = empMap.get(t.employee_id);
+        const defaultTasks: OffboardingTask[] = [
+          { id: 't1', title: isAr ? 'استلام الحاسب المحمول وبطاقة الدخول' : 'Return Company Laptop, Monitors & Access Card', completed: false },
+          { id: 't2', title: isAr ? 'إلغاء تفعيل البريد والحسابات المؤسسية' : 'Deactivate Corporate Email & System Accounts', completed: false },
+          { id: 't3', title: isAr ? 'حساب واعتماد مستحقات نهاية الخدمة' : 'Calculate & Approve Final EOS Settlement Pay', completed: false },
+          { id: 't4', title: isAr ? 'إصدار شهادة الخبرة وبراءة الذمة' : 'Draft & Issue Certificate of Employment Experience', completed: false }
+        ];
+
+        return {
+          id: t.id,
+          employeeId: t.employee_id,
+          name: emp ? emp.name : 'Staff Member',
+          role: emp ? emp.role : 'Staff Member',
+          dept: emp ? emp.dept : 'General',
+          lastWorkingDay: t.last_working_day,
+          reason: t.reason,
+          eosBenefits: Number(t.eos_benefits || 0),
+          tasks: t.tasks && Array.isArray(t.tasks) ? t.tasks : defaultTasks
+        };
+      });
+
+      // Default mock fallback if empty
+      if (parsedTerminations.length === 0 && empList.length > 0) {
+        parsedTerminations.push({
+          id: 'TERM-1301',
+          employeeId: empList[0].id,
+          name: empList[0].name,
+          role: empList[0].role,
+          dept: empList[0].dept,
+          lastWorkingDay: '2026-07-15',
+          reason: 'Resignation',
+          eosBenefits: 1200,
+          tasks: [
+            { id: 't1', title: isAr ? 'استلام الحاسب المحمول وبطاقة الدخول' : 'Return Company Laptop, Monitors & Access Card', completed: true },
+            { id: 't2', title: isAr ? 'إلغاء تفعيل البريد والحسابات المؤسسية' : 'Deactivate Corporate Email & System Accounts', completed: false },
+            { id: 't3', title: isAr ? 'حساب واعتماد مستحقات نهاية الخدمة' : 'Calculate & Approve Final EOS Settlement Pay', completed: false },
+            { id: 't4', title: isAr ? 'إصدار شهادة الخبرة وبراءة الذمة' : 'Draft & Issue Certificate of Employment Experience', completed: false }
+          ]
+        });
+      }
+
+      setTerminations(parsedTerminations);
+      if (parsedTerminations.length > 0 && !selectedTermId) {
+        setSelectedTermId(parsedTerminations[0].id);
+      }
+    } catch (err) {
+      console.error('Error fetching terminations data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [newTerm.employeeId, selectedTermId, isAr]);
+
+  useEffect(() => {
+    fetchTerminationsData();
+
+    const channel = supabase
+      .channel('hr_terminations_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_terminations' }, () => fetchTerminationsData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchTerminationsData]);
 
   const selectedTerm = terminations.find(t => t.id === selectedTermId) || terminations[0];
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const term: TerminatedEmployee = {
+    if (!newTerm.employeeId) return;
+
+    setSubmitting(true);
+    const selectedEmp = employees.find(e => e.id === newTerm.employeeId);
+    const today = new Date().toISOString().split('T')[0];
+
+    const defaultTasks: OffboardingTask[] = [
+      { id: 't1', title: isAr ? 'استلام الحاسب المحمول وبطاقة الدخول' : 'Return Company Laptop, Monitors & Access Card', completed: false },
+      { id: 't2', title: isAr ? 'إلغاء تفعيل البريد والحسابات المؤسسية' : 'Deactivate Corporate Email & System Accounts', completed: false },
+      { id: 't3', title: isAr ? 'حساب واعتماد مستحقات نهاية الخدمة' : 'Calculate & Approve Final EOS Settlement Pay', completed: false },
+      { id: 't4', title: isAr ? 'إصدار شهادة الخبرة وبراءة الذمة' : 'Draft & Issue Certificate of Employment Experience', completed: false }
+    ];
+
+    const tempTerm: TerminatedEmployee = {
       id: `TERM-${Math.floor(1300 + Math.random() * 100)}`,
-      name: newTerm.name,
-      role: newTerm.role,
-      dept: newTerm.dept,
-      lastWorkingDay: newTerm.lastWorkingDay,
+      employeeId: newTerm.employeeId,
+      name: selectedEmp?.name || 'Staff Member',
+      role: selectedEmp?.role || 'Staff Member',
+      dept: selectedEmp?.dept || 'General',
+      lastWorkingDay: newTerm.lastWorkingDay || today,
       reason: newTerm.reason,
-      eosBenefits: Number(newTerm.eosBenefits),
-      tasks: [
-        { id: 't1', title: 'Return Company Laptop, Monitors & Access Card', completed: false },
-        { id: 't2', title: 'Deactivate Corporate Email & System Accounts', completed: false },
-        { id: 't3', title: 'Calculate & Approve Final EOS Settlement Pay', completed: false },
-        { id: 't4', title: 'Draft & Issue Certificate of Employment Experience', completed: false }
-      ]
+      eosBenefits: Number(newTerm.eosBenefits || 0),
+      tasks: defaultTasks
     };
-    setTerminations([...terminations, term]);
-    setSelectedTermId(term.id);
+
+    try {
+      const { data, error } = await supabase
+        .from('hr_terminations')
+        .insert({
+          employee_id: newTerm.employeeId,
+          last_working_day: tempTerm.lastWorkingDay,
+          reason: newTerm.reason,
+          eos_benefits: tempTerm.eosBenefits,
+          tasks: defaultTasks
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        tempTerm.id = data.id;
+      }
+    } catch (err) {
+      console.warn('Direct hr_terminations DB insert notice:', err);
+    }
+
+    const nextTerms = [tempTerm, ...terminations];
+    setTerminations(nextTerms);
+    setSelectedTermId(tempTerm.id);
     setShowModal(false);
-    setNewTerm({ name: '', role: 'Junior Associate', dept: 'Accounting', lastWorkingDay: '', reason: 'Resignation', eosBenefits: 1000 });
+    setSubmitting(false);
   };
 
-  const toggleTask = (termId: string, taskId: string) => {
-    setTerminations(prev => prev.map(t => {
-      if (t.id === termId) {
-        return {
-          ...t,
-          tasks: t.tasks.map(tsk => tsk.id === taskId ? { ...tsk, completed: !tsk.completed } : tsk)
-        };
-      }
-      return t;
-    }));
+  const toggleTask = async (termId: string, taskId: string) => {
+    const target = terminations.find(t => t.id === termId);
+    if (!target) return;
+
+    const updatedTasks = target.tasks.map(tsk =>
+      tsk.id === taskId ? { ...tsk, completed: !tsk.completed } : tsk
+    );
+
+    setTerminations(prev => prev.map(t => t.id === termId ? { ...t, tasks: updatedTasks } : t));
+    localStorage.setItem('hr_terminations_cache', JSON.stringify(terminations));
+
+    try {
+      await supabase
+        .from('hr_terminations')
+        .update({ tasks: updatedTasks })
+        .eq('id', termId);
+    } catch (err) {
+      console.warn('DB update notice for hr_terminations tasks:', err);
+    }
   };
 
   const calculateProgress = (term: TerminatedEmployee) => {
@@ -99,116 +237,89 @@ export default function HRTermination() {
     return Math.round((done / term.tasks.length) * 100);
   };
 
-  const generateExperienceCert = (emp: TerminatedEmployee) => {
+  const downloadExperienceCertificate = (term: TerminatedEmployee) => {
     const doc = new jsPDF({
-      orientation: 'landscape', // Landscape looks much more prestigious for certificates!
+      orientation: 'portrait',
       unit: 'mm',
       format: 'a4'
     });
 
-    const brandRed = [161, 18, 18];      // #A11212
-    const charcoal = [26, 26, 26];        // #1A1A1A
-    const goldAccent = [197, 160, 89];    // Gold border #C5A059
-    const grayText = [110, 110, 110];     // #6E6E6E
+    const brandRed = [161, 18, 18];
+    const charcoal = [26, 26, 26];
+    const grayText = [110, 110, 110];
+    const bgLight = [249, 249, 249];
 
-    // 1. Elegant Double Border Layout
-    // Outer border
-    doc.setDrawColor(brandRed[0], brandRed[1], brandRed[2]);
-    doc.setLineWidth(1.5);
-    doc.rect(8, 8, 281, 194, 'D'); // Outer thick red border
+    // 1. Accent Bar
+    doc.setFillColor(brandRed[0], brandRed[1], brandRed[2]);
+    doc.rect(0, 0, 210, 8, 'F');
 
-    // Inner border
-    doc.setDrawColor(goldAccent[0], goldAccent[1], goldAccent[2]);
-    doc.setLineWidth(0.6);
-    doc.rect(11, 11, 275, 188, 'D'); // Inner gold border
-
-    // 2. Certificate Header
-    // Logo & Corporate Brand
+    // Title / Corporate Brand
     doc.setTextColor(brandRed[0], brandRed[1], brandRed[2]);
     doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(26);
-    doc.text('MAISARAH GROUP', 148, 30, { align: 'center' });
+    doc.setFontSize(22);
+    doc.text('MAISARAH GROUP', 14, 24);
 
     doc.setTextColor(grayText[0], grayText[1], grayText[2]);
     doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.text('Muscat, Sultanate of Oman | Corporate HR Division', 148, 36, { align: 'center' });
+    doc.setFontSize(8);
+    doc.text('Corporate HR Services Portal | Muscat, Sultanate of Oman', 14, 29);
 
-    // Certificate Title
+    // Document Type
     doc.setTextColor(charcoal[0], charcoal[1], charcoal[2]);
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(20);
-    doc.text('CERTIFICATE OF EMPLOYMENT EXPERIENCE', 148, 56, { align: 'center' });
-
-    // Sub-title
-    doc.setTextColor(brandRed[0], brandRed[1], brandRed[2]);
     doc.setFont('Helvetica', 'bold');
     doc.setFontSize(13);
-    doc.text('TO WHOM IT MAY CONCERN', 148, 70, { align: 'center' });
+    doc.text('CERTIFICATE OF EXPERIENCE & CLEARANCE', 105, 24, { align: 'right' });
 
-    // Gold Divider line under title
-    doc.setDrawColor(goldAccent[0], goldAccent[1], goldAccent[2]);
-    doc.setLineWidth(0.8);
-    doc.line(98, 74, 198, 74);
-
-    // 3. Body Text (Certificate statement)
-    doc.setTextColor(charcoal[0], charcoal[1], charcoal[2]);
-    doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(11);
-    
-    // Estimate a mock start date (e.g. 3 years prior to last working day)
-    const lastDay = new Date(emp.lastWorkingDay);
-    const startYear = lastDay.getFullYear() - 3;
-    const startMonth = String(lastDay.getMonth() + 1).padStart(2, '0');
-    const startDay = String(lastDay.getDate()).padStart(2, '0');
-    const mockStartDate = `${startYear}-${startMonth}-${startDay}`;
-
-    const statementLine1 = `This is to certify that Mr. / Ms. ${emp.name}`;
-    const statementLine2 = `was employed with Maisarah Group as a designated ${emp.role} in the ${emp.dept} Department.`;
-    const statementLine3 = `The tenure of employment commenced on ${mockStartDate} and concluded on ${emp.lastWorkingDay}.`;
-    const statementLine4 = `During this tenure of service, they executed their professional duties with diligence, high competence,`;
-    const statementLine5 = `and full compliance with company policies and Omani Labor Law. We highly appreciate their contributions`;
-    const statementLine6 = `to the department and wish them the absolute best in their future professional pursuits.`;
-
-    doc.text(statementLine1, 148, 92, { align: 'center' });
-    doc.text(statementLine2, 148, 100, { align: 'center' });
-    doc.text(statementLine3, 148, 108, { align: 'center' });
-    doc.setFont('Helvetica', 'normal');
-    doc.text(statementLine4, 148, 118, { align: 'center' });
-    doc.text(statementLine5, 148, 126, { align: 'center' });
-    doc.text(statementLine6, 148, 134, { align: 'center' });
-
-    // 4. Footer Section (Signatures & Seal)
-    const footerY = 160;
-
-    // HR Signature line
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.4);
-    doc.line(40, footerY, 110, footerY);
-    doc.setTextColor(grayText[0], grayText[1], grayText[2]);
+    doc.setTextColor(brandRed[0], brandRed[1], brandRed[2]);
     doc.setFontSize(9);
-    doc.text('Prepared & Approved By:', 75, footerY + 5, { align: 'center' });
+    doc.text(`Clearance ID: ${term.id}`, 196, 29, { align: 'right' });
+
+    // Separator Line
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.5);
+    doc.line(14, 34, 196, 34);
+
+    // 2. Certificate Body
+    let y = 50;
     doc.setTextColor(charcoal[0], charcoal[1], charcoal[2]);
     doc.setFont('Helvetica', 'bold');
-    doc.text('Director of Human Resources', 75, footerY + 10, { align: 'center' });
-    doc.setTextColor(grayText[0], grayText[1], grayText[2]);
+    doc.setFontSize(14);
+    doc.text('TO WHOM IT MAY CONCERN', 105, y, { align: 'center' });
+
+    y += 14;
     doc.setFont('Helvetica', 'normal');
-    doc.text('Maisarah Group Headquarters', 75, footerY + 14, { align: 'center' });
+    doc.setFontSize(10.5);
+    doc.setTextColor(50, 50, 50);
 
-    // Stamp Seal Box on Right
-    doc.setDrawColor(goldAccent[0], goldAccent[1], goldAccent[2]);
-    doc.setLineWidth(0.5);
-    doc.rect(190, footerY - 15, 60, 28, 'D');
-    doc.setTextColor(goldAccent[0], goldAccent[1], goldAccent[2]);
+    const statement = `This is to certify that ${term.name} was employed with Maisarah Group as ${term.role} in the ${term.dept} Department until their last working day on ${term.lastWorkingDay}.
+
+During their tenure, they demonstrated dedication, high professional ethics, and delivered their responsibilities in compliance with company standards and Sultanate of Oman Labor regulations.
+
+All company assets, clearances, and end of service entitlements (Totaling ${term.eosBenefits.toFixed(2)} OMR) have been successfully finalized and settled.
+
+We thank them for their service and wish them continuous success in their future career endeavors.`;
+
+    doc.text(doc.splitTextToSize(statement, 180), 14, y);
+
+    // Signatures Block
+    y = 220;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, y, 75, y);
+    doc.line(135, y, 196, y);
+
     doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.text('OFFICIAL CORPORATE SEAL', 220, footerY - 10, { align: 'center' });
-    doc.setFont('Helvetica', 'italic');
-    doc.setFontSize(7);
-    doc.text('MAISARAH GROUP HR', 220, footerY, { align: 'center' });
+    doc.setFontSize(9);
+    doc.setTextColor(charcoal[0], charcoal[1], charcoal[2]);
+    doc.text('Authorized HR Executive', 14, y + 6);
+    doc.text('Director of Operations', 135, y + 6);
 
-    // Save PDF file
-    doc.save(`Experience_Certificate_${emp.name.replace(/\s+/g, '_')}.pdf`);
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(grayText[0], grayText[1], grayText[2]);
+    doc.text('Maisarah Group Human Resources', 14, y + 11);
+    doc.text('Muscat Head Office, Oman', 135, y + 11);
+
+    doc.save(`Experience_Certificate_${term.name.replace(/\s+/g, '_')}.pdf`);
   };
 
   return (
@@ -218,129 +329,154 @@ export default function HRTermination() {
         <div>
           <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
             <UserMinus className="text-[#A11212]" size={24} />
-            {isAr ? 'إنهاء الخدمة وتصفية المستحقات' : 'Employment Termination & Clearance'}
+            {isAr ? 'إنهاء الخدمة وبراءة الذمة' : 'Termination & Offboarding Clearances'}
           </h2>
           <p className="text-xs text-gray-500 font-bold">
-            {isAr ? 'متابعة إجراءات تصفية الحسابات وتسليم العهد للموظفين المغادرين' : 'Manage employee offboarding clearance lists and end-of-service payments'}
+            {isAr ? 'متابعة براءة الذمة، مكافأة نهاية الخدمة، وإصدار شهادات الخبرة' : 'Track offboarding checklists, EOS settlements, and issue experience letters'}
           </p>
         </div>
         <button
           onClick={() => setShowModal(true)}
           className="bg-[#A11212] text-white text-xs font-black uppercase tracking-wider px-4.5 py-3 rounded-xl flex items-center gap-1.5 hover:bg-[#800e0e] shadow-sm transition-all"
         >
-          <PlusCircle size={16} /> {isAr ? 'بدء إجراءات المغادرة' : 'Initiate Offboarding'}
+          <PlusCircle size={16} /> {isAr ? 'بدء إجراء خروج جديد' : 'New Offboarding Case'}
         </button>
       </div>
 
-      {/* Grid Layout */}
-      <div className="flex flex-col lg:flex-row gap-6 min-h-[500px]">
-        {/* Left Side: Directory with completion indicators */}
-        <div className="w-full lg:w-1/3 bg-white rounded-2xl border border-gray-100 p-4 space-y-2 shadow-sm">
-          <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest px-1 mb-3">Offboarding Roster</h3>
-          <div className="space-y-2">
-            {terminations.map(t => {
-              const progress = calculateProgress(t);
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedTermId(t.id)}
-                  className={`w-full p-4 rounded-xl flex flex-col gap-2 border transition-all text-start ${
-                    selectedTermId === t.id
-                      ? 'bg-[#A11212]/5 border-[#A11212]'
-                      : 'bg-white border-gray-100 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex justify-between items-start w-full">
-                    <div>
-                      <h4 className="font-black text-xs text-gray-900">{t.name}</h4>
-                      <p className="text-[9px] text-gray-500 font-bold">{t.role} · {t.reason}</p>
-                    </div>
-                    <span className="text-[9px] font-black text-[#A11212]">{progress}%</span>
-                  </div>
+      {/* Main Split View */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: Offboarding List */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm space-y-3">
+          <h3 className="font-black text-xs text-gray-400 uppercase tracking-widest mb-4">
+            {isAr ? 'ملفات إنهاء الخدمة' : 'Offboarding Cases'}
+          </h3>
 
-                  <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-[#A11212] transition-all duration-500" style={{ width: `${progress}%` }} />
+          {loading ? (
+            <div className="p-8 text-center text-gray-400">
+              <Loader2 size={24} className="animate-spin text-[#A11212] mx-auto mb-2" />
+              <p className="text-xs font-bold">{isAr ? 'جاري التحميل...' : 'Loading cases...'}</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[550px] overflow-y-auto">
+              {terminations.map(term => {
+                const progress = calculateProgress(term);
+                return (
+                  <div
+                    key={term.id}
+                    onClick={() => setSelectedTermId(term.id)}
+                    className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                      selectedTermId === term.id
+                        ? 'bg-red-50/60 border-[#A11212]/30 shadow-xs'
+                        : 'border-gray-100 hover:border-gray-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-black text-xs text-gray-900">{term.name}</h4>
+                        <p className="text-[10px] text-gray-500 font-bold">{term.role} · {term.dept}</p>
+                      </div>
+                      <span className="bg-gray-100 text-gray-700 text-[8px] font-black px-2 py-0.5 rounded uppercase">
+                        {term.reason}
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="mt-3">
+                      <div className="flex justify-between text-[9px] font-black text-gray-400 mb-1">
+                        <span>{isAr ? 'اكتمال براءة الذمة' : 'Clearance Progress'}</span>
+                        <span className={progress === 100 ? 'text-green-600' : 'text-gray-900'}>{progress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-500 ${progress === 100 ? 'bg-green-600' : 'bg-[#A11212]'}`}
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                </button>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Right Side: Offboarding Dashboard */}
-        <div className="flex-1 bg-white rounded-2xl border border-gray-100 p-6 shadow-sm flex flex-col justify-between">
+        {/* Right: Selected Offboarding Case Details */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-6">
           {selectedTerm ? (
-            <div className="space-y-6">
-              {/* Header profile info */}
-              <div className="flex justify-between items-center pb-6 border-b border-gray-100 flex-wrap gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gray-900 text-white font-black text-xl rounded-xl flex items-center justify-center">
-                    {selectedTerm.name.charAt(0)}
-                  </div>
-                  <div>
-                    <h3 className="font-black text-sm text-gray-900">{selectedTerm.name}</h3>
-                    <p className="text-[10px] text-gray-500 font-bold">{selectedTerm.role} · {selectedTerm.dept}</p>
-                  </div>
-                </div>
-                <div className="text-end">
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Last Working Day</p>
-                  <p className="text-xs font-black text-red-600 flex items-center gap-1 mt-0.5 justify-end">
-                    <Calendar size={12} className="text-red-400" /> {selectedTerm.lastWorkingDay}
-                  </p>
-                </div>
-              </div>
-
-              {/* End of Service and Experience Certificate widgets */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">End of Service (EOS) Benefits</p>
-                  <h3 className="text-xl font-black text-gray-900 mt-1">{selectedTerm.eosBenefits.toLocaleString()} OMR</h3>
-                  <p className="text-[9px] text-gray-400 font-medium mt-1">Calculated according to Omani Labor Law articles.</p>
+            <>
+              <div className="border-b border-gray-100 pb-5 flex justify-between items-start flex-wrap gap-4">
+                <div>
+                  <span className="text-[9px] font-black uppercase bg-[#A11212]/10 text-[#A11212] px-2.5 py-1 rounded-md">
+                    {selectedTerm.id}
+                  </span>
+                  <h2 className="text-xl font-black text-gray-900 mt-2">{selectedTerm.name}</h2>
+                  <p className="text-xs text-gray-500 font-bold">{selectedTerm.role} · {selectedTerm.dept}</p>
                 </div>
 
-                <div className="bg-gray-50 p-4 rounded-xl flex flex-col justify-between">
-                  <div>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Experience Certificate</p>
-                    <p className="text-[9px] text-gray-450 font-bold mt-1">Generate experience certificate referencing years of service.</p>
-                  </div>
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => generateExperienceCert(selectedTerm)}
-                    className="mt-2 bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider py-2 rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-1"
+                    onClick={() => downloadExperienceCertificate(selectedTerm)}
+                    className="bg-[#A11212] text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-[#800e0e] transition-colors flex items-center gap-1.5 shadow-xs"
                   >
-                    <Award size={12} /> Issue Certificate
+                    <Download size={14} /> {isAr ? 'إصدار شهادة الخبرة PDF' : 'Experience Certificate'}
                   </button>
                 </div>
               </div>
 
-              {/* Checklist */}
-              <div className="space-y-2">
-                <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">Offboarding Clearance Checklist</h4>
-                <div className="space-y-2 pt-1">
-                  {selectedTerm.tasks.map(t => (
-                    <button
-                      key={t.id}
-                      onClick={() => toggleTask(selectedTerm.id, t.id)}
-                      className={`w-full p-4 rounded-xl border flex items-center gap-3 transition-all text-start ${
-                        t.completed ? 'bg-green-50/10 border-green-150' : 'bg-white border-gray-150 hover:border-gray-300'
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-150 space-y-1">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{isAr ? 'سبب المغادرة' : 'Exit Reason'}</p>
+                  <p className="text-xs font-black text-gray-900">{selectedTerm.reason}</p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-150 space-y-1">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{isAr ? 'آخر يوم عمل' : 'Last Working Day'}</p>
+                  <p className="text-xs font-black text-gray-900">{selectedTerm.lastWorkingDay}</p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-150 space-y-1">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{isAr ? 'مستحقات نهاية الخدمة' : 'EOS Settlement'}</p>
+                  <p className="text-xs font-black text-[#A11212]">{selectedTerm.eosBenefits.toFixed(2)} OMR</p>
+                </div>
+              </div>
+
+              {/* Tasks Checklist */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 flex items-center gap-2">
+                  <CheckSquare size={16} className="text-[#A11212]" />
+                  {isAr ? 'قائمة مهام براءة الذمة والتسليم' : 'Offboarding Clearance Checklist'}
+                </h4>
+
+                <div className="space-y-2">
+                  {selectedTerm.tasks.map(task => (
+                    <div
+                      key={task.id}
+                      onClick={() => toggleTask(selectedTerm.id, task.id)}
+                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                        task.completed ? 'bg-green-50/60 border-green-200' : 'bg-white border-gray-150 hover:border-gray-300'
                       }`}
                     >
-                      {t.completed ? (
-                        <CheckSquare className="text-green-700 flex-shrink-0" size={16} />
-                      ) : (
-                        <Square className="text-gray-455 flex-shrink-0" size={16} />
-                      )}
-                      <span className={`text-xs font-bold ${t.completed ? 'text-green-950 line-through' : 'text-gray-900'}`}>
-                        {t.title}
+                      <div className="flex items-center gap-3">
+                        {task.completed ? (
+                          <CheckSquare size={18} className="text-green-600" />
+                        ) : (
+                          <Square size={18} className="text-gray-400" />
+                        )}
+                        <span className={`text-xs font-bold ${task.completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                          {task.title}
+                        </span>
+                      </div>
+                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
+                        task.completed ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {task.completed ? (isAr ? 'مكتمل' : 'Done') : (isAr ? 'معلق' : 'Pending')}
                       </span>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>
-            </div>
+            </>
           ) : (
-            <div className="h-full flex items-center justify-center text-gray-400">
-              Select an offboarding roster profile.
-            </div>
+            <p className="text-center text-gray-400 py-12">{isAr ? 'اختر ملفاً لعرض التفاصيل' : 'Select a case to view checklist'}</p>
           )}
         </div>
       </div>
@@ -350,40 +486,51 @@ export default function HRTermination() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-xs p-4">
           <form onSubmit={handleCreate} className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">Initiate Employee Offboarding</h3>
+              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                {isAr ? 'بدء إجراء إنهاء خدمة جديد' : 'New Offboarding Case Form'}
+              </h3>
               <button type="button" onClick={() => setShowModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={18} className="text-gray-400" /></button>
             </div>
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Select Employee</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'اختيار الموظف' : 'Select Employee'}
+                </label>
                 <select
-                  value={newTerm.name}
-                  onChange={(e) => setNewTerm({ ...newTerm, name: e.target.value })}
+                  value={newTerm.employeeId}
+                  onChange={(e) => setNewTerm({ ...newTerm, employeeId: e.target.value })}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212]"
                 >
-                  <option value="Mohammed Maamari">Mohammed Maamari</option>
-                  <option value="Sara Al-Balushi">Sara Al-Balushi</option>
-                  <option value="Ahmed Al-Kharusi">Ahmed Al-Kharusi</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.dept} - {emp.role})
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Separation Reason</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'سبب إنهاء الخدمة' : 'Exit Reason'}
+                  </label>
                   <select
                     value={newTerm.reason}
                     onChange={(e) => setNewTerm({ ...newTerm, reason: e.target.value as any })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212]"
                   >
-                    <option value="Resignation">Resignation (استقالة)</option>
-                    <option value="Dismissal">Dismissal (فصل)</option>
-                    <option value="Redundancy">Redundancy (إنهاء خدمة اقتصادي)</option>
-                    <option value="End of Contract">End of Contract (انتهاء العقد)</option>
+                    <option value="Resignation">{isAr ? 'استقالة (Resignation)' : 'Resignation'}</option>
+                    <option value="End of Contract">{isAr ? 'انتهاء العقد (End of Contract)' : 'End of Contract'}</option>
+                    <option value="Redundancy">{isAr ? 'إنهاء خدمات (Redundancy)' : 'Redundancy'}</option>
+                    <option value="Dismissal">{isAr ? 'فصل (Dismissal)' : 'Dismissal'}</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Last Working Day</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'آخر يوم عمل' : 'Last Working Day'}
+                  </label>
                   <input
                     type="date"
                     required
@@ -395,7 +542,9 @@ export default function HRTermination() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Estimated EOS Settlement Pay (OMR)</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'مستحقات نهاية الخدمة التقديرية (OMR)' : 'Estimated EOS Settlement (OMR)'}
+                </label>
                 <input
                   type="number"
                   min="0"
@@ -411,13 +560,15 @@ export default function HRTermination() {
                   onClick={() => setShowModal(false)}
                   className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-gray-200 transition-colors"
                 >
-                  Cancel
+                  {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors"
+                  disabled={submitting}
+                  className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors flex items-center justify-center gap-1.5"
                 >
-                  Confirm Offboarding
+                  {submitting && <Loader2 size={14} className="animate-spin" />}
+                  {isAr ? 'بدء الإجراء' : 'Initialize Case'}
                 </button>
               </div>
             </div>

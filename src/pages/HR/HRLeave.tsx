@@ -2,11 +2,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabaseClient';
 import {
-  Calendar, Check, X, FileText, Info, PlusCircle, AlertCircle, Clock, CheckCircle2
+  Calendar, Check, X, FileText, Info, PlusCircle, AlertCircle, Clock, CheckCircle2, Loader2, User
 } from 'lucide-react';
 
-interface LeaveRequest {
+interface EmployeeProfile {
   id: string;
+  name: string;
+  email: string;
+  role: string;
+  dept: string;
+}
+
+interface LeaveRequest {
+  id: string | number;
+  employeeId: string;
   employeeName: string;
   type: string;
   startDate: string;
@@ -15,11 +24,12 @@ interface LeaveRequest {
   managerApproval: 'Pending' | 'Approved' | 'Rejected';
   hrApproval: 'Pending' | 'Approved' | 'Rejected';
   notes?: string;
-  sickLeaveDetails?: string; // e.g. "Full salary tier"
+  sickLeaveDetails?: string;
+  createdAt?: string;
 }
 
 interface LeaveBalance {
-  id: string;
+  employeeId: string;
   employeeName: string;
   annual: number;
   sick: number;
@@ -29,60 +39,20 @@ interface LeaveBalance {
   hajjUsed: boolean;
 }
 
-const INITIAL_REQUESTS: LeaveRequest[] = [
-  {
-    id: 'LR-201',
-    employeeName: 'Ahmed Al-Kharusi',
-    type: 'Annual Leave',
-    startDate: '2026-07-10',
-    endDate: '2026-07-15',
-    days: 5,
-    managerApproval: 'Approved',
-    hrApproval: 'Pending',
-    notes: 'Family vacation'
-  },
-  {
-    id: 'LR-202',
-    employeeName: 'Sara Al-Balushi',
-    type: 'Sick Leave',
-    startDate: '2026-07-01',
-    endDate: '2026-07-05',
-    days: 4,
-    managerApproval: 'Approved',
-    hrApproval: 'Pending',
-    notes: 'Medical recovery following dental surgery',
-    sickLeaveDetails: 'Eligible for 100% Wage (Day 1 to 21 schedule)'
-  },
-  {
-    id: 'LR-203',
-    employeeName: 'Mohammed Maamari',
-    type: 'Paternity Leave',
-    startDate: '2026-07-20',
-    endDate: '2026-07-26',
-    days: 7,
-    managerApproval: 'Pending',
-    hrApproval: 'Pending',
-    notes: 'Birth of newborn child'
-  }
-];
-
-const INITIAL_BALANCES: LeaveBalance[] = [
-  { id: '1', employeeName: 'Ahmed Al-Kharusi', annual: 24, sick: 15, maternity: 0, paternity: 7, marriageUsed: true, hajjUsed: false },
-  { id: '2', employeeName: 'Sara Al-Balushi', annual: 18, sick: 17, maternity: 98, paternity: 0, marriageUsed: false, hajjUsed: false },
-  { id: '3', employeeName: 'Mohammed Maamari', annual: 30, sick: 21, maternity: 0, paternity: 7, marriageUsed: false, hajjUsed: false }
-];
-
 export default function HRLeave() {
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
 
+  const [employees, setEmployees] = useState<EmployeeProfile[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
-  const [balances, setBalances] = useState<LeaveBalance[]>(INITIAL_BALANCES);
+  const [balances, setBalances] = useState<LeaveBalance[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [showApplyModal, setShowApplyModal] = useState(false);
 
   // New Request Form State
   const [newReq, setNewReq] = useState({
-    employeeName: 'Ahmed Al-Kharusi',
+    employeeId: '',
     type: 'Annual Leave',
     startDate: '',
     endDate: '',
@@ -90,58 +60,120 @@ export default function HRLeave() {
     notes: ''
   });
 
-  // ── Fetch Requests (Live DB + Fallback) ──────────────────────────────────
-  const fetchRequests = useCallback(async () => {
+  // ── 1. Fetch Employees, Balances & Leave Requests ─────────────────────────
+  const fetchAllLeaveData = useCallback(async () => {
     try {
-      const liveList: LeaveRequest[] = [];
+      setLoading(true);
 
-      // 1. Fetch live from Supabase
-      const { data: dbLeaves } = await supabase
-        .from('hr_leave_requests')
-        .select('*');
+      // Fetch Profiles and HR Employees
+      const [{ data: profData }, { data: hrData }, { data: leaveReqData }, { data: leaveBalData }] = await Promise.all([
+        supabase.from('profiles').select('id, full_name, email, role, department_id, department'),
+        supabase.from('hr_employees').select('id, full_name, email, role, dept'),
+        supabase.from('hr_leave_requests').select('*').order('created_at', { ascending: false }),
+        supabase.from('hr_leave_balances').select('*')
+      ]);
 
-      if (dbLeaves && dbLeaves.length > 0) {
-        dbLeaves.forEach((leave: any) => {
-          liveList.push({
-            id: leave.id.toString().slice(0, 8),
-            employeeName: leave.employee_name || 'Employee',
-            type: leave.leave_type || 'Annual Leave',
-            startDate: leave.start_date || '',
-            endDate: leave.end_date || '',
-            days: leave.days || 1,
-            managerApproval: leave.status === 'approved' ? 'Approved' : leave.status === 'rejected' ? 'Rejected' : 'Pending',
-            hrApproval: leave.status === 'approved' ? 'Approved' : leave.status === 'rejected' ? 'Rejected' : 'Pending',
-            notes: leave.reason || ''
-          });
+      // Build unified employee map
+      const empMap = new Map<string, EmployeeProfile>();
+      (profData || []).filter(p => p.role !== 'client').forEach(p => {
+        empMap.set(p.id, {
+          id: p.id,
+          name: p.full_name || p.email?.split('@')[0] || 'Employee',
+          email: p.email || '',
+          role: p.role || 'Staff',
+          dept: p.department_id || p.department || 'General'
         });
-      }
+      });
 
-      // 2. Merge local storage fallback
-      const saved = localStorage.getItem('hr_leave_requests');
-      const localLeaves: LeaveRequest[] = saved ? JSON.parse(saved) : INITIAL_REQUESTS;
-      localLeaves.forEach(local => {
-        if (!liveList.some(l => l.id === local.id)) {
-          liveList.push(local);
+      (hrData || []).forEach(h => {
+        if (!empMap.has(h.id)) {
+          empMap.set(h.id, {
+            id: h.id,
+            name: h.full_name || h.email?.split('@')[0] || 'Employee',
+            email: h.email || '',
+            role: h.role || 'Staff',
+            dept: h.dept || 'General'
+          });
         }
       });
 
-      setRequests(liveList);
+      const empList = Array.from(empMap.values());
+      setEmployees(empList);
+
+      if (empList.length > 0 && !newReq.employeeId) {
+        setNewReq(prev => ({ ...prev, employeeId: empList[0].id }));
+      }
+
+      // Map leave requests
+      const parsedRequests: LeaveRequest[] = (leaveReqData || []).map((req: any) => {
+        const emp = empMap.get(req.employee_id);
+        return {
+          id: req.id,
+          employeeId: req.employee_id,
+          employeeName: emp ? emp.name : 'Staff Member',
+          type: req.type || 'Annual Leave',
+          startDate: req.start_date || '',
+          endDate: req.end_date || '',
+          days: Number(req.days || 1),
+          managerApproval: (req.manager_approval as any) || 'Approved',
+          hrApproval: (req.hr_approval as any) || 'Pending',
+          notes: req.notes || '',
+          sickLeaveDetails: req.sick_leave_details || '',
+          createdAt: req.created_at
+        };
+      });
+
+      setRequests(parsedRequests);
+      localStorage.setItem('hr_leave_requests', JSON.stringify(parsedRequests));
+
+      // Map leave balances
+      const parsedBalances: LeaveBalance[] = empList.map(emp => {
+        const dbBal = (leaveBalData || []).find((b: any) => b.employee_id === emp.id);
+        return {
+          employeeId: emp.id,
+          employeeName: emp.name,
+          annual: dbBal ? Number(dbBal.annual ?? 30) : 30,
+          sick: dbBal ? Number(dbBal.sick ?? 15) : 15,
+          maternity: dbBal ? Number(dbBal.maternity ?? 98) : 98,
+          paternity: dbBal ? Number(dbBal.paternity ?? 7) : 7,
+          marriageUsed: dbBal ? Boolean(dbBal.marriage_used) : false,
+          hajjUsed: dbBal ? Boolean(dbBal.hajj_used) : false
+        };
+      });
+
+      setBalances(parsedBalances);
     } catch (e) {
-      console.error('Error fetching HR leave requests:', e);
+      console.error('Error fetching HR leave data:', e);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [newReq.employeeId]);
 
   useEffect(() => {
-    fetchRequests();
+    fetchAllLeaveData();
 
-    // ── Supabase Realtime Subscription ─────────────────────────────────────
+    // ── Supabase Realtime Subscriptions ─────────────────────────────────────
     const channel = supabase
-      .channel('hr-leave-requests-realtime')
+      .channel('hr_leave_live_realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'hr_leave_requests' },
         () => {
-          fetchRequests();
+          fetchAllLeaveData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hr_leave_balances' },
+        () => {
+          fetchAllLeaveData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
+        () => {
+          fetchAllLeaveData();
         }
       )
       .subscribe();
@@ -149,68 +181,140 @@ export default function HRLeave() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchRequests]);
+  }, [fetchAllLeaveData]);
 
-  const handleAction = async (id: string, action: 'Approve' | 'Reject') => {
-    const nextRequests = requests.map(req => {
-      if (req.id === id) {
-        return {
-          ...req,
-          hrApproval: action === 'Approve' ? 'Approved' : 'Rejected'
-        };
-      }
-      return req;
-    });
-    setRequests(nextRequests);
-    localStorage.setItem('hr_leave_requests', JSON.stringify(nextRequests));
+  // ── 2. Handle Approve / Reject ───────────────────────────────────────────
+  const handleAction = async (requestId: string | number, action: 'Approve' | 'Reject') => {
+    const targetReq = requests.find(r => r.id === requestId);
+    if (!targetReq) return;
 
-    // Update in Supabase if live DB record
+    const newHrStatus = action === 'Approve' ? 'Approved' : 'Rejected';
+
+    // Optimistic UI update
+    setRequests(prev => prev.map(r => r.id === requestId ? { ...r, hrApproval: newHrStatus } : r));
+
     try {
-      await supabase
+      // 1. Update hr_leave_requests in Supabase
+      const { error: reqErr } = await supabase
         .from('hr_leave_requests')
-        .update({ status: action === 'Approve' ? 'approved' : 'rejected' })
-        .eq('id', id);
-    } catch (err) {
-      console.error('Failed to sync leave decision to DB:', err);
-    }
+        .update({
+          hr_approval: newHrStatus,
+          manager_approval: 'Approved' // Ensure both are aligned if HR approves directly
+        })
+        .eq('id', requestId);
 
-    // Also deduct balances if approved
-    if (action === 'Approve') {
-      const approvedReq = requests.find(r => r.id === id);
-      if (approvedReq) {
-        setBalances(prev => prev.map(b => {
-          if (b.employeeName === approvedReq.employeeName) {
-            const leaveType = approvedReq.type.toLowerCase();
-            if (leaveType.includes('annual')) {
-              return { ...b, annual: Math.max(0, b.annual - approvedReq.days) };
-            } else if (leaveType.includes('sick')) {
-              return { ...b, sick: Math.max(0, b.sick - approvedReq.days) };
-            }
+      if (reqErr) throw reqErr;
+
+      // 2. If Approved, deduct corresponding balance in DB
+      if (action === 'Approve' && targetReq.employeeId) {
+        const leaveType = (targetReq.type || '').toLowerCase();
+        const currentBal = balances.find(b => b.employeeId === targetReq.employeeId);
+        const daysToDeduct = Number(targetReq.days || 1);
+
+        if (currentBal) {
+          let updatedAnnual = currentBal.annual;
+          let updatedSick = currentBal.sick;
+
+          if (leaveType.includes('annual')) {
+            updatedAnnual = Math.max(0, currentBal.annual - daysToDeduct);
+          } else if (leaveType.includes('sick')) {
+            updatedSick = Math.max(0, currentBal.sick - daysToDeduct);
           }
-          return b;
-        }));
+
+          // Upsert to hr_leave_balances in Supabase
+          const { error: balErr } = await supabase
+            .from('hr_leave_balances')
+            .upsert({
+              employee_id: targetReq.employeeId,
+              annual: updatedAnnual,
+              sick: updatedSick,
+              maternity: currentBal.maternity,
+              paternity: currentBal.paternity
+            }, { onConflict: 'employee_id' });
+
+          if (balErr) {
+            console.warn('Notice updating leave balance in DB:', balErr);
+          } else {
+            setBalances(prev => prev.map(b => b.employeeId === targetReq.employeeId ? {
+              ...b,
+              annual: updatedAnnual,
+              sick: updatedSick
+            } : b));
+          }
+        }
       }
+    } catch (err) {
+      console.error('Failed to sync leave decision to Supabase DB:', err);
+      fetchAllLeaveData();
     }
   };
 
-  const handleApply = (e: React.FormEvent) => {
+  // ── 3. Handle Submit New Leave Request ────────────────────────────────────
+  const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
-    const request: LeaveRequest = {
-      id: `LR-${Math.floor(100 + Math.random() * 900)}`,
-      employeeName: newReq.employeeName,
-      type: newReq.type,
-      startDate: newReq.startDate,
-      endDate: newReq.endDate,
-      days: Number(newReq.days),
-      managerApproval: 'Approved', // Auto-approved by HOD if HR inputs directly
-      hrApproval: 'Pending',
-      notes: newReq.notes
-    };
-    const nextRequests = [request, ...requests];
-    setRequests(nextRequests);
-    localStorage.setItem('hr_leave_requests', JSON.stringify(nextRequests));
-    setShowApplyModal(false);
+    if (!newReq.employeeId || !newReq.startDate || !newReq.endDate) return;
+
+    setSubmitting(true);
+    try {
+      const selectedEmp = employees.find(e => e.id === newReq.employeeId);
+
+      const dbPayload = {
+        employee_id: newReq.employeeId,
+        type: newReq.type,
+        start_date: newReq.startDate,
+        end_date: newReq.endDate,
+        days: Number(newReq.days),
+        manager_approval: 'Approved',
+        hr_approval: 'Pending',
+        notes: newReq.notes || null,
+        sick_leave_details: newReq.type.includes('Sick') ? 'Tier-1 Omani Labor Law Schedule' : null
+      };
+
+      const { data, error } = await supabase
+        .from('hr_leave_requests')
+        .insert(dbPayload)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        const newRecord: LeaveRequest = {
+          id: data.id,
+          employeeId: data.employee_id,
+          employeeName: selectedEmp?.name || 'Employee',
+          type: data.type,
+          startDate: data.start_date,
+          endDate: data.end_date,
+          days: Number(data.days),
+          managerApproval: 'Approved',
+          hrApproval: 'Pending',
+          notes: data.notes || '',
+          sickLeaveDetails: data.sick_leave_details || '',
+          createdAt: data.created_at
+        };
+
+        setRequests(prev => [newRecord, ...prev]);
+      }
+
+      setShowApplyModal(false);
+      setNewReq({
+        employeeId: employees[0]?.id || '',
+        type: 'Annual Leave',
+        startDate: '',
+        endDate: '',
+        days: 1,
+        notes: ''
+      });
+    } catch (err: any) {
+      console.error('Failed to insert leave request to Supabase:', err);
+      alert(isAr ? 'فشل حفظ طلب الإجازة في قاعدة البيانات' : 'Failed to save leave request to Supabase');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const pendingRequests = requests.filter(req => req.hrApproval === 'Pending');
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300" dir={isAr ? 'rtl' : 'ltr'}>
@@ -222,7 +326,7 @@ export default function HRLeave() {
             <Calendar className="text-[#A11212]" size={24} />
             {isAr ? 'طلب وإجازة الموظفين' : 'Leave & Holiday Management'}
           </h2>
-          <p className="text-xs text-gray-500 font-bold">{isAr ? 'قوانين العمل العمانية المعتمدة' : 'Compliant with Sultanate of Oman Labor Laws'}</p>
+          <p className="text-xs text-gray-500 font-bold">{isAr ? 'متصل بقاعدة بيانات ميسرة وقوانين العمل العمانية المعتمدة' : 'Real-time Supabase sync & compliant with Sultanate of Oman Labor Laws'}</p>
         </div>
         <button
           onClick={() => setShowApplyModal(true)}
@@ -253,98 +357,111 @@ export default function HRLeave() {
         
         {/* Left Side: Pending Approval Requests Inbox */}
         <div className="lg:col-span-2 space-y-4">
-          <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-1">
-            <Clock size={14} /> Pending HR Approval Inbox
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+              <Clock size={14} className="text-[#A11212]" /> {isAr ? 'صندوق طلبات الإجازة المعلقة للموافقة' : 'Pending HR Approval Inbox'}
+            </h3>
+            <span className="bg-red-50 text-[#A11212] text-[10px] font-black px-2.5 py-0.5 rounded-full border border-red-100">
+              {pendingRequests.length} {isAr ? 'معلق' : 'Pending'}
+            </span>
+          </div>
           
-          <div className="space-y-4">
-            {requests.filter(req => req.managerApproval === 'Approved' && req.hrApproval === 'Pending').map(req => (
-              <div key={req.id} className="bg-white border border-gray-150 rounded-2xl p-5 shadow-xs hover:border-gray-300 transition-all">
-                <div className="flex justify-between items-start flex-wrap gap-2">
-                  <div>
-                    <h4 className="font-black text-sm text-gray-900">{req.employeeName}</h4>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{req.type}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
-                      req.managerApproval === 'Approved' ? 'bg-green-50 text-green-700 border border-green-150' : 'bg-orange-50 text-orange-700'
-                    }`}>
-                      Manager: {req.managerApproval}
-                    </span>
-                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
-                      req.hrApproval === 'Approved' ? 'bg-green-50 text-green-700' :
-                      req.hrApproval === 'Rejected' ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-700 border border-orange-150'
-                    }`}>
-                      HR: {req.hrApproval}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-xl">
-                  <div>
-                    <p className="text-[10px] text-gray-400 font-bold">Duration</p>
-                    <p className="text-xs font-black text-gray-800">{req.startDate} to {req.endDate}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-gray-400 font-bold">Total Days</p>
-                    <p className="text-xs font-black text-gray-800">{req.days} Days</p>
-                  </div>
-                  {req.notes && (
-                    <div className="col-span-2 border-t border-gray-200/50 pt-2">
-                      <p className="text-[10px] text-gray-400 font-bold">Reason / Notes</p>
-                      <p className="text-xs text-gray-650 font-medium">{req.notes}</p>
+          {loading ? (
+            <div className="p-12 text-center text-gray-400 bg-white rounded-2xl border border-gray-100">
+              <Loader2 size={28} className="animate-spin text-[#A11212] mx-auto mb-2" />
+              <p className="text-xs font-bold">{isAr ? 'جاري مزامنة الطلبات...' : 'Syncing live leave requests...'}</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {pendingRequests.map(req => (
+                <div key={req.id} className="bg-white border border-gray-150 rounded-2xl p-5 shadow-xs hover:border-gray-300 transition-all">
+                  <div className="flex justify-between items-start flex-wrap gap-2">
+                    <div>
+                      <h4 className="font-black text-sm text-gray-900">{req.employeeName}</h4>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{req.type}</p>
                     </div>
-                  )}
-                </div>
+                    <div className="flex gap-2">
+                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
+                        req.managerApproval === 'Approved' ? 'bg-green-50 text-green-700 border border-green-150' : 'bg-orange-50 text-orange-700'
+                      }`}>
+                        Manager: {req.managerApproval}
+                      </span>
+                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
+                        req.hrApproval === 'Approved' ? 'bg-green-50 text-green-700' :
+                        req.hrApproval === 'Rejected' ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-700 border border-orange-150'
+                      }`}>
+                        HR: {req.hrApproval}
+                      </span>
+                    </div>
+                  </div>
 
-                {req.hrApproval === 'Pending' && (
+                  <div className="mt-4 grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-xl">
+                    <div>
+                      <p className="text-[10px] text-gray-400 font-bold">{isAr ? 'الفترة' : 'Duration'}</p>
+                      <p className="text-xs font-black text-gray-800">{req.startDate} {isAr ? 'إلى' : 'to'} {req.endDate}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray-400 font-bold">{isAr ? 'عدد الأيام' : 'Total Days'}</p>
+                      <p className="text-xs font-black text-[#A11212]">{req.days} {isAr ? 'أيام' : 'Days'}</p>
+                    </div>
+                    {req.notes && (
+                      <div className="col-span-2 border-t border-gray-200/50 pt-2">
+                        <p className="text-[10px] text-gray-400 font-bold">{isAr ? 'السبب / الملاحظات' : 'Reason / Notes'}</p>
+                        <p className="text-xs text-gray-700 font-medium">{req.notes}</p>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="mt-4 flex gap-2 border-t border-gray-100 pt-3 justify-end">
                     <button
                       onClick={() => handleAction(req.id, 'Reject')}
                       className="bg-white border border-gray-200 text-gray-700 hover:text-red-700 hover:border-red-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1 transition-colors"
                     >
-                      <X size={14} /> Reject
+                      <X size={14} /> {isAr ? 'رفض' : 'Reject'}
                     </button>
                     <button
                       onClick={() => handleAction(req.id, 'Approve')}
                       className="bg-[#A11212] text-white hover:bg-[#800e0e] px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1 transition-colors"
                     >
-                      <Check size={14} /> Approve & Deduct
+                      <Check size={14} /> {isAr ? 'اعتماد وخصم الرصيد' : 'Approve & Deduct'}
                     </button>
                   </div>
-                )}
-              </div>
-            ))}
-            {requests.filter(req => req.managerApproval === 'Approved' && req.hrApproval === 'Pending').length === 0 && (
-              <div className="p-8 text-center text-gray-400 border border-dashed border-gray-200 rounded-2xl bg-gray-50/50">
-                <CheckCircle2 size={32} className="mx-auto mb-2 opacity-20" />
-                <p className="font-bold text-sm">No pending leave requests authorized by HOD.</p>
-              </div>
-            )}
-          </div>
+                </div>
+              ))}
+              {pendingRequests.length === 0 && (
+                <div className="p-8 text-center text-gray-400 border border-dashed border-gray-200 rounded-2xl bg-gray-50/50">
+                  <CheckCircle2 size={32} className="mx-auto mb-2 opacity-20 text-green-600" />
+                  <p className="font-bold text-sm">{isAr ? 'لا توجد طلبات إجازة معلقة حالياً' : 'No pending leave requests.'}</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Side: Employee Leave Balances Summary */}
         <div className="space-y-4">
-          <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">
-            Employee Leave Balances
+          <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+            <User size={14} /> {isAr ? 'أرصدة إجازات الموظفين الحية' : 'Employee Leave Balances'}
           </h3>
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-xs space-y-4">
+          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-xs space-y-4 max-h-[600px] overflow-y-auto">
             {balances.map(b => (
-              <div key={b.id} className="border-b border-gray-50 last:border-b-0 pb-4 last:pb-0 space-y-2">
+              <div key={b.employeeId} className="border-b border-gray-50 last:border-b-0 pb-4 last:pb-0 space-y-2">
                 <h4 className="font-black text-xs text-gray-900">{b.employeeName}</h4>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-gray-50 p-2 rounded-lg text-center">
-                    <p className="text-[9px] text-gray-400 font-bold">Annual Bal</p>
-                    <p className="text-xs font-black text-gray-800">{b.annual} Days</p>
+                  <div className="bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
+                    <p className="text-[9px] text-gray-400 font-bold">{isAr ? 'الرصيد السنوي' : 'Annual Bal'}</p>
+                    <p className="text-xs font-black text-gray-800">{b.annual} {isAr ? 'يوم' : 'Days'}</p>
                   </div>
-                  <div className="bg-gray-50 p-2 rounded-lg text-center">
-                    <p className="text-[9px] text-gray-400 font-bold">Sick Bal</p>
-                    <p className="text-xs font-black text-gray-800">{b.sick} Days</p>
+                  <div className="bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
+                    <p className="text-[9px] text-gray-400 font-bold">{isAr ? 'الرصيد المرضي' : 'Sick Bal'}</p>
+                    <p className="text-xs font-black text-gray-800">{b.sick} {isAr ? 'يوم' : 'Days'}</p>
                   </div>
                 </div>
               </div>
             ))}
+            {balances.length === 0 && !loading && (
+              <p className="text-xs text-gray-400 text-center py-4">{isAr ? 'لا توجد بيانات موظفين' : 'No employee balances found.'}</p>
+            )}
           </div>
         </div>
 
@@ -355,26 +472,34 @@ export default function HRLeave() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-xs p-4">
           <form onSubmit={handleApply} className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">New Leave Request</h3>
+              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                {isAr ? 'تقديم طلب إجازة جديد' : 'New Leave Request'}
+              </h3>
               <button type="button" onClick={() => setShowApplyModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={18} className="text-gray-400" /></button>
             </div>
             
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Select Employee</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'اختيار الموظف' : 'Select Employee'}
+                </label>
                 <select
-                  value={newReq.employeeName}
-                  onChange={(e) => setNewReq({ ...newReq, employeeName: e.target.value })}
+                  value={newReq.employeeId}
+                  onChange={(e) => setNewReq({ ...newReq, employeeId: e.target.value })}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212]"
                 >
-                  <option value="Ahmed Al-Kharusi">Ahmed Al-Kharusi</option>
-                  <option value="Sara Al-Balushi">Sara Al-Balushi</option>
-                  <option value="Mohammed Maamari">Mohammed Maamari</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.dept} - {emp.role})
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Leave Type</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'نوع الإجازة' : 'Leave Type'}
+                </label>
                 <select
                   value={newReq.type}
                   onChange={(e) => setNewReq({ ...newReq, type: e.target.value })}
@@ -392,7 +517,9 @@ export default function HRLeave() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Start Date</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'تاريخ البداية' : 'Start Date'}
+                  </label>
                   <input
                     type="date"
                     required
@@ -402,7 +529,9 @@ export default function HRLeave() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">End Date</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'تاريخ النهاية' : 'End Date'}
+                  </label>
                   <input
                     type="date"
                     required
@@ -414,7 +543,9 @@ export default function HRLeave() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Days Duration</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'عدد الأيام' : 'Days Duration'}
+                </label>
                 <input
                   type="number"
                   min="1"
@@ -426,7 +557,9 @@ export default function HRLeave() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Notes / Medical Document reference</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'ملاحظات / تقرير طبي' : 'Notes / Medical Document reference'}
+                </label>
                 <textarea
                   value={newReq.notes}
                   onChange={(e) => setNewReq({ ...newReq, notes: e.target.value })}
@@ -442,13 +575,15 @@ export default function HRLeave() {
                   onClick={() => setShowApplyModal(false)}
                   className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-gray-200 transition-colors"
                 >
-                  Cancel
+                  {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors"
+                  disabled={submitting}
+                  className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors flex items-center justify-center gap-1.5"
                 >
-                  Submit
+                  {submitting && <Loader2 size={14} className="animate-spin" />}
+                  {isAr ? 'إرسال الطلب' : 'Submit'}
                 </button>
               </div>
             </div>
