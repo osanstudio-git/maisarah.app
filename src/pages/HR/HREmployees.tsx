@@ -9,7 +9,7 @@ import {
   Download, UploadCloud, Plus, Edit, Trash2, CheckCircle2, X, PlusCircle, LayoutGrid, ListFilter, SlidersHorizontal, UserX, AlertCircle, ShieldAlert,
   Copy, Check, Share2, Send, Lock, Mail, Key, Loader2, Sparkles
 } from 'lucide-react';
-import { getLocalRecruits, upsertLocalRecruit, deleteLocalRecruit, upsertRecruitToDatabase } from '../../utils/recruitmentSync';
+import { getLocalRecruits, upsertLocalRecruit, deleteLocalRecruit, upsertRecruitToDatabase, syncRecruitsFromSupabase } from '../../utils/recruitmentSync';
 import { getAllDepartments, getDepartmentById, getJobPositionsByDepartment } from '../../config/departments';
 
 interface Employee {
@@ -415,7 +415,7 @@ export default function HREmployees() {
 
         // Merge offered / placed recruits from recruitment pipeline
         try {
-          const recruits = getLocalRecruits();
+          const recruits = await syncRecruitsFromSupabase();
           recruits.forEach(r => {
             if ((r.stage === 'offered' || r.placement_status === 'placed' || r.placement_status === 'pending_placement') && r.email && !isDeleted(r.id, r.email, r.name)) {
               if (!liveEmployees.some(e => e.email && e.email.toLowerCase() === r.email.toLowerCase())) {

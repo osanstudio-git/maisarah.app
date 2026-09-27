@@ -99,8 +99,26 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
       .order('created_at', { ascending: false });
 
     if (!error && Array.isArray(data)) {
-      saveLocalRecruits(data);
-      return data;
+      const local = getLocalRecruits();
+      const mergedMap = new Map<string, RecruitCandidate>();
+
+      // First add DB records
+      data.forEach(item => {
+        if (item.id) mergedMap.set(item.id, item);
+      });
+
+      // Preserve local items that are not in DB yet (unsynced or pending local items)
+      local.forEach(item => {
+        if (item.id && !mergedMap.has(item.id)) {
+          mergedMap.set(item.id, item);
+          // Retry background upsert to DB
+          upsertRecruitToDatabase(item).catch(err => console.warn('Retry DB upsert notice:', err));
+        }
+      });
+
+      const mergedList = Array.from(mergedMap.values());
+      saveLocalRecruits(mergedList);
+      return mergedList;
     }
 
     console.warn('Direct hr_recruits read error:', error?.message);
