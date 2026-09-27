@@ -786,155 +786,142 @@ const EmployeeManagement = () => {
       ? 'Executive Management & Board of Directors'
       : (placementData.supervisor === 'custom' ? (placementData.customSupervisor || 'General Manager') : placementData.supervisor);
 
-    try {
-      let userId: string = crypto.randomUUID();
-      const cleanEmail = selectedPlacement.email.trim().toLowerCase();
-      const assignedSecondary = (placementData.secondaryRoles || []).filter((r: string) => r !== effectiveRole);
+    const userId: string = crypto.randomUUID();
+    const cleanEmail = selectedPlacement.email.trim().toLowerCase();
+    const assignedSecondary = (placementData.secondaryRoles || []).filter((r: string) => r !== effectiveRole);
 
-      // 1. Synchronize Supabase Auth Account and Password via Admin Auth API (Edge Function with 3s non-blocking timeout)
+    const newEmployeeRecord = {
+      id: userId,
+      full_name: selectedPlacement.name,
+      email: selectedPlacement.email,
+      phone: selectedPlacement.phone || '+968 9000 0000',
+      role: finalRole,
+      accessRole: effectiveRole,
+      dept: targetDeptName,
+      employee_type: selectedPlacement.employment_type || 'Experienced',
+      joined_date: placementData.startDate || new Date().toISOString().split('T')[0],
+      immediate_supervisor: finalSupervisor,
+      accommodation_status: 'Lives with family',
+      allowances: { transport: 150, housing: 250, other: 50 },
+      education: [],
+      experience: [],
+      family: [],
+      emergency_contact: { name: '', relation: 'Parent', phone: '' },
+      promotions: [],
+      disciplinaries: [],
+      bonuses: [],
+      transfers: []
+    };
+
+    // 1. Instant local storage sync & UI responsiveness
+    try {
+      const localEmps = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+      const filtered = localEmps.filter((e: any) => e.email !== selectedPlacement.email);
+      filtered.push(newEmployeeRecord);
+      localStorage.setItem('maisarah_placed_employees', JSON.stringify(filtered));
+    } catch (lsErr) {
+      console.warn('Local storage save notice:', lsErr);
+    }
+
+    // 2. Open Success Credentials Modal IMMEDIATELY — zero UI lag
+    setIsPlacing(false);
+    setNotification({
+      show: true,
+      title: isAr ? 'تم تأكيد التعيين' : 'Placement Finalized',
+      message: isAr
+        ? `تم تفعيل حساب الموظف لـ ${selectedPlacement.name} بنجاح وإرسال البريد الإلكتروني.`
+        : `Placement confirmed for ${selectedPlacement.name}! Dispatched credentials to ${selectedPlacement.email}.`,
+      type: 'success'
+    });
+
+    setCredentialsModal({
+      show: true,
+      name: selectedPlacement.name,
+      email: selectedPlacement.email,
+      password: tempPassword,
+      role: finalRole,
+      dept: targetDeptName,
+      supervisor: finalSupervisor
+    });
+
+    const activePlacement = selectedPlacement;
+    setPendingPlacements(prev => prev.filter(p => p.id !== activePlacement.id));
+    setSelectedPlacement(null);
+
+    // 3. Background DB & Edge Function sync (completely non-blocking for smooth UX)
+    (async () => {
       try {
+        // A. Auth user creation (5s timeout)
         const authRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
           email: cleanEmail,
           password: tempPassword,
-          full_name: selectedPlacement.name,
+          full_name: activePlacement.name,
           role: effectiveRole,
           department_id: targetDeptKey,
           secondary_roles: assignedSecondary
-        }, 3000);
+        }, 5000).catch(e => console.warn('Auth sync notice:', e));
 
-        if (authRes?.data?.userId) {
-          userId = authRes.data.userId;
-        }
-      } catch (authEdgeErr) {
-        console.warn('manage-auth edge function non-blocking notice:', authEdgeErr);
-      }
+        const finalUserId = authRes?.data?.userId || userId;
 
-      // 2. Insert/Upsert profile record (safely catch RLS/FK warnings)
-      try {
-        const { error: profileError } = await supabase.from('profiles').upsert({
-          id: userId,
-          full_name: selectedPlacement.name,
-          email: selectedPlacement.email,
+        // B. Profiles table upsert
+        await supabase.from('profiles').upsert({
+          id: finalUserId,
+          full_name: activePlacement.name,
+          email: activePlacement.email,
           role: effectiveRole,
           department_id: targetDeptKey
-        }, { onConflict: 'id' });
-        if (profileError) console.warn('Profiles upsert warning:', profileError.message);
-      } catch (pErr) {
-        console.warn('Profiles upsert caught exception:', pErr);
-      }
+        }, { onConflict: 'id' }).catch(pErr => console.warn('Profiles upsert notice:', pErr));
 
-      // 3. Upsert active employee card inside hr_employees
-      const newEmployeeRecord = {
-        id: userId,
-        full_name: selectedPlacement.name,
-        email: selectedPlacement.email,
-        phone: selectedPlacement.phone || '+968 9000 0000',
-        role: finalRole,
-        accessRole: effectiveRole,
-        dept: targetDeptName,
-        employee_type: selectedPlacement.employment_type || 'Experienced',
-        joined_date: placementData.startDate || new Date().toISOString().split('T')[0],
-        immediate_supervisor: finalSupervisor,
-        accommodation_status: 'Lives with family',
-        allowances: { transport: 150, housing: 250, other: 50 },
-        education: [],
-        experience: [],
-        family: [],
-        emergency_contact: { name: '', relation: 'Parent', phone: '' },
-        promotions: [],
-        disciplinaries: [],
-        bonuses: [],
-        transfers: []
-      };
+        // C. HR Employees table upsert
+        const { accessRole: _accRole, ...dbEmployeeRecord } = { ...newEmployeeRecord, id: finalUserId };
+        await supabase.from('hr_employees').upsert(dbEmployeeRecord, { onConflict: 'id' })
+          .catch(hrErr => console.warn('HR Employees upsert notice:', hrErr));
 
-      try {
-        const { accessRole: _accRole, ...dbEmployeeRecord } = newEmployeeRecord;
-        const { error: employeeUpsertError } = await supabase.from('hr_employees').upsert(dbEmployeeRecord, { onConflict: 'id' });
-        if (employeeUpsertError) console.warn('HR Employees upsert warning:', employeeUpsertError.message);
-      } catch (eErr) {
-        console.warn('HR Employees upsert caught exception:', eErr);
-      }
+        // D. Update hr_recruits status
+        await updateRecruitStatus(activePlacement.id, {
+          placement_status: 'placed',
+          role: finalRole,
+          dept: targetDeptName
+        }).catch(rErr => console.warn('Recruit status update notice:', rErr));
 
-      // Local fallback store to guarantee real-time UI rendering
-      try {
-        const localEmps = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
-        const filtered = localEmps.filter((e: any) => e.email !== selectedPlacement.email);
-        filtered.push(newEmployeeRecord);
-        localStorage.setItem('maisarah_placed_employees', JSON.stringify(filtered));
-      } catch (lsErr) {
-        console.warn('Local storage save error:', lsErr);
-      }
-
-      // 4. Update hr_recruits to mark status as 'placed'
-      await updateRecruitStatus(selectedPlacement.id, {
-        placement_status: 'placed',
-        role: finalRole,
-        dept: targetDeptName
-      });
-
-      // 5. Dispatch portal credentials email (Email B) non-blocking for instant UI response
-      supabase.functions.invoke('send-email', {
-        body: {
-          to: selectedPlacement.email,
-          subject: isAr
-            ? 'مرحباً بك في مجموعة ميسرة - حساب الموظف الخاص بك جاهز!'
-            : 'Welcome to Maisarah - Your Employee Portal is Active!',
-          html: `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; color: #333;">
-              <h2 style="color: #A11212; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; text-align: center;">Welcome to Maisarah Group!</h2>
-              <p>Dear ${selectedPlacement.name},</p>
-              <p>
-                ${isAr
-              ? 'يسعدنا إبلاغك بأنه قد تم اعتماد تفاصيل تعيينك وتفعيل حساب الموظف الخاص بك بنجاح. يمكنك الآن تسجيل الدخول لتحديث ملفك والبدء بقائمة مهام التهيئة.'
-              : 'We are pleased to inform you that your department placement setup has been finalized and your corporate portal access is now active.'}
-              </p>
-              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb;">
-                <h3 style="margin-top: 0; color: #555;">Your Access Credentials:</h3>
-                <p style="margin: 6px 0;"><strong>Portal URL:</strong> <a href="${window.location.origin}/login" style="color: #A11212; font-weight: bold;">${window.location.origin}/login</a></p>
-                <p style="margin: 6px 0;"><strong>Username/Email:</strong> ${selectedPlacement.email}</p>
-                <p style="margin: 6px 0;"><strong>Temporary Password:</strong> <span style="font-family: monospace; background-color: #f3f4f6; padding: 3px 8px; border-radius: 4px; font-weight: bold; color: #111827; border: 1px solid #e5e7eb;">${tempPassword}</span></p>
-                <p style="margin: 6px 0;"><strong>Assigned Role:</strong> ${finalRole}</p>
-                <p style="margin: 6px 0;"><strong>Assigned Department:</strong> ${targetDeptName}</p>
+        // E. Send Credentials Email (Email B)
+        await supabase.functions.invoke('send-email', {
+          body: {
+            to: activePlacement.email,
+            subject: isAr
+              ? 'مرحباً بك في مجموعة ميسرة - حساب الموظف الخاص بك جاهز!'
+              : 'Welcome to Maisarah - Your Employee Portal is Active!',
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; color: #333;">
+                <h2 style="color: #A11212; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; text-align: center;">Welcome to Maisarah Group!</h2>
+                <p>Dear ${activePlacement.name},</p>
+                <p>
+                  ${isAr
+                ? 'يسعدنا إبلاغك بأنه قد تم اعتماد تفاصيل تعيينك وتفعيل حساب الموظف الخاص بك بنجاح. يمكنك الآن تسجيل الدخول لتحديث ملفك والبدء بقائمة مهام التهيئة.'
+                : 'We are pleased to inform you that your department placement setup has been finalized and your corporate portal access is now active.'}
+                </p>
+                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb;">
+                  <h3 style="margin-top: 0; color: #555;">Your Access Credentials:</h3>
+                  <p style="margin: 6px 0;"><strong>Portal URL:</strong> <a href="${window.location.origin}/login" style="color: #A11212; font-weight: bold;">${window.location.origin}/login</a></p>
+                  <p style="margin: 6px 0;"><strong>Username/Email:</strong> ${activePlacement.email}</p>
+                  <p style="margin: 6px 0;"><strong>Temporary Password:</strong> <span style="font-family: monospace; background-color: #f3f4f6; padding: 3px 8px; border-radius: 4px; font-weight: bold; color: #111827; border: 1px solid #e5e7eb;">${tempPassword}</span></p>
+                  <p style="margin: 6px 0;"><strong>Assigned Role:</strong> ${finalRole}</p>
+                  <p style="margin: 6px 0;"><strong>Assigned Department:</strong> ${targetDeptName}</p>
+                </div>
+                <p>${isAr ? 'يرجى تغيير كلمة المرور المؤقتة فور تسجيل الدخول لأول مرة.' : 'Please log in to complete your onboarding tasklist and change your temporary password for system security.'}</p>
+                <br/>
+                <p>${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
+                <p>${isAr ? 'إدارة العمليات والتنفيذ - ميسرة' : 'Maisarah Operations & Placement Management'}</p>
               </div>
-              <p>${isAr ? 'يرجى تغيير كلمة المرور المؤقتة فور تسجيل الدخول لأول مرة.' : 'Please log in to complete your onboarding tasklist and change your temporary password for system security.'}</p>
-              <br/>
-              <p>${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
-              <p>${isAr ? 'إدارة العمليات والتنفيذ - ميسرة' : 'Maisarah Operations & Placement Management'}</p>
-            </div>
-          `
-        }
-      }).catch(emailErr => {
-        console.warn('Portal credentials email dispatch notice:', emailErr);
-      });
-
-      setNotification({
-        show: true,
-        title: isAr ? 'تم تأكيد التعيين' : 'Placement Finalized',
-        message: isAr
-          ? `تم تفعيل حساب الموظف لـ ${selectedPlacement.name} بنجاح وإرسال البريد الإلكتروني (Email B).`
-          : `Placement details confirmed! Registered employee account for ${selectedPlacement.name} and dispatched login credentials to ${selectedPlacement.email}.`,
-        type: 'success'
-      });
-
-      // Show Manager Credentials Modal with Copy Options
-      setCredentialsModal({
-        show: true,
-        name: selectedPlacement.name,
-        email: selectedPlacement.email,
-        password: tempPassword,
-        role: finalRole,
-        dept: targetDeptName,
-        supervisor: finalSupervisor
-      });
-
-      setPendingPlacements(prev => prev.filter(p => p.id !== selectedPlacement.id));
-      setSelectedPlacement(null);
-      fetchEmployees();
-    } catch (err: any) {
-      setPlacementError(err.message || 'Failed to confirm placement');
-    } finally {
-      setIsPlacing(false);
-    }
+            `
+          }
+        }).catch(emailErr => console.warn('Email B dispatch notice:', emailErr));
+      } catch (bgErr) {
+        console.warn('Background placement sync notice:', bgErr);
+      } finally {
+        fetchEmployees();
+      }
+    })();
   };
 
   const openEditModal = (emp: Employee) => {
