@@ -258,16 +258,33 @@ const EmployeeManagement = () => {
 
       const dbData = await syncRecruitsFromSupabase();
       const recruits = Array.isArray(dbData) ? dbData : getLocalRecruits();
+      const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+
+      const isAlreadyPlaced = (c: any) => {
+        if (c.placement_status === 'placed') return true;
+        const cEmail = (c.email || '').trim().toLowerCase();
+        const cId = (c.id || '').trim().toLowerCase();
+        if (cEmail && localPlaced.some(lp => lp.email && lp.email.trim().toLowerCase() === cEmail)) return true;
+        if (cId && localPlaced.some(lp => lp.id && lp.id.trim().toLowerCase() === cId)) return true;
+        if (cEmail && employees.some(e => e.email && e.email.trim().toLowerCase() === cEmail)) return true;
+        return false;
+      };
+
       const filtered = recruits.filter((c: any) =>
         (c.stage === 'offered' || c.placement_status === 'pending_placement') &&
-        c.placement_status !== 'placed' &&
+        !isAlreadyPlaced(c) &&
         !isDeleted(c.id, c.email, c.name)
       );
       setPendingPlacements(filtered);
     } catch (err) {
       console.error('Error fetching pending placements:', err);
       const local = getLocalRecruits();
-      setPendingPlacements(local.filter((c: any) => (c.stage === 'offered' || c.placement_status === 'pending_placement') && c.placement_status !== 'placed'));
+      const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+      setPendingPlacements(local.filter((c: any) =>
+        (c.stage === 'offered' || c.placement_status === 'pending_placement') &&
+        c.placement_status !== 'placed' &&
+        !(c.email && localPlaced.some(lp => lp.email && lp.email.trim().toLowerCase() === c.email.trim().toLowerCase()))
+      ));
     } finally {
       setLoadingPlacements(false);
     }
@@ -816,9 +833,18 @@ const EmployeeManagement = () => {
     // 1. Instant local storage sync & UI responsiveness
     try {
       const localEmps = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
-      const filtered = localEmps.filter((e: any) => e.email !== selectedPlacement.email);
+      const filtered = localEmps.filter((e: any) => e.email?.toLowerCase() !== cleanEmail && e.id !== userId);
       filtered.push(newEmployeeRecord);
       localStorage.setItem('maisarah_placed_employees', JSON.stringify(filtered));
+
+      const localRecruits = JSON.parse(localStorage.getItem('maisarah_hr_recruits_v1') || '[]');
+      const updatedRecruits = localRecruits.map((r: any) => {
+        if (r.id === selectedPlacement.id || (r.email && r.email.toLowerCase() === cleanEmail)) {
+          return { ...r, placement_status: 'placed', role: finalRole, dept: targetDeptName };
+        }
+        return r;
+      });
+      localStorage.setItem('maisarah_hr_recruits_v1', JSON.stringify(updatedRecruits));
     } catch (lsErr) {
       console.warn('Local storage save notice:', lsErr);
     }
@@ -845,8 +871,11 @@ const EmployeeManagement = () => {
     });
 
     const activePlacement = selectedPlacement;
-    setPendingPlacements(prev => prev.filter(p => p.id !== activePlacement.id));
+    setPendingPlacements(prev => prev.filter(p => p.id !== activePlacement.id && p.email?.toLowerCase() !== cleanEmail));
     setSelectedPlacement(null);
+
+    window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+    window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
 
     // 3. Background DB & Edge Function sync (completely non-blocking for smooth UX)
     (async () => {
@@ -864,18 +893,19 @@ const EmployeeManagement = () => {
         const finalUserId = authRes?.data?.userId || userId;
 
         // B. Profiles table upsert
-        await supabase.from('profiles').upsert({
+        const { error: pErr } = await supabase.from('profiles').upsert({
           id: finalUserId,
           full_name: activePlacement.name,
           email: activePlacement.email,
           role: effectiveRole,
           department_id: targetDeptKey
-        }, { onConflict: 'id' }).catch(pErr => console.warn('Profiles upsert notice:', pErr));
+        }, { onConflict: 'id' });
+        if (pErr) console.warn('Profiles upsert notice:', pErr);
 
         // C. HR Employees table upsert
         const { accessRole: _accRole, ...dbEmployeeRecord } = { ...newEmployeeRecord, id: finalUserId };
-        await supabase.from('hr_employees').upsert(dbEmployeeRecord, { onConflict: 'id' })
-          .catch(hrErr => console.warn('HR Employees upsert notice:', hrErr));
+        const { error: hrErr } = await supabase.from('hr_employees').upsert(dbEmployeeRecord, { onConflict: 'id' });
+        if (hrErr) console.warn('HR Employees upsert notice:', hrErr);
 
         // D. Update hr_recruits status
         await updateRecruitStatus(activePlacement.id, {

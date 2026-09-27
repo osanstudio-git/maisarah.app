@@ -254,11 +254,14 @@ export async function deleteRecruitFromDatabase(idOrEmail: string) {
  */
 export async function updateRecruitStatus(id: string, updates: Partial<RecruitCandidate>) {
   const current = getLocalRecruits();
-  const candidate = current.find(c => c.id === id);
-  if (candidate) {
-    const updatedCandidate = { ...candidate, ...updates };
-    upsertLocalRecruit(updatedCandidate);
-  }
+  const updatedList = current.map(c => {
+    const isMatch = c.id === id || (c.email && updates.email && c.email.toLowerCase() === updates.email.toLowerCase()) || (c.name && updates.name && c.name.toLowerCase() === updates.name.toLowerCase());
+    if (isMatch) {
+      return { ...c, ...updates };
+    }
+    return c;
+  });
+  saveLocalRecruits(updatedList);
 
   const sanitizedUpdates = { ...updates };
   if ('placement_status' in sanitizedUpdates) {
