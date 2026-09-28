@@ -14,7 +14,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // pkce is recommended for modern web apps
     flowType: 'pkce',
+    // Non-blocking lock handler to prevent orphaned browser locks (e.g. React StrictMode / unmounts)
+    lock: async (_name, _acquireTimeout, fn) => {
+      return await fn();
+    },
   },
 });
