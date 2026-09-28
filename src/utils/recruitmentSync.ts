@@ -51,10 +51,12 @@ export function getLocalRecruits(): RecruitCandidate[] {
   return DEFAULT_OFFERED_RECRUITS;
 }
 
-export function saveLocalRecruits(recruits: RecruitCandidate[]) {
+export function saveLocalRecruits(recruits: RecruitCandidate[], shouldDispatch: boolean = true) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(recruits));
-    window.dispatchEvent(new Event('maisarah_recruits_updated'));
+    if (shouldDispatch) {
+      window.dispatchEvent(new Event('maisarah_recruits_updated'));
+    }
   } catch (e) {
     console.warn('Failed to save local recruits:', e);
   }
@@ -140,8 +142,8 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
       // Filter out deleted/blacklisted candidates
       const cleanDbData = data.filter(item => !isRecruitDeleted(item.id, item.email, item.name));
 
-      // Save database state directly to localStorage so deletions are synced
-      saveLocalRecruits(cleanDbData);
+      // Save database state directly to localStorage without dispatching recursive sync events
+      saveLocalRecruits(cleanDbData, false);
       return cleanDbData;
     }
 

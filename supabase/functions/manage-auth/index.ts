@@ -1,4 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+/// <reference path="../deno.d.ts" />
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -6,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -14,7 +15,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    
+
     if (!supabaseServiceKey) {
       return new Response(
         JSON.stringify({ error: 'Missing SUPABASE_SERVICE_ROLE_KEY' }),
@@ -103,7 +104,7 @@ serve(async (req) => {
       // Ensure bucket exists
       try {
         await supabaseAdmin.storage.createBucket(bucket, { public: true })
-      } catch {}
+      } catch { }
 
       const binaryStr = atob(file_base64)
       const bytes = new Uint8Array(binaryStr.length)
@@ -149,9 +150,9 @@ serve(async (req) => {
       const cleanEmail = (email || '').trim().toLowerCase()
 
       if (!targetUserId && cleanEmail) {
-        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
-        if (!listErr) {
-          const found = users?.find(u => u.email?.toLowerCase() === cleanEmail)
+        const { data, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
+        if (!listErr && data?.users) {
+          const found = data.users.find((u: any) => u.email?.toLowerCase() === cleanEmail)
           if (found) targetUserId = found.id
         }
       }
@@ -187,20 +188,20 @@ serve(async (req) => {
     const cleanEmail = email.trim().toLowerCase()
 
     // 1. Check if user already exists in auth.users
-    const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
+    const { data, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
     if (listErr) throw listErr
 
-    const existingUser = users?.find(u => u.email?.toLowerCase() === cleanEmail)
+    const existingUser = data?.users?.find((u: any) => u.email?.toLowerCase() === cleanEmail)
     let userId: string
 
     if (existingUser) {
       userId = existingUser.id
       const updateData: any = {
-        user_metadata: { 
-          full_name, 
-          role, 
-          department_id, 
-          secondary_roles: Array.isArray(secondary_roles) ? secondary_roles : [] 
+        user_metadata: {
+          full_name,
+          role,
+          department_id,
+          secondary_roles: Array.isArray(secondary_roles) ? secondary_roles : []
         }
       }
       if (password) {
@@ -213,11 +214,11 @@ serve(async (req) => {
         email: cleanEmail,
         password: password,
         email_confirm: true,
-        user_metadata: { 
-          full_name, 
-          role, 
-          department_id, 
-          secondary_roles: Array.isArray(secondary_roles) ? secondary_roles : [] 
+        user_metadata: {
+          full_name,
+          role,
+          department_id,
+          secondary_roles: Array.isArray(secondary_roles) ? secondary_roles : []
         }
       })
       if (createErr) throw createErr
