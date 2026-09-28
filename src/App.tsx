@@ -130,7 +130,7 @@ function App() {
             </Route>
 
             {/* Department Head Routes */}
-            <Route element={<ProtectedRoute allowedRoles={['department_head']} />}>
+            <Route element={<ProtectedRoute allowedRoles={['department_head', 'manager']} />}>
               <Route path="/hod" element={<Navigate to="/hod/dashboard" replace />} />
               <Route path="/hod/dashboard" element={<DepartmentHeadWorkspace />} />
               <Route path="/hod/team-leadership" element={<DepartmentHeadWorkspace />} />
@@ -142,7 +142,7 @@ function App() {
             </Route>
 
             {/* HR Routes - All 15 Modules */}
-            <Route element={<ProtectedRoute allowedRoles={['hr']} />}>
+            <Route element={<ProtectedRoute allowedRoles={['hr', 'manager']} />}>
               <Route path="/hr/dashboard" element={<HRWorkspace />} />
               <Route path="/hr/employees" element={<HRWorkspace />} />
               <Route path="/hr/attendance" element={<HRWorkspace />} />

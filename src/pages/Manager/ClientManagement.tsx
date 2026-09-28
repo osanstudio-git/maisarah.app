@@ -19,7 +19,8 @@ import {
   Archive,
   AlertTriangle,
   Banknote,
-  Clock
+  Clock,
+  RefreshCw
 } from 'lucide-react';
 
 interface Client {
@@ -47,6 +48,8 @@ const ClientManagement = () => {
   const isAr = i18n.language === 'ar';
 
   const [clients, setClients] = useState<Client[]>([]);
+  const [allInvoices, setAllInvoices] = useState<any[]>([]);
+  const [allServices, setAllServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -57,23 +60,65 @@ const ClientManagement = () => {
   const [clientFinance, setClientFinance] = useState<ClientFinance>({ total_billed: 0, paid: 0, outstanding: 0 });
   const [detailsLoading, setDetailsLoading] = useState(false);
 
-  const fetchClients = useCallback(async () => {
-    setLoading(true);
+  const fetchClientsAndStats = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*, assigned_employee:profiles!assigned_employee_id(full_name)')
-        .eq('is_archived', false)
-        .order('created_at', { ascending: false });
+      const [
+        { data: clientData, error: clientErr },
+        { data: invoiceData },
+        { data: serviceData }
+      ] = await Promise.all([
+        supabase
+          .from('clients')
+          .select('*, assigned_employee:profiles!assigned_employee_id(full_name)')
+          .eq('is_archived', false)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('invoices')
+          .select('id, client_id, amount, status, due_date, created_at'),
+        supabase
+          .from('services')
+          .select('id, client_id, title, status, created_at')
+      ]);
 
-      if (error) throw error;
-      setClients(data || []);
+      if (clientErr) throw clientErr;
+      setClients(clientData || []);
+      setAllInvoices(invoiceData || []);
+      setAllServices(serviceData || []);
     } catch (err) {
       console.error('Fetch clients error:', err);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    fetchClientsAndStats();
+
+    // ── Supabase Realtime Subscription ─────────────────────────────────────────
+    const channel = supabase
+      .channel('manager-clients-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clients' },
+        () => fetchClientsAndStats(true)
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'invoices' },
+        () => fetchClientsAndStats(true)
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'services' },
+        () => fetchClientsAndStats(true)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchClientsAndStats]);
 
   const fetchClientDetails = async (client: Client) => {
     setSelectedClient(client);
@@ -96,10 +141,10 @@ const ClientManagement = () => {
       setClientServices(servicesRes.data || []);
       setClientInvoices(invoicesRes.data || []);
 
-      // Calculate Finances
+      // Calculate Real Client Finances
       const invs = invoicesRes.data || [];
-      const total = invs.reduce((sum, inv) => sum + Number(inv.amount), 0);
-      const paid = invs.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + Number(inv.amount), 0);
+      const total = invs.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+      const paid = invs.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
       
       setClientFinance({
         total_billed: total,
@@ -113,10 +158,6 @@ const ClientManagement = () => {
       setDetailsLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchClients();
-  }, [fetchClients]);
 
   const handleArchive = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -137,18 +178,29 @@ const ClientManagement = () => {
   };
 
   const filtered = clients.filter(c => 
-    c.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchTerm.toLowerCase())
+    (c.company_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // ── Mock Pulse Data based on Real Clients ────────────────────────────────
+  // ── Real Pulse Data Derived from DB ────────────────────────────────────────
   const totalPortfolio = clients.length;
-  // Mock active engagements (approx 1.5 per client on average)
-  const activeEngagements = Math.floor(clients.length * 1.5) + Math.floor(Math.random() * 5);
-  // Mock LTV based on realistic OMR figures
-  const avgLtv = totalPortfolio > 0 ? Math.floor((Math.random() * 5000 + 8000)) : 0;
-  const riskAlerts = Math.floor(Math.random() * 3 + 1);
+  
+  // Real active engagements (services not yet completed)
+  const activeEngagements = allServices.filter(s => s.status !== 'completed').length;
+  
+  // Real Lifetime Value (LTV) across all billed invoices
+  const totalBilledAll = allInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+  const avgLtv = totalPortfolio > 0 ? Math.round(totalBilledAll / totalPortfolio) : 0;
+  
+  // Real Risk Alerts (Clients with overdue invoices or delayed operations)
+  const now = new Date();
+  const overdueClientIds = new Set(
+    allInvoices
+      .filter(i => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now && i.status !== 'paid'))
+      .map(i => i.client_id)
+  );
+  const riskAlerts = overdueClientIds.size;
 
   return (
     <div className="space-y-6 pb-10" dir={isAr ? 'rtl' : 'ltr'}>
@@ -160,12 +212,18 @@ const ClientManagement = () => {
             {isAr ? 'ذكاء العملاء' : 'Client Intelligence'}
           </h1>
           <p className="text-sm text-gray-500 mt-2 font-medium">
-            {isAr ? 'نظرة شاملة 360 درجة لمحفظة العملاء والوضع المالي' : '360-degree executive overview of the client portfolio'}
+            {isAr ? 'نظرة شاملة 360 درجة لمحفظة العملاء والوضع المالي لحظياً' : 'Real-time 360-degree executive overview of the client portfolio'}
           </p>
         </div>
+        <button
+          onClick={() => fetchClientsAndStats()}
+          className="bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm"
+        >
+          <RefreshCw size={14} /> {isAr ? 'تحديث' : 'Refresh'}
+        </button>
       </div>
 
-      {/* ── Section 1: Pulse Bar ────────────────────────────────────────── */}
+      {/* ── Section 1: Pulse Bar (100% Real DB Data) ────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-brand-dark text-white rounded-[2rem] p-6 shadow-lg relative overflow-hidden group">
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700" />
@@ -187,9 +245,9 @@ const ClientManagement = () => {
         </div>
 
         <div className="bg-white border border-gray-100 rounded-[2rem] p-6 shadow-sm relative overflow-hidden group">
-          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 relative z-10">{isAr ? 'متوسط قيمة العميل' : 'Avg Lifetime Value'}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 relative z-10">{isAr ? 'متوسط قيمة العميل (LTV)' : 'Avg Lifetime Value'}</p>
           <div className="flex justify-between items-end relative z-10">
-            <p className="text-4xl font-black text-gray-900 leading-none">{avgLtv.toLocaleString()}</p>
+            <p className="text-4xl font-black text-gray-900 leading-none">{avgLtv.toLocaleString()} <span className="text-xs text-gray-400">OMR</span></p>
             <div className="w-10 h-10 rounded-xl bg-green-50 text-green-500 flex items-center justify-center">
               <TrendingUp size={20} />
             </div>
@@ -197,7 +255,7 @@ const ClientManagement = () => {
         </div>
 
         <div className="bg-red-50 border border-red-100 rounded-[2rem] p-6 shadow-sm relative overflow-hidden group">
-          <p className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-2 relative z-10">{isAr ? 'تنبيهات المخاطر' : 'Risk Alerts'}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-2 relative z-10">{isAr ? 'تنبيهات المخاطر / المتأخرات' : 'Risk Alerts'}</p>
           <div className="flex justify-between items-end relative z-10">
             <p className="text-4xl font-black text-red-700 leading-none">{riskAlerts}</p>
             <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
@@ -230,7 +288,7 @@ const ClientManagement = () => {
         ) : filtered.length === 0 ? (
           <div className="p-20 text-center text-gray-400">
             <Users size={48} className="mx-auto mb-4 opacity-20" />
-            <p className="font-bold">{isAr ? 'لا يوجد عملاء' : 'No clients found'}</p>
+            <p className="font-bold">{isAr ? 'لا يوجد عملاء مطابقة للبحث' : 'No clients found'}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -246,9 +304,13 @@ const ClientManagement = () => {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map(client => {
-                  // Mock financial health for table
-                  const healthPercent = Math.floor(Math.random() * 40 + 60); 
-                  const opsCount = Math.floor(Math.random() * 4 + 1);
+                  // Calculate actual real financial health for each client row
+                  const clientInvs = allInvoices.filter(i => i.client_id === client.id);
+                  const totalClientBilled = clientInvs.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+                  const totalClientPaid = clientInvs.filter(i => i.status === 'paid').reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+                  const healthPercent = totalClientBilled > 0 ? Math.round((totalClientPaid / totalClientBilled) * 100) : 100;
+
+                  const clientActiveServices = allServices.filter(s => s.client_id === client.id && s.status !== 'completed');
 
                   return (
                     <tr 
@@ -262,9 +324,9 @@ const ClientManagement = () => {
                             <Building2 size={18} />
                           </div>
                           <div>
-                            <p className="font-black text-gray-900 text-sm">{client.company_name}</p>
+                            <p className="font-black text-gray-900 text-sm">{client.company_name || 'Corporate Client'}</p>
                             <div className="flex items-center gap-1 text-[10px] text-gray-400 mt-1">
-                              <UserCircle2 size={12} /> {client.full_name}
+                              <UserCircle2 size={12} /> {client.full_name || 'Contact Person'}
                             </div>
                           </div>
                         </div>
@@ -274,27 +336,27 @@ const ClientManagement = () => {
                           <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-black text-gray-600">
                             {client.assigned_employee?.full_name?.charAt(0) || '?'}
                           </div>
-                          <span className="text-xs font-bold text-gray-700">{client.assigned_employee?.full_name || 'Unassigned'}</span>
+                          <span className="text-xs font-bold text-gray-700">{client.assigned_employee?.full_name || (isAr ? 'غير مخصص' : 'Unassigned')}</span>
                         </div>
                       </td>
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3 min-w-[120px]">
                           <div className="flex-1 bg-gray-100 rounded-full h-2">
-                            <div className="h-2 rounded-full" style={{ width: `${healthPercent}%`, backgroundColor: healthPercent > 80 ? '#10B981' : '#F59E0B' }} />
+                            <div className="h-2 rounded-full" style={{ width: `${healthPercent}%`, backgroundColor: healthPercent >= 80 ? '#10B981' : '#F59E0B' }} />
                           </div>
-                          <span className="text-[10px] font-black text-gray-400 w-8">{healthPercent}% Paid</span>
+                          <span className="text-[10px] font-black text-gray-500 w-12">{healthPercent}% {isAr ? 'مسدد' : 'Paid'}</span>
                         </div>
                       </td>
                       <td className="px-6 py-5">
                         <span className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase">
-                          {opsCount} Active
+                          {clientActiveServices.length} {isAr ? 'نشطة' : 'Active'}
                         </span>
                       </td>
                       <td className="px-6 py-5 text-end space-x-2 space-x-reverse">
                         <button 
                           onClick={(e) => handleArchive(client.id, e)}
                           className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Archive Client"
+                          title={isAr ? 'أرشفة العميل' : 'Archive Client'}
                         >
                           <Archive size={16} />
                         </button>
@@ -343,12 +405,16 @@ const ClientManagement = () => {
                   <p className="text-sm font-bold text-gray-500 mt-1">{selectedClient.full_name}</p>
                   
                   <div className="flex justify-center gap-4 mt-6">
-                    <a href={`mailto:${selectedClient.email}`} className="bg-gray-50 hover:bg-gray-100 p-3 rounded-2xl text-brand-dark transition-colors">
-                      <Mail size={18} />
-                    </a>
-                    <a href={`tel:${selectedClient.phone}`} className="bg-gray-50 hover:bg-gray-100 p-3 rounded-2xl text-brand-dark transition-colors">
-                      <Phone size={18} />
-                    </a>
+                    {selectedClient.email && (
+                      <a href={`mailto:${selectedClient.email}`} className="bg-gray-50 hover:bg-gray-100 p-3 rounded-2xl text-brand-dark transition-colors">
+                        <Mail size={18} />
+                      </a>
+                    )}
+                    {selectedClient.phone && (
+                      <a href={`tel:${selectedClient.phone}`} className="bg-gray-50 hover:bg-gray-100 p-3 rounded-2xl text-brand-dark transition-colors">
+                        <Phone size={18} />
+                      </a>
+                    )}
                   </div>
                 </div>
 
@@ -376,9 +442,9 @@ const ClientManagement = () => {
                   </h4>
                   <div className="space-y-3">
                     {clientServices.length === 0 ? (
-                      <p className="text-sm text-gray-400 text-center py-4">{isAr ? 'لا توجد خدمات' : 'No services found'}</p>
+                      <p className="text-sm text-gray-400 text-center py-4">{isAr ? 'لا توجد عمليات مسجلة' : 'No services found'}</p>
                     ) : (
-                      clientServices.slice(0, 5).map(svc => (
+                      clientServices.map(svc => (
                         <div key={svc.id} className="bg-white border border-gray-100 p-4 rounded-2xl shadow-sm">
                           <div className="flex justify-between items-start mb-2">
                             <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${
@@ -388,7 +454,7 @@ const ClientManagement = () => {
                               {svc.status.replace('_', ' ')}
                             </span>
                             <span className="text-[10px] font-bold text-gray-400">
-                              {new Date(svc.created_at).toLocaleDateString()}
+                              {svc.created_at ? new Date(svc.created_at).toLocaleDateString() : ''}
                             </span>
                           </div>
                           <p className="text-sm font-bold text-gray-900">{svc.title}</p>
@@ -396,11 +462,6 @@ const ClientManagement = () => {
                       ))
                     )}
                   </div>
-                  {clientServices.length > 5 && (
-                    <button className="w-full mt-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-brand-dark transition-colors">
-                      {isAr ? 'عرض الكل' : 'View All'}
-                    </button>
-                  )}
                 </div>
 
               </div>

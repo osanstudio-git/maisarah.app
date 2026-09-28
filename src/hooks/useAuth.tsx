@@ -172,6 +172,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       localStorage.setItem('app_user_secondary_roles', JSON.stringify(profileSec));
         
       if (profileData?.role) {
+        localStorage.setItem('app_user_primary_role', profileData.role);
         // Validate cached role against authorized roles for this user
         const cachedRole = localStorage.getItem('app_user_role');
         const isAuthorized = cachedRole && (
@@ -228,6 +229,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error("Error signing out from Supabase:", error);
     } finally {
       localStorage.removeItem('app_user_role');
+      localStorage.removeItem('app_user_primary_role');
       localStorage.removeItem('app_user_secondary_roles');
       setSession(null);
       setUser(null);

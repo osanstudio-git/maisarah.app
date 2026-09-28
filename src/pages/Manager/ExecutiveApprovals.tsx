@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   CheckCircle2,
@@ -13,10 +13,9 @@ import {
   MessageSquareDiff,
   Download,
   Eye,
-  Check
+  Check,
+  RefreshCw
 } from 'lucide-react';
-import { getAllDepartments } from '../../config/departments';
-
 import { supabase } from '../../lib/supabaseClient';
 
 type ApprovalType = 'quote' | 'contract' | 'expense' | 'hr';
@@ -24,7 +23,8 @@ type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'changes_requested';
 
 interface ApprovalRequest {
   id: string;
-  dbId?: string;
+  dbId?: string | number;
+  tableName?: 'hr_leave_requests' | 'quotations' | 'hr_contracts' | 'hr_requests';
   type: ApprovalType;
   title: string;
   department: string;
@@ -37,63 +37,11 @@ interface ApprovalRequest {
   urgency: 'high' | 'medium' | 'low';
 }
 
-const mockRequests: ApprovalRequest[] = [
-  {
-    id: 'REQ-1042',
-    type: 'quote',
-    title: 'Audit Services Proposal',
-    department: 'Audit',
-    submitter: 'Ahmed Al-Kharusi',
-    amount: 12500,
-    client: 'Oman Telco LLC',
-    status: 'pending',
-    date: new Date().toISOString(),
-    description: 'Annual financial audit proposal for Oman Telco. Includes risk assessment and compliance review. 15% discount applied as per previous agreement.',
-    urgency: 'high'
-  },
-  {
-    id: 'REQ-1043',
-    type: 'contract',
-    title: 'Vendor Agreement Renewal',
-    department: 'Internal Support & Administration',
-    submitter: 'Sara Al-Balushi',
-    status: 'pending',
-    date: new Date(Date.now() - 86400000).toISOString(),
-    description: 'Renewal of the IT infrastructure support contract with TechSolutions. Terms remain unchanged, but SLA has been tightened to 2 hours for critical issues.',
-    urgency: 'medium'
-  },
-  {
-    id: 'REQ-1044',
-    type: 'expense',
-    title: 'Software Licensing Upgrade',
-    department: 'Innovation & Development',
-    submitter: 'Mohammed Al-Maamari',
-    amount: 4500,
-    status: 'pending',
-    date: new Date(Date.now() - 172800000).toISOString(),
-    description: 'Upgrading the development team to Enterprise tier for Figma and GitHub Copilot to improve workflow efficiency.',
-    urgency: 'low'
-  },
-  {
-    id: 'REQ-1045',
-    type: 'quote',
-    title: 'VAT Implementation Consulting',
-    department: 'Tax & VAT',
-    submitter: 'Fatma Al-Harthy',
-    amount: 8200,
-    client: 'Muscat Logistics Group',
-    status: 'pending',
-    date: new Date(Date.now() - 3600000).toISOString(),
-    description: 'Full VAT compliance review and implementation strategy for their new warehouse expansion project.',
-    urgency: 'high'
-  }
-];
-
 const getTypeConfig = (type: ApprovalType) => {
   switch (type) {
     case 'quote': return { icon: DollarSign, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Quote / Proposal' };
     case 'contract': return { icon: FileSignature, color: 'text-purple-600', bg: 'bg-purple-50', label: 'Contract' };
-    case 'expense': return { icon: FileText, color: 'text-orange-600', bg: 'bg-orange-50', label: 'Expense' };
+    case 'expense': return { icon: FileText, color: 'text-orange-600', bg: 'bg-orange-50', label: 'Administrative / Expense' };
     case 'hr': return { icon: User, color: 'text-green-600', bg: 'bg-green-50', label: 'HR / Leave' };
   }
 };
@@ -105,149 +53,173 @@ const ExecutiveApprovals = () => {
   const [filter, setFilter] = useState<ApprovalType | 'all'>('all');
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
   const [selectedReq, setSelectedReq] = useState<ApprovalRequest | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const filteredRequests = requests.filter(r => filter === 'all' || r.type === filter);
-
-  // ── Fetch Approvals (Cross-Portal Aggregator) ──────────────────────────────
-  const fetchApprovals = async (isSilent = false) => {
+  // ── Fetch Approvals (Cross-Portal Live DB Aggregator) ──────────────────────
+  const fetchApprovals = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
-      const liveLeaveRequests: ApprovalRequest[] = [];
+      const [
+        { data: dbLeaves },
+        { data: dbQuotes },
+        { data: dbContracts },
+        { data: dbAdminReqs },
+        { data: dbProfiles }
+      ] = await Promise.all([
+        supabase.from('hr_leave_requests').select('*').order('created_at', { ascending: false }),
+        supabase.from('quotations').select('*').order('created_at', { ascending: false }),
+        supabase.from('hr_contracts').select('*').order('created_at', { ascending: false }),
+        supabase.from('hr_requests').select('*').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, full_name, email, department')
+      ]);
 
-      // 1. Fetch live DB leave requests
-      try {
-        const { data: dbLeaves } = await supabase
-          .from('hr_leave_requests')
-          .select('*');
-
-        if (dbLeaves && dbLeaves.length > 0) {
-          dbLeaves.forEach((leave: any) => {
-            liveLeaveRequests.push({
-              id: `LEAVE-${leave.id.slice(0, 8)}`,
-              dbId: leave.id,
-              type: 'hr',
-              title: isAr 
-                ? `طلب إجازة: ${leave.leave_type || 'اعتيادية'}` 
-                : `${leave.leave_type || 'Annual'} Leave Request`,
-              department: leave.department || 'Audit',
-              submitter: leave.employee_name || 'Employee',
-              status: leave.status === 'approved' ? 'approved' : leave.status === 'rejected' ? 'rejected' : 'pending',
-              date: leave.created_at || new Date().toISOString(),
-              description: `${leave.days || 1} days (${leave.start_date || ''} to ${leave.end_date || ''}). Reason: ${leave.reason || 'Personal leave request'}`,
-              urgency: (leave.days && leave.days > 5) ? 'high' : 'medium'
-            });
-          });
-        }
-      } catch (e) {
-        console.error('Failed to fetch DB leave requests:', e);
-      }
-
-      // 2. Fetch local storage leave requests fallback
-      const savedLeaves = localStorage.getItem('hr_leave_requests');
-      if (savedLeaves) {
-        const localLeaves = JSON.parse(savedLeaves) as any[];
-        localLeaves.forEach(leave => {
-          if (!liveLeaveRequests.some(l => l.id === `LEAVE-${leave.id}`)) {
-            liveLeaveRequests.push({
-              id: `LEAVE-${leave.id}`,
-              type: 'hr',
-              title: isAr ? `طلب إجازة: ${leave.type || 'اعتيادية'}` : `${leave.type || 'Annual'} Leave Request`,
-              department: leave.department || 'Audit',
-              submitter: leave.employee || 'Employee',
-              status: leave.status === 'approved' ? 'approved' : leave.status === 'rejected' ? 'rejected' : 'pending',
-              date: leave.submittedDate || new Date().toISOString(),
-              description: `${leave.days || 1} days (${leave.startDate} to ${leave.endDate}). Reason: ${leave.reason || 'Personal leave'}`,
-              urgency: leave.days > 5 ? 'high' : 'medium'
-            });
-          }
-        });
-      }
-
-      // 3. Merge with base operational requests
-      const saved = localStorage.getItem('manager_approval_requests');
-      const baseRequests: ApprovalRequest[] = saved ? JSON.parse(saved) : mockRequests;
-
-      const combined: ApprovalRequest[] = [...liveLeaveRequests];
-      baseRequests.forEach(req => {
-        if (!combined.some(c => c.id === req.id)) {
-          combined.push(req);
-        }
+      const profMap = new Map<string, string>();
+      (dbProfiles || []).forEach(p => {
+        profMap.set(p.id, p.full_name || p.email?.split('@')[0] || 'Staff Member');
       });
 
-      setRequests(combined);
-      if (!selectedReq && combined.length > 0) {
-        setSelectedReq(combined[0]);
-      } else if (selectedReq) {
-        const updatedSelected = combined.find(c => c.id === selectedReq.id);
-        if (updatedSelected) setSelectedReq(updatedSelected);
-      }
+      const aggregated: ApprovalRequest[] = [];
+
+      // 1. Map Live HR Leave Requests
+      (dbLeaves || []).forEach((leave: any) => {
+        const submitterName = leave.employee_name || profMap.get(leave.employee_id) || 'Employee';
+        const rawStatus = (leave.status || 'pending').toLowerCase();
+        aggregated.push({
+          id: `LV-${String(leave.id).slice(0, 6).toUpperCase()}`,
+          dbId: leave.id,
+          tableName: 'hr_leave_requests',
+          type: 'hr',
+          title: isAr ? `طلب إجازة: ${leave.type || 'اعتيادية'}` : `${leave.type || 'Annual'} Leave Request`,
+          department: leave.department || 'Audit',
+          submitter: submitterName,
+          status: rawStatus === 'approved' ? 'approved' : rawStatus === 'rejected' ? 'rejected' : 'pending',
+          date: leave.created_at || new Date().toISOString(),
+          description: `${leave.days || 1} ${isAr ? 'أيام' : 'days'} (${leave.start_date || ''} -> ${leave.end_date || ''}). ${isAr ? 'ملاحظات:' : 'Notes:'} ${leave.notes || 'No extra notes provided.'}`,
+          urgency: (leave.days && Number(leave.days) > 5) ? 'high' : 'medium'
+        });
+      });
+
+      // 2. Map Live CRM Quotations & Proposals
+      (dbQuotes || []).forEach((q: any) => {
+        const rawStatus = (q.status || 'pending').toLowerCase();
+        aggregated.push({
+          id: `QT-${String(q.id).slice(0, 6).toUpperCase()}`,
+          dbId: q.id,
+          tableName: 'quotations',
+          type: 'quote',
+          title: q.title || (isAr ? 'عرض سعر خدمات مهنية' : 'Professional Services Proposal'),
+          department: q.department || 'Audit',
+          submitter: q.created_by || 'CRM Officer',
+          client: q.client_name || q.client_company || 'Corporate Client',
+          amount: Number(q.total_amount || q.amount || 0),
+          status: rawStatus === 'approved' ? 'approved' : rawStatus === 'rejected' ? 'rejected' : 'pending',
+          date: q.created_at || new Date().toISOString(),
+          description: q.notes || q.description || (isAr ? 'عرض سعر واستشارات مقدم للعميل يتطلب المراجعة والاعتماد التنفيذي.' : 'Client service proposal submitted for executive approval and terms validation.'),
+          urgency: (Number(q.total_amount || 0) > 5000) ? 'high' : 'medium'
+        });
+      });
+
+      // 3. Map Live HR Contracts & Visas
+      (dbContracts || []).forEach((c: any) => {
+        const submitterName = profMap.get(c.employee_id) || 'Staff Member';
+        const rawStatus = (c.status || 'active').toLowerCase();
+        aggregated.push({
+          id: `CT-${String(c.id).slice(0, 6).toUpperCase()}`,
+          dbId: c.id,
+          tableName: 'hr_contracts',
+          type: 'contract',
+          title: isAr ? `عقد توظيف / تجديد: ${c.type || 'دوام كامل'}` : `Employment Contract: ${c.type || 'Full Time'}`,
+          department: 'Internal Support & Administration',
+          submitter: submitterName,
+          status: rawStatus === 'approved' || rawStatus === 'active' ? 'approved' : rawStatus === 'rejected' ? 'rejected' : 'pending',
+          date: c.created_at || new Date().toISOString(),
+          description: `${isAr ? 'فترة التجربة:' : 'Probation:'} ${c.probation_months || 3} ${isAr ? 'أشهر' : 'months'}, ${isAr ? 'فترة الإشعار:' : 'Notice:'} ${c.notice_days || 30} ${isAr ? 'يوم' : 'days'}. ${isAr ? 'تاريخ البدء:' : 'Start Date:'} ${c.start_date || ''}`,
+          urgency: 'medium'
+        });
+      });
+
+      // 4. Map Live Administrative / Asset Requests
+      (dbAdminReqs || []).forEach((req: any) => {
+        const submitterName = profMap.get(req.employee_id) || 'Employee';
+        const rawStatus = (req.status || 'pending').toLowerCase();
+        aggregated.push({
+          id: `REQ-${String(req.id).slice(0, 6).toUpperCase()}`,
+          dbId: req.id,
+          tableName: 'hr_requests',
+          type: 'expense',
+          title: isAr ? `طلب إداري / أصول: ${req.type || 'طلب عام'}` : `Administrative Request: ${req.type || 'General'}`,
+          department: 'Internal Support & Administration',
+          submitter: submitterName,
+          status: rawStatus === 'approved' ? 'approved' : rawStatus === 'rejected' ? 'rejected' : 'pending',
+          date: req.submitted_date || req.created_at || new Date().toISOString(),
+          description: req.details || (isAr ? 'طلب إداري مقدم للمدير التنفيذي.' : 'Official request submitted for management authorization.'),
+          urgency: 'low'
+        });
+      });
+
+      setRequests(aggregated);
+
+      setSelectedReq(prev => {
+        if (!prev && aggregated.length > 0) return aggregated[0];
+        if (prev) {
+          const matched = aggregated.find(a => a.id === prev.id);
+          return matched || aggregated[0] || null;
+        }
+        return null;
+      });
     } catch (err) {
-      console.error(err);
+      console.error('Error fetching executive approvals:', err);
+    } finally {
+      if (!isSilent) setLoading(false);
     }
-  };
+  }, [isAr]);
 
   useEffect(() => {
     fetchApprovals();
 
-    // Realtime channel for instant leave approval updates
+    // ── Supabase Realtime Channels Across All 4 Approval Tables ──────────────
     const channel = supabase
-      .channel('manager-approvals-live')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'hr_leave_requests' },
-        () => {
-          fetchApprovals(true);
-        }
-      )
+      .channel('manager-approvals-cross-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_leave_requests' }, () => fetchApprovals(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => fetchApprovals(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_contracts' }, () => fetchApprovals(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_requests' }, () => fetchApprovals(true))
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchApprovals]);
 
+  // ── Handle Action with Immediate DB Sync ──────────────────────────────────
   const handleAction = async (id: string, action: ApprovalStatus) => {
-    // 1. Optimistic local update
     const target = requests.find(r => r.id === id);
-    const updated = requests.map(r => r.id === id ? { ...r, status: action } : r);
-    setRequests(updated);
-    localStorage.setItem('manager_approval_requests', JSON.stringify(updated.filter(r => r.type !== 'hr')));
+    if (!target) return;
 
+    // 1. Optimistic UI update
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: action } : r));
     if (selectedReq?.id === id) {
       setSelectedReq(prev => prev ? { ...prev, status: action } : null);
     }
 
-    // 2. Sync to Supabase if it's a live DB record
-    if (target?.dbId) {
+    // 2. Direct Supabase DB Update
+    if (target.tableName && target.dbId) {
       try {
+        const dbStatusValue = action === 'approved' ? (target.tableName === 'hr_contracts' ? 'Active' : 'Approved')
+          : action === 'rejected' ? 'Rejected'
+          : 'Pending';
+
         await supabase
-          .from('hr_leave_requests')
-          .update({ status: action })
+          .from(target.tableName)
+          .update({ status: dbStatusValue })
           .eq('id', target.dbId);
       } catch (err) {
-        console.error('Failed to update DB leave status:', err);
-      }
-    }
-
-    // 3. Sync to localStorage hr_leave_requests
-    if (target?.type === 'hr') {
-      const savedLeaves = localStorage.getItem('hr_leave_requests');
-      if (savedLeaves) {
-        const localLeaves = JSON.parse(savedLeaves) as any[];
-        const cleanId = id.replace('LEAVE-', '');
-        const updatedLeaves = localLeaves.map(l => l.id.toString() === cleanId.toString() ? { ...l, status: action } : l);
-        localStorage.setItem('hr_leave_requests', JSON.stringify(updatedLeaves));
-      }
-    }
-
-    // 4. Handle payroll approval
-    if (action === 'approved' && id === 'PAY-REQ-2026') {
-      const payrollDataStr = localStorage.getItem('manager_pending_payroll_data');
-      if (payrollDataStr) {
-        localStorage.setItem('accountant_pending_payroll', payrollDataStr);
-        alert('Payroll has been approved and automatically routed to the Accountant portal!');
+        console.error(`Failed to update ${target.tableName} status:`, err);
       }
     }
   };
+
+  const filteredRequests = requests.filter(r => filter === 'all' || r.type === filter);
 
   return (
     <div className="space-y-6 pb-10 h-[calc(100vh-6rem)] flex flex-col" dir={isAr ? 'rtl' : 'ltr'}>
@@ -259,26 +231,35 @@ const ExecutiveApprovals = () => {
             {isAr ? 'الاعتمادات التنفيذية' : 'Executive Approvals'}
           </h1>
           <p className="text-sm text-gray-500 mt-2 font-medium">
-            {isAr ? 'المركز الموحد للمراجعة واعتماد الطلبات الهامة' : 'Centralized hub for reviewing and authorizing critical requests'}
+            {isAr ? 'المركز الموحد لمراجعة واعتماد الطلبات والعقود وعروض الأسعار لحظياً' : 'Real-time centralized hub for authorizing proposals, contracts, leaves, and requests'}
           </p>
         </div>
 
-        <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-gray-100 flex-wrap">
-          {[
-            { id: 'all', label: isAr ? 'الكل' : 'All' },
-            { id: 'hr', label: isAr ? 'الإجازات والموارد البشرية' : 'HR & Leave' },
-            { id: 'quote', label: isAr ? 'عروض الأسعار' : 'Quotes' },
-            { id: 'contract', label: isAr ? 'العقود' : 'Contracts' },
-            { id: 'expense', label: isAr ? 'المصروفات' : 'Expenses' }
-          ].map(f => (
-            <button
-              key={f.id}
-              onClick={() => setFilter(f.id as any)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-black tracking-wider uppercase transition-all ${filter === f.id ? 'bg-brand-dark text-white' : 'text-gray-500 hover:bg-gray-50'}`}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-gray-100 flex-wrap">
+            {[
+              { id: 'all', label: isAr ? 'الكل' : 'All' },
+              { id: 'hr', label: isAr ? 'الإجازات' : 'HR & Leave' },
+              { id: 'quote', label: isAr ? 'عروض الأسعار' : 'Quotes' },
+              { id: 'contract', label: isAr ? 'العقود' : 'Contracts' },
+              { id: 'expense', label: isAr ? 'الطلبات الإدارية' : 'Admin & Assets' }
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFilter(f.id as any)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black tracking-wider uppercase transition-all ${filter === f.id ? 'bg-brand-dark text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => fetchApprovals()}
+            className="p-2.5 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-xl shadow-sm transition-all"
+            title={isAr ? 'تحديث' : 'Refresh'}
+          >
+            <RefreshCw size={16} />
+          </button>
         </div>
       </div>
 
@@ -298,10 +279,14 @@ const ExecutiveApprovals = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {filteredRequests.length === 0 ? (
+            {loading ? (
+              <div className="p-10 flex justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark" />
+              </div>
+            ) : filteredRequests.length === 0 ? (
               <div className="text-center p-8 text-gray-400">
                 <CheckCircle2 size={32} className="mx-auto mb-2 opacity-20" />
-                <p className="font-bold text-sm">{isAr ? 'لا توجد طلبات' : 'Queue is empty'}</p>
+                <p className="font-bold text-sm">{isAr ? 'لا توجد طلبات معلقة' : 'Queue is empty'}</p>
               </div>
             ) : (
               filteredRequests.map(req => {
@@ -385,7 +370,7 @@ const ExecutiveApprovals = () => {
                 
                 {/* Highlights Grid */}
                 <div className="grid grid-cols-2 gap-4">
-                  {selectedReq.amount && (
+                  {selectedReq.amount !== undefined && selectedReq.amount > 0 && (
                     <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
                       <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{isAr ? 'القيمة' : 'Amount'}</p>
                       <p className="text-2xl font-black text-brand-dark">{selectedReq.amount.toLocaleString()} <span className="text-sm">OMR</span></p>
@@ -401,31 +386,13 @@ const ExecutiveApprovals = () => {
 
                 {/* Description */}
                 <div>
-                  <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">{isAr ? 'التفاصيل' : 'Description'}</h3>
+                  <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">{isAr ? 'التفاصيل والبيان' : 'Description'}</h3>
                   <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                     <p className="text-sm font-medium text-gray-700 leading-relaxed">
                       {selectedReq.description}
                     </p>
                   </div>
                 </div>
-
-                {/* Attachments Mock */}
-                <div>
-                  <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">{isAr ? 'المرفقات' : 'Attachments'}</h3>
-                  <div className="flex gap-3">
-                    <button className="bg-white border border-gray-200 hover:border-brand-dark p-4 rounded-2xl flex items-center gap-3 transition-all group">
-                      <div className="w-10 h-10 rounded-xl bg-red-50 text-red-500 flex items-center justify-center">
-                        <FileText size={20} />
-                      </div>
-                      <div className="text-start">
-                        <p className="text-xs font-black text-gray-900 group-hover:text-brand-dark transition-colors">Draft_Document.pdf</p>
-                        <p className="text-[10px] font-bold text-gray-400">1.2 MB</p>
-                      </div>
-                      <Eye size={16} className="text-gray-300 group-hover:text-brand-dark ml-2" />
-                    </button>
-                  </div>
-                </div>
-
               </div>
 
               {/* ── Action Bar ────────────────────────────────────────────── */}
@@ -446,7 +413,7 @@ const ExecutiveApprovals = () => {
                   onClick={() => handleAction(selectedReq.id, 'approved')}
                   className="flex-[2] py-4 rounded-2xl bg-brand-dark hover:bg-gray-900 text-white font-black text-sm tracking-widest uppercase flex items-center justify-center gap-2 transition-colors shadow-lg shadow-gray-200"
                 >
-                  <Check size={18} /> {isAr ? 'اعتماد نهائي' : 'Approve & Sign'}
+                  <Check size={18} /> {isAr ? 'اعتماد وتوقيع' : 'Approve & Sign'}
                 </button>
               </div>
             </>
