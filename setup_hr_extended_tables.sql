@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS public.hr_recruits (
     resume_url TEXT,
     employment_type TEXT DEFAULT 'Experienced',
     placement_status TEXT DEFAULT 'pending_placement',
+    supervisor TEXT,
+    civil_id TEXT,
+    passport_no TEXT,
+    residency_no TEXT,
+    nationality TEXT DEFAULT 'Omani',
+    dob DATE,
+    gender TEXT DEFAULT 'Male',
+    marital_status TEXT DEFAULT 'Single',
     onboarding_tasks JSONB DEFAULT '{"contract_signed": false, "bank_details_submitted": false, "documents_uploaded": false, "it_assets_ready": false}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -53,6 +61,14 @@ ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS resume_name TEXT;
 ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS resume_url TEXT;
 ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS employment_type TEXT DEFAULT 'Experienced';
 ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS placement_status TEXT DEFAULT 'pending_placement';
+ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS supervisor TEXT;
+ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS civil_id TEXT;
+ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS passport_no TEXT;
+ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS residency_no TEXT;
+ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS nationality TEXT DEFAULT 'Omani';
+ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS dob DATE;
+ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'Male';
+ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS marital_status TEXT DEFAULT 'Single';
 ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS onboarding_tasks JSONB DEFAULT '{"contract_signed": false, "bank_details_submitted": false, "documents_uploaded": false, "it_assets_ready": false}'::jsonb;
 ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE public.hr_recruits ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
@@ -80,6 +96,7 @@ CREATE TABLE IF NOT EXISTS public.hr_employees (
     accommodation_status TEXT DEFAULT 'Lives with family',
     role TEXT,
     dept TEXT,
+    status TEXT DEFAULT 'active',
     accessRole TEXT,
     department_id TEXT,
     secondary_roles JSONB DEFAULT '[]'::jsonb,
@@ -109,6 +126,7 @@ ALTER TABLE public.hr_employees ADD COLUMN IF NOT EXISTS employee_type TEXT DEFA
 ALTER TABLE public.hr_employees ADD COLUMN IF NOT EXISTS accommodation_status TEXT DEFAULT 'Lives with family';
 ALTER TABLE public.hr_employees ADD COLUMN IF NOT EXISTS role TEXT;
 ALTER TABLE public.hr_employees ADD COLUMN IF NOT EXISTS dept TEXT;
+ALTER TABLE public.hr_employees ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
 ALTER TABLE public.hr_employees ADD COLUMN IF NOT EXISTS accessRole TEXT;
 ALTER TABLE public.hr_employees ADD COLUMN IF NOT EXISTS department_id TEXT;
 ALTER TABLE public.hr_employees ADD COLUMN IF NOT EXISTS secondary_roles JSONB DEFAULT '[]'::jsonb;

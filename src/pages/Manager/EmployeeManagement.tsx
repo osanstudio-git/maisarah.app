@@ -257,8 +257,48 @@ const EmployeeManagement = () => {
       };
 
       const dbData = await syncRecruitsFromSupabase();
-      const recruits = Array.isArray(dbData) ? dbData : getLocalRecruits();
+      let recruits: any[] = Array.isArray(dbData) ? [...dbData] : [...getLocalRecruits()];
       const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+
+      // Also check hr_employees table for candidates forwarded by HR with status pending_placement
+      try {
+        const { data: hrPending } = await supabase
+          .from('hr_employees')
+          .select('*')
+          .eq('status', 'pending_placement');
+
+        if (Array.isArray(hrPending)) {
+          hrPending.forEach(hp => {
+            if (!recruits.some(r => r.id === hp.id || (r.email && hp.email && r.email.toLowerCase() === hp.email.toLowerCase()))) {
+              recruits.push({
+                id: hp.id,
+                name: hp.full_name || 'Candidate',
+                role: hp.role || 'Pending Assignment',
+                dept: hp.dept || 'Pending Department',
+                stage: 'offered',
+                score: 90,
+                email: hp.email,
+                phone: hp.phone || '',
+                company_phone: hp.company_phone || '',
+                civil_id: hp.civil_id || '',
+                passport_no: hp.passport_no || '',
+                residency_no: hp.residency_no || '',
+                nationality: hp.nationality || 'Omani',
+                dob: hp.dob || '',
+                gender: hp.gender || 'Male',
+                marital_status: hp.marital_status || 'Single',
+                supervisor: hp.immediate_supervisor || 'To Be Assigned by Executive Manager',
+                basic_salary: Number(hp.basic_salary || 0),
+                employment_type: hp.employee_type || 'Experienced',
+                placement_status: 'pending_placement',
+                created_at: hp.created_at || new Date().toISOString()
+              });
+            }
+          });
+        }
+      } catch (hrPendingErr) {
+        console.warn('Error checking pending hr_employees:', hrPendingErr);
+      }
 
       const isAlreadyPlaced = (c: any) => {
         if (c.placement_status === 'placed') return true;
@@ -266,7 +306,6 @@ const EmployeeManagement = () => {
         const cId = (c.id || '').trim().toLowerCase();
         if (cEmail && localPlaced.some(lp => lp.email && lp.email.trim().toLowerCase() === cEmail)) return true;
         if (cId && localPlaced.some(lp => lp.id && lp.id.trim().toLowerCase() === cId)) return true;
-        if (cEmail && employees.some(e => e.email && e.email.trim().toLowerCase() === cEmail)) return true;
         return false;
       };
 
@@ -419,8 +458,9 @@ const EmployeeManagement = () => {
         };
       });
 
-      // Also add any hr_employees that didn't have profiles
+      // Also add any hr_employees that didn't have profiles (excluding pending placement candidates)
       for (const h of hrEmployees || []) {
+        if (h.status === 'pending_placement' || h.role === 'Pending Assignment') continue;
         if (h.email && !mapped.some(m => m.id === h.id || (m.email && m.email.toLowerCase() === h.email.toLowerCase()))) {
           let rawDept = h.department_id || h.dept || '';
           const resolvedAccessRole = h.accessRole || h.role || 'employee';
@@ -473,10 +513,11 @@ const EmployeeManagement = () => {
         }
       }
 
-      // Also merge hr_employee_records from localStorage (instant HR registration sync)
+      // Also merge hr_employee_records from localStorage (instant HR registration sync, excluding pending)
       try {
         const hrRecords: any[] = JSON.parse(localStorage.getItem('hr_employee_records') || '[]');
         hrRecords.forEach(hr => {
+          if (hr.status === 'pending_placement' || hr.role === 'Pending Assignment') return;
           if (hr.email && !mapped.some(m => m.id === hr.id || (m.email && m.email.toLowerCase() === hr.email.toLowerCase()))) {
             let rawDept = hr.dept || '';
             const resolvedRole = hr.systemRole || 'employee';
@@ -619,6 +660,15 @@ const EmployeeManagement = () => {
         { event: '*', schema: 'public', table: 'hr_employees' },
         () => {
           fetchEmployees(true);
+          fetchPlacements();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hr_recruits' },
+        () => {
+          fetchPlacements();
+          fetchEmployees(true);
         }
       )
       .subscribe();
@@ -627,7 +677,7 @@ const EmployeeManagement = () => {
       window.removeEventListener('maisarah_employees_updated', handleEmpUpdated);
       supabase.removeChannel(channel);
     };
-  }, [fetchEmployees]);
+  }, [fetchEmployees, fetchPlacements]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 

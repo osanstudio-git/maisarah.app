@@ -31,6 +31,7 @@ interface Employee {
   immediateSupervisor: string;
   basicSalary: number;
   type: 'Experienced' | 'Trainee' | 'Worker';
+  status?: 'active' | 'pending_placement' | 'inactive' | 'on_leave' | string;
   accommodationStatus?: string;
   accommodationDetails?: string;
   allowances: { transport: number; housing: number; other: number };
@@ -312,6 +313,7 @@ export default function HREmployees() {
             immediateSupervisor: hrEmp?.immediate_supervisor || (dept === 'Tax & VAT' ? 'Khalfan Al-Abri' : dept === 'Audit' ? 'Dr. Tariq Al-Hashimi' : 'Executive Board'),
             basicSalary: Number(hrEmp?.basic_salary || 1200),
             type: ((hrEmp?.employee_type as any) || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
+            status: hrEmp?.status || 'active',
             accommodationStatus: hrEmp?.accommodation_status || 'Lives with family',
             accommodationDetails: hrEmp?.accommodation_details || '',
             allowances: hrEmp?.allowances || { transport: 150, housing: 250, other: 50 },
@@ -359,6 +361,7 @@ export default function HREmployees() {
               immediateSupervisor: h.immediate_supervisor || '',
               basicSalary: Number(h.basic_salary || 1000),
               type: (h.employee_type || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
+              status: h.status || 'active',
               accommodationStatus: h.accommodation_status || 'Lives with family',
               accommodationDetails: h.accommodation_details || '',
               allowances: h.allowances || { transport: 150, housing: 250, other: 50 },
@@ -413,6 +416,7 @@ export default function HREmployees() {
                 immediateSupervisor: lp.immediate_supervisor || 'General Manager',
                 basicSalary: Number(lp.basic_salary || 1000),
                 type: (lp.employee_type || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
+                status: 'active',
                 accommodationStatus: lp.accommodation_status || 'Lives with family',
                 accommodationDetails: lp.accommodation_details || '',
                 allowances: lp.allowances || { transport: 150, housing: 250, other: 50 },
@@ -441,23 +445,24 @@ export default function HREmployees() {
                 liveEmployees.push({
                   id: r.id || crypto.randomUUID(),
                   name: r.name || 'New Hire',
-                  role: r.role || 'Staff Member',
-                  dept: r.dept || 'Audit',
+                  role: r.role || (r.placement_status === 'pending_placement' ? 'Pending Assignment' : 'Staff Member'),
+                  dept: r.dept || (r.placement_status === 'pending_placement' ? 'Pending Department' : 'Audit'),
                   email: r.email,
                   phone: r.phone || '',
-                  companyPhone: '+968 2456 0000',
-                  civilId: '109876543',
-                  passportNo: 'OM1234567',
-                  residencyNo: 'PR9876543',
-                  nationality: 'Omani',
-                  dob: '1995-01-01',
-                  gender: 'Male',
-                  maritalStatus: 'Single',
+                  companyPhone: r.company_phone || '+968 2456 0000',
+                  civilId: r.civil_id || '109876543',
+                  passportNo: r.passport_no || 'OM1234567',
+                  residencyNo: r.residency_no || 'PR9876543',
+                  nationality: r.nationality || 'Omani',
+                  dob: r.dob || '1995-01-01',
+                  gender: (r.gender as any) || 'Male',
+                  maritalStatus: r.marital_status || 'Single',
                   joinedDate: new Date().toISOString().split('T')[0],
-                  immediateSupervisor: 'General Manager',
-                  basicSalary: 1000,
+                  immediateSupervisor: r.supervisor || (r.placement_status === 'pending_placement' ? 'To Be Assigned by Executive Manager' : 'General Manager'),
+                  basicSalary: Number(r.basic_salary || 1000),
                   type: (r.employment_type || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
-                  accommodationStatus: 'Lives with family',
+                  status: r.placement_status === 'pending_placement' ? 'pending_placement' : 'active',
+                  accommodationStatus: r.accommodation_status || 'Lives with family',
                   accommodationDetails: '',
                   allowances: { transport: 150, housing: 250, other: 50 },
                   education: [],
@@ -977,18 +982,31 @@ export default function HREmployees() {
       // 1. If Manager Placement workflow is chosen for a new candidate:
       if (!isEditMode && formData.activationMode === 'manager_placement') {
         const recruitId = crypto.randomUUID();
+        const cleanName = formData.name.trim();
+        const cleanEmail = formData.email.trim().toLowerCase();
+
         const recruitPayload: any = {
           id: recruitId,
-          name: formData.name.trim(),
-          email: formData.email.trim().toLowerCase(),
+          name: cleanName,
+          email: cleanEmail,
           phone: formData.phone || '',
-          role: formData.role,
-          dept: formData.dept,
+          company_phone: formData.companyPhone || '',
+          civil_id: formData.civilId || '',
+          passport_no: formData.passportNo || '',
+          residency_no: formData.residencyNo || '',
+          nationality: formData.nationality || 'Omani',
+          dob: formData.dob || null,
+          gender: formData.gender || 'Male',
+          marital_status: formData.maritalStatus || 'Single',
+          role: formData.role || 'Pending Assignment',
+          dept: formData.dept || 'Pending Department',
           stage: 'offered',
           placement_status: 'pending_placement',
           employment_type: formData.type || 'Experienced',
           supervisor: formData.immediateSupervisor || 'To Be Assigned by Executive Manager',
-          score: 0,
+          basic_salary: Number(formData.basicSalary || 0),
+          accommodation_status: formData.accommodationStatus || 'Lives with family',
+          score: 90,
           onboarding_tasks: {
             contract_signed: false,
             bank_details_submitted: false,
@@ -998,52 +1016,128 @@ export default function HREmployees() {
           created_at: new Date().toISOString()
         };
 
-        // Fire-and-forget: save to DB in background — never block the UI
+        // 1. Save to local storage & DB
         upsertLocalRecruit(recruitPayload);
         upsertRecruitToDatabase(recruitPayload).catch(rErr =>
           console.warn('hr_recruits background save notice:', rErr)
         );
 
-        // Send Offer Welcome Email (non-blocking)
+        // 2. Also persist full employee dossier to hr_employees in DB
+        (async () => {
+          try {
+            await supabase.from('hr_employees').upsert({
+              id: recruitId,
+              full_name: cleanName,
+              email: cleanEmail,
+              phone: formData.phone || '',
+              company_phone: formData.companyPhone || '',
+              civil_id: formData.civilId || '',
+              passport_no: formData.passportNo || '',
+              residency_no: formData.residencyNo || '',
+              nationality: formData.nationality || 'Omani',
+              dob: formData.dob || null,
+              gender: formData.gender || 'Male',
+              marital_status: formData.maritalStatus || 'Single',
+              joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
+              immediate_supervisor: 'To Be Assigned by Executive Manager',
+              basic_salary: Number(formData.basicSalary || 0),
+              employee_type: formData.type || 'Experienced',
+              accommodation_status: formData.accommodationStatus || 'Lives with family',
+              role: formData.role || 'Pending Assignment',
+              dept: formData.dept || 'Pending Department',
+              status: 'pending_placement',
+              created_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+          } catch (hrDbErr) {
+            console.warn('hr_employees background placement upsert notice:', hrDbErr);
+          }
+        })();
+
+        // 3. Send Candidate Offer Email (non-blocking)
         supabase.functions.invoke('send-email', {
           body: {
-            to: formData.email.trim().toLowerCase(),
+            to: cleanEmail,
             subject: isAr
               ? 'مرحباً بك في مجموعة ميسرة - عرض العمل والخطوات القادمة'
               : 'Welcome to Maisarah Group - Job Offer & Next Steps',
             html: `
-              <div style="font-family: sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px;">
-                <h2 style="color: #A11212; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">
-                  ${isAr ? 'تهانينا على عرض العمل!' : 'Congratulations on your Job Offer!'}
-                </h2>
-                <p>${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${formData.name}</strong>,</p>
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #1f2937; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff;">
+                <div style="text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #f3f4f6;">
+                  <h2 style="color: #A11212; margin: 0; font-size: 20px; font-weight: 800;">
+                    ${isAr ? 'مجموعة ميسرة للاستشارات المالية والتدقيق' : 'Maisarah Financial & Auditing Group'}
+                  </h2>
+                  <p style="color: #6b7280; font-size: 12px; margin-top: 4px; font-weight: 600;">
+                    ${isAr ? 'إشعار تسجيل ملف مرشح وعرض عمل' : 'Candidate Registration & Placement Notice'}
+                  </p>
+                </div>
+                <p style="font-size: 15px;">${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${cleanName}</strong>,</p>
                 <p>
                   ${isAr
-                    ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تفعيل عرض العمل الخاص بك وتوجيهه للمدير التنفيذي لوضع اللمسات الأخيرة وتعيين القسم وتحديد الصلاحيات والمشرف المباشر.'
-                    : 'We are thrilled to welcome you to the Maisarah family. Your job offer has been submitted and forwarded to Executive Management for final department placement and role configuration.'}
+                    ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تسجيل ملفك الوظيفي بنجاح وتوجيهه إلى المدير التنفيذي لاعتماد وتحديد القسم والمسمى الوظيفي والمشرف المباشر وتفعيل بيانات الدخول للبوابة.'
+                    : 'We are thrilled to welcome you to the Maisarah family. Your employee profile has been registered and forwarded to Executive Management for final department placement, role designation, and portal account activation.'}
                 </p>
-                <p>
+                <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 20px 0;">
+                  <h4 style="margin: 0 0 10px 0; color: #374151; font-size: 13px; font-weight: 700;">${isAr ? 'ملخص البيانات المسجلة:' : 'Submitted Registration Summary:'}</h4>
+                  <p style="margin: 4px 0; font-size: 12px;"><strong>${isAr ? 'الاسم:' : 'Name:'}</strong> ${cleanName}</p>
+                  <p style="margin: 4px 0; font-size: 12px;"><strong>${isAr ? 'البريد الإلكتروني:' : 'Corporate Email:'}</strong> ${cleanEmail}</p>
+                  <p style="margin: 4px 0; font-size: 12px;"><strong>${isAr ? 'رقم الهاتف:' : 'Phone:'}</strong> ${formData.phone || 'N/A'}</p>
+                  <p style="margin: 4px 0; font-size: 12px;"><strong>${isAr ? 'الرقم المدني:' : 'Civil ID:'}</strong> ${formData.civilId || 'N/A'}</p>
+                  <p style="margin: 4px 0; font-size: 12px;"><strong>${isAr ? 'الجنسية:' : 'Nationality:'}</strong> ${formData.nationality || 'Omani'}</p>
+                </div>
+                <p style="color: #4b5563;">
                   ${isAr
-                    ? 'ستصلك رسالة إلكترونية ثانية تحتوي على بيانات تفعيل الحساب وتفاصيل التعيين فور اعتماد المدير التنفيذي.'
-                    : 'You will receive your portal login credentials and final placement details as soon as executive placement review is completed.'}
+                    ? 'ستصلك رسالة إلكترونية ثانية تحتوي على بيانات تفعيل الحساب وكلمة المرور المؤقتة ورابط البوابة فور اعتماد التسكين من قبل الإدارة التنفيذية.'
+                    : 'You will receive a subsequent email with your secure portal login credentials and password as soon as the executive placement is finalized.'}
                 </p>
                 <br/>
-                <p>${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
-                <p>${isAr ? 'إدارة الموارد البشرية - ميسرة' : 'Maisarah HR Department'}</p>
+                <div style="border-top: 1px solid #f3f4f6; padding-top: 16px; color: #6b7280; font-size: 12px;">
+                  <p style="margin: 0;">${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
+                  <p style="margin: 2px 0 0 0; font-weight: 700; color: #111827;">${isAr ? 'قسم الموارد البشرية - ميسرة' : 'Human Resources Department · Maisarah'}</p>
+                </div>
               </div>
             `
           }
         }).catch(mailErr => console.warn('Offer email dispatch notice:', mailErr));
 
-        window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+        // 4. Notify Executive Manager about new placement request
+        supabase.functions.invoke('send-email', {
+          body: {
+            to: 'manager@maisarah.om',
+            subject: isAr
+              ? `طلب تسكين واعتماد تعيين جديد: ${cleanName}`
+              : `New Placement Review Pending: ${cleanName}`,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #1f2937; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff;">
+                <h2 style="color: #A11212; margin-top: 0;">
+                  ${isAr ? 'طلب تسكين وتعيين موظف جديد' : 'New Hire Placement Ready for Review'}
+                </h2>
+                <p>${isAr ? 'قام قسم الموارد البشرية بتسجيل موظف جديد وتحويل الملف للاعتماد والتسكين:' : 'HR has registered a new candidate and submitted their dossier for placement configuration:'}</p>
+                <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 16px 0;">
+                  <p style="margin: 4px 0;"><strong>${isAr ? 'الاسم:' : 'Name:'}</strong> ${cleanName}</p>
+                  <p style="margin: 4px 0;"><strong>${isAr ? 'البريد:' : 'Email:'}</strong> ${cleanEmail}</p>
+                  <p style="margin: 4px 0;"><strong>${isAr ? 'الهاتف:' : 'Phone:'}</strong> ${formData.phone || 'N/A'}</p>
+                  <p style="margin: 4px 0;"><strong>${isAr ? 'الرقم المدني:' : 'Civil ID:'}</strong> ${formData.civilId || 'N/A'}</p>
+                  <p style="margin: 4px 0;"><strong>${isAr ? 'التصنيف:' : 'Classification:'}</strong> ${formData.type || 'Experienced'}</p>
+                </div>
+                <a href="${window.location.origin}/manager/hr" style="display: inline-block; background-color: #A11212; color: #ffffff; padding: 12px 24px; border-radius: 10px; font-weight: 700; text-decoration: none; font-size: 13px;">
+                  ${isAr ? 'فتح قائمة التعيينات بالبوابة' : 'Open Placements Queue'}
+                </a>
+              </div>
+            `
+          }
+        }).catch(mErr => console.warn('Manager alert email notice:', mErr));
 
-        // Also add to local HR employee list (status: pending) so it shows in HR portal
+        // 5. Fire cross-component and cross-portal sync events
+        window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+        window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
+
+        // 6. Also add to local HR employee list (status: pending_placement) so it shows in HR portal
         const pendingEmp: any = {
           id: recruitId,
-          name: formData.name.trim(),
-          role: 'Pending Assignment',
-          dept: 'Pending Department',
-          email: formData.email.trim().toLowerCase(),
+          name: cleanName,
+          role: formData.role || 'Pending Assignment',
+          dept: formData.dept || 'Pending Department',
+          email: cleanEmail,
           phone: formData.phone || '',
           companyPhone: formData.companyPhone || '',
           civilId: formData.civilId || '',
@@ -1055,8 +1149,8 @@ export default function HREmployees() {
           maritalStatus: formData.maritalStatus || 'Single',
           joinedDate: formData.joinedDate || new Date().toISOString().split('T')[0],
           immediateSupervisor: 'To Be Assigned by Executive Manager',
-          basicSalary: 0,
-          type: 'Experienced',
+          basicSalary: Number(formData.basicSalary || 0),
+          type: (formData.type || 'Experienced') as any,
           status: 'pending_placement',
           accommodationStatus: formData.accommodationStatus || 'Lives with family',
           accommodationDetails: formData.accommodationDetails || '',
@@ -1072,13 +1166,13 @@ export default function HREmployees() {
         setEmployees(updatedEmpList);
         localStorage.setItem('hr_employee_records', JSON.stringify(updatedEmpList));
 
-        // Show success and close modal IMMEDIATELY — no waiting for DB
+        // Show success and close modal IMMEDIATELY
         setNotification({
           show: true,
           title: isAr ? 'تم إرسال الملف للاعتماد' : 'Forwarded to Manager',
           message: isAr
-            ? `تم إرسال ملف ${formData.name} إلى قائمة التعيينات والاعتماد لدى المدير التنفيذي بنجاح.`
-            : `${formData.name} added to Manager's New Hire Placements queue for review.`,
+            ? `تم إرسال ملف ${cleanName} إلى قائمة التعيينات والاعتماد لدى المدير التنفيذي بنجاح.`
+            : `${cleanName} added to Manager's New Hire Placements queue for review.`,
           type: 'success'
         });
 
@@ -1587,11 +1681,18 @@ export default function HREmployees() {
                       : 'bg-white border-gray-100 hover:bg-gray-50'
                   }`}
                 >
-                  <div>
-                    <h4 className="font-black text-sm text-gray-900">{emp.name}</h4>
-                    <p className="text-[10px] text-gray-500 font-bold">{emp.role} · {emp.dept}</p>
+                  <div className="flex-1 min-w-0 me-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h4 className="font-black text-sm text-gray-900 truncate">{emp.name}</h4>
+                      {emp.status === 'pending_placement' && (
+                        <span className="text-[8px] bg-amber-50 text-amber-800 border border-amber-200 font-black px-1.5 py-0.5 rounded-md uppercase whitespace-nowrap">
+                          {isAr ? 'قيد الاعتماد' : 'Pending'}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-gray-500 font-bold truncate">{emp.role} · {emp.dept}</p>
                   </div>
-                  <span className="text-[10px] bg-gray-100 text-gray-500 font-black px-2.5 py-0.5 rounded-full shadow-xs">
+                  <span className="text-[10px] bg-gray-100 text-gray-500 font-black px-2.5 py-0.5 rounded-full shadow-xs shrink-0">
                     #{index + 1}
                   </span>
                 </button>
@@ -1615,7 +1716,17 @@ export default function HREmployees() {
                     <div>
                       <h2 className="text-xl font-black text-gray-900">{selectedEmp.name}</h2>
                       <p className="text-xs font-bold text-gray-500">{selectedEmp.role} · {selectedEmp.dept}</p>
-                      <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start">
+                      <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start items-center">
+                        {selectedEmp.status === 'pending_placement' ? (
+                          <span className="text-[9px] bg-amber-100 text-amber-800 border border-amber-300 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                            {isAr ? 'قيد التسكين والاعتماد لدى المدير' : 'Pending Manager Placement'}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                            {isAr ? 'نشط' : 'Active'}
+                          </span>
+                        )}
                         <span className="text-[9px] bg-red-50 text-red-700 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                           {selectedEmp.nationality}
                         </span>
@@ -2009,7 +2120,14 @@ export default function HREmployees() {
                             setViewMode('split');
                           }}
                         >
-                          <p className="text-xs font-black text-gray-900 group-hover:text-[#A11212] group-hover:underline transition-all">{emp.name}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-xs font-black text-gray-900 group-hover:text-[#A11212] group-hover:underline transition-all">{emp.name}</p>
+                            {emp.status === 'pending_placement' && (
+                              <span className="text-[8px] bg-amber-50 text-amber-800 border border-amber-200 font-black px-1.5 py-0.5 rounded-md uppercase">
+                                {isAr ? 'قيد الاعتماد' : 'Pending'}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[9px] text-gray-400 font-bold">{emp.role}</p>
                         </div>
                       </div>

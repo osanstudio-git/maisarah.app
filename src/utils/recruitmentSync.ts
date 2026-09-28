@@ -9,6 +9,17 @@ export interface RecruitCandidate {
   score: number;
   email: string;
   phone: string;
+  company_phone?: string;
+  civil_id?: string;
+  passport_no?: string;
+  residency_no?: string;
+  nationality?: string;
+  dob?: string;
+  gender?: string;
+  marital_status?: string;
+  supervisor?: string;
+  basic_salary?: number;
+  accommodation_status?: string;
   resume_name?: string;
   resume_url?: string;
   employment_type?: 'Experienced' | 'Trainee' | 'Worker';
@@ -144,6 +155,8 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
 function sanitizeRecruitForDb(candidate: any): any {
   const allowedKeys = [
     'id', 'name', 'role', 'dept', 'stage', 'score', 'email', 'phone',
+    'company_phone', 'civil_id', 'passport_no', 'residency_no', 'nationality',
+    'dob', 'gender', 'marital_status', 'supervisor', 'basic_salary', 'accommodation_status',
     'resume_name', 'resume_url', 'employment_type', 'placement_status',
     'onboarding_tasks', 'created_at'
   ];
