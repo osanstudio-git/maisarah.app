@@ -1018,42 +1018,13 @@ export default function HREmployees() {
 
         // 1. Save to local storage & DB
         upsertLocalRecruit(recruitPayload);
-        upsertRecruitToDatabase(recruitPayload).catch(rErr =>
-          console.warn('hr_recruits background save notice:', rErr)
-        );
+        try {
+          await upsertRecruitToDatabase(recruitPayload);
+        } catch (rErr) {
+          console.warn('hr_recruits save notice:', rErr);
+        }
 
-        // 2. Also persist full employee dossier to hr_employees in DB
-        (async () => {
-          try {
-            await supabase.from('hr_employees').upsert({
-              id: recruitId,
-              full_name: cleanName,
-              email: cleanEmail,
-              phone: formData.phone || '',
-              company_phone: formData.companyPhone || '',
-              civil_id: formData.civilId || '',
-              passport_no: formData.passportNo || '',
-              residency_no: formData.residencyNo || '',
-              nationality: formData.nationality || 'Omani',
-              dob: formData.dob || null,
-              gender: formData.gender || 'Male',
-              marital_status: formData.maritalStatus || 'Single',
-              joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
-              immediate_supervisor: 'To Be Assigned by Executive Manager',
-              basic_salary: Number(formData.basicSalary || 0),
-              employee_type: formData.type || 'Experienced',
-              accommodation_status: formData.accommodationStatus || 'Lives with family',
-              role: formData.role || 'Pending Assignment',
-              dept: formData.dept || 'Pending Department',
-              status: 'pending_placement',
-              created_at: new Date().toISOString()
-            }, { onConflict: 'id' });
-          } catch (hrDbErr) {
-            console.warn('hr_employees background placement upsert notice:', hrDbErr);
-          }
-        })();
-
-        // 3. Welcome email will be triggered from Manager Portal once placement is finalized
+        // 2. Welcome email will be triggered from Manager Portal once placement is finalized
 
         // 4. Notify Executive Manager about new placement request
         supabase.functions.invoke('send-email', {

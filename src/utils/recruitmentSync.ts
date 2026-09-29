@@ -127,36 +127,38 @@ export function isRecruitDeleted(id?: string, email?: string, name?: string): bo
 }
 
 /**
- * Sync all recruits from Supabase DB (trying edge function with fallback to direct table query).
+ * Sync all recruits from Supabase DB (trying edge function first to guarantee RLS bypass).
  * Falls back to localStorage if the DB is unreachable.
  */
 export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
   try {
     let rawRecruits: any[] | null = null;
 
-    // 1. Direct table read
-    const { data, error } = await supabase
-      .from('hr_recruits')
-      .select('*')
-      .order('created_at', { ascending: false });
+    // 1. Try edge function first to guarantee full access regardless of user's RLS profile state
+    try {
+      const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
+        body: { action: 'get_recruits' }
+      });
+      if (!edgeErr && edgeRes?.success && Array.isArray(edgeRes?.data) && edgeRes.data.length > 0) {
+        rawRecruits = edgeRes.data;
+      }
+    } catch (e) {
+      console.warn('Edge function get_recruits notice:', e);
+    }
 
-    if (!error && Array.isArray(data)) {
-      rawRecruits = data;
-    } else {
-      // 2. If direct table read hit RLS or network issue, fallback to edge function
-      try {
-        const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
-          body: { action: 'get_recruits' }
-        });
-        if (!edgeErr && edgeRes?.success && Array.isArray(edgeRes?.data)) {
-          rawRecruits = edgeRes.data;
-        }
-      } catch (e) {
-        console.warn('Edge function get_recruits fallback notice:', e);
+    // 2. Direct table read fallback
+    if (!rawRecruits) {
+      const { data, error } = await supabase
+        .from('hr_recruits')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        rawRecruits = data;
       }
     }
 
-    if (Array.isArray(rawRecruits)) {
+    if (Array.isArray(rawRecruits) && rawRecruits.length > 0) {
       // Filter out deleted/blacklisted candidates and unpack dossier metadata
       const cleanDbData: RecruitCandidate[] = rawRecruits
         .filter(item => !isRecruitDeleted(item.id, item.email, item.name))
@@ -228,7 +230,7 @@ function sanitizeRecruitForDb(candidate: any): any {
 }
 
 /**
- * Save a recruit to the DB directly with edge function fallback.
+ * Save a recruit to the DB directly with edge function priority.
  * Always updates localStorage immediately for instant UI response.
  */
 export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Promise<RecruitCandidate> {
@@ -237,7 +239,20 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
 
   const sanitized = sanitizeRecruitForDb(candidate);
 
-  // 2. Try direct Supabase upsert
+  // 2. Try Edge Function first (guaranteed admin privilege)
+  try {
+    const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
+      body: { action: 'upsert_recruit', recruit: sanitized }
+    });
+    if (!edgeErr && edgeRes?.success && edgeRes?.data) {
+      upsertLocalRecruit(edgeRes.data);
+      return edgeRes.data;
+    }
+  } catch (edgeE) {
+    console.warn('Edge function upsert notice, trying direct table:', edgeE);
+  }
+
+  // 3. Direct table upsert fallback
   try {
     const { data, error } = await supabase
       .from('hr_recruits')
@@ -249,24 +264,8 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
       upsertLocalRecruit(data);
       return data;
     }
-
-    // 3. Fall back to edge function
-    if (error) {
-      console.warn('Direct hr_recruits upsert fallback via edge function:', error.message);
-      try {
-        const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
-          body: { action: 'upsert_recruit', recruit: sanitized }
-        });
-        if (!edgeErr && edgeRes?.success && edgeRes?.data) {
-          upsertLocalRecruit(edgeRes.data);
-          return edgeRes.data;
-        }
-      } catch (edgeE) {
-        console.warn('Edge function fallback upsert recruit notice:', edgeE);
-      }
-    }
   } catch (e) {
-    console.warn('Recruit DB upsert notice:', e);
+    console.warn('Direct recruit DB upsert notice:', e);
   }
 
   return candidate;
