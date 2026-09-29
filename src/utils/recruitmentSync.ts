@@ -127,38 +127,44 @@ export function isRecruitDeleted(id?: string, email?: string, name?: string): bo
 }
 
 /**
- * Sync all recruits from Supabase DB (trying edge function first to guarantee RLS bypass).
+ * Sync all recruits from Supabase DB (trying direct table read first, then edge function fallback).
  * Falls back to localStorage if the DB is unreachable.
  */
 export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
   try {
     let rawRecruits: any[] | null = null;
 
-    // 1. Try edge function first to guarantee full access regardless of user's RLS profile state
+    // 1. Direct table read first (instant, reliable, no cold start)
     try {
-      const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
-        body: { action: 'get_recruits' }
-      });
-      if (!edgeErr && edgeRes?.success && Array.isArray(edgeRes?.data) && edgeRes.data.length > 0) {
-        rawRecruits = edgeRes.data;
-      }
-    } catch (e) {
-      console.warn('Edge function get_recruits notice:', e);
-    }
-
-    // 2. Direct table read fallback
-    if (!rawRecruits) {
       const { data, error } = await supabase
         .from('hr_recruits')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         rawRecruits = data;
+      } else if (error) {
+        console.warn('Direct hr_recruits select error:', error.message);
+      }
+    } catch (e) {
+      console.warn('Direct hr_recruits select notice:', e);
+    }
+
+    // 2. Edge function fallback if direct table failed
+    if (rawRecruits === null) {
+      try {
+        const edgeRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
+          action: 'get_recruits'
+        }, 8000);
+        if (!edgeRes.error && edgeRes.data?.success && Array.isArray(edgeRes.data.data)) {
+          rawRecruits = edgeRes.data.data;
+        }
+      } catch (e) {
+        console.warn('Edge function get_recruits notice:', e);
       }
     }
 
-    if (Array.isArray(rawRecruits) && rawRecruits.length > 0) {
+    if (Array.isArray(rawRecruits)) {
       // Filter out deleted/blacklisted candidates and unpack dossier metadata
       const cleanDbData: RecruitCandidate[] = rawRecruits
         .filter(item => !isRecruitDeleted(item.id, item.email, item.name))
@@ -204,7 +210,19 @@ function sanitizeRecruitForDb(candidate: any): any {
       sanitized[key] = candidate[key];
     }
   }
-  sanitized.placement_status = sanitizePlacementStatus(candidate.placement_status);
+
+  // Ensure mandatory NOT NULL columns have valid defaults
+  sanitized.id = candidate.id || crypto.randomUUID();
+  sanitized.name = candidate.name || 'Unnamed Candidate';
+  sanitized.email = candidate.email || '';
+  sanitized.phone = candidate.phone || '';
+  sanitized.role = candidate.role || 'Pending Assignment';
+  sanitized.dept = candidate.dept || 'Pending Department';
+  sanitized.stage = candidate.stage || 'offered';
+  sanitized.score = typeof candidate.score === 'number' ? candidate.score : 90;
+  sanitized.employment_type = candidate.employment_type || 'Experienced';
+  sanitized.placement_status = sanitizePlacementStatus(candidate.placement_status) || 'pending_placement';
+  sanitized.created_at = candidate.created_at || new Date().toISOString();
 
   // Preserve all extra dossier fields safely inside the JSONB onboarding_tasks column
   const baseTasks = typeof candidate.onboarding_tasks === 'object' && candidate.onboarding_tasks !== null
@@ -221,7 +239,7 @@ function sanitizeRecruitForDb(candidate: any): any {
     marital_status: candidate.marital_status || 'Single',
     supervisor: candidate.supervisor || '',
     basic_salary: Number(candidate.basic_salary || 0),
-    accommodation_status: candidate.accommodation_status || '',
+    accommodation_status: candidate.accommodation_status || candidate.accommodationStatus || '',
     company_phone: candidate.company_phone || ''
   };
 
@@ -230,7 +248,8 @@ function sanitizeRecruitForDb(candidate: any): any {
 }
 
 /**
- * Save a recruit to the DB directly with edge function priority and strict timeout.
+ * Save a recruit to the DB directly (fastest, zero cold start).
+ * Edge function fallback is used if direct write fails.
  * Always updates localStorage immediately for instant UI response.
  */
 export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Promise<RecruitCandidate> {
@@ -239,21 +258,7 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
 
   const sanitized = sanitizeRecruitForDb(candidate);
 
-  // 2. Try Edge Function first with 4-second timeout
-  try {
-    const edgeRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
-      action: 'upsert_recruit',
-      recruit: sanitized
-    }, 4000);
-    if (!edgeRes.error && edgeRes.data?.success && edgeRes.data?.data) {
-      upsertLocalRecruit(edgeRes.data.data);
-      return edgeRes.data.data;
-    }
-  } catch (edgeE) {
-    console.warn('Edge function upsert notice, trying direct table:', edgeE);
-  }
-
-  // 3. Direct table upsert fallback
+  // 2. Direct table upsert FIRST (Fastest, < 100ms)
   try {
     const { data, error } = await supabase
       .from('hr_recruits')
@@ -265,8 +270,25 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
       upsertLocalRecruit(data);
       return data;
     }
+    if (error) {
+      console.warn('Direct recruit DB upsert error, falling back to edge function:', error.message);
+    }
   } catch (e) {
     console.warn('Direct recruit DB upsert notice:', e);
+  }
+
+  // 3. Edge function fallback with 8-second timeout
+  try {
+    const edgeRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
+      action: 'upsert_recruit',
+      recruit: sanitized
+    }, 8000);
+    if (!edgeRes.error && edgeRes.data?.success && edgeRes.data?.data) {
+      upsertLocalRecruit(edgeRes.data.data);
+      return edgeRes.data.data;
+    }
+  } catch (edgeE) {
+    console.warn('Edge function upsert notice:', edgeE);
   }
 
   return candidate;
@@ -275,7 +297,7 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
 export async function invokeEdgeFunctionWithTimeout(
   functionName: string,
   payload: any,
-  timeoutMs: number = 3000
+  timeoutMs: number = 8000
 ): Promise<any> {
   const timeoutPromise = new Promise((_, reject) =>
     setTimeout(() => reject(new Error(`Edge function ${functionName} timed out after ${timeoutMs}ms`)), timeoutMs)
@@ -310,7 +332,7 @@ export async function deleteRecruitFromDatabase(idOrEmail: string) {
       console.warn('Direct delete failed, trying edge function:', error.message);
       await invokeEdgeFunctionWithTimeout('manage-auth', {
         action: 'delete_recruit', recruit_id: idOrEmail
-      }, 3000);
+      }, 8000);
     }
   } catch (e) {
     console.warn('Recruit delete notice:', e);
@@ -348,9 +370,10 @@ export async function updateRecruitStatus(id: string, updates: Partial<RecruitCa
       console.warn('Direct update failed, trying edge function:', error.message);
       await invokeEdgeFunctionWithTimeout('manage-auth', {
         action: 'update_recruit', recruit_id: id, updates: sanitizedUpdates
-      }, 3000);
+      }, 8000);
     }
   } catch (e) {
     console.warn('Recruit update notice:', e);
   }
 }
+

@@ -334,7 +334,22 @@ const EmployeeManagement = () => {
 
     const handleSyncEvent = () => fetchPlacements();
     window.addEventListener('maisarah_recruits_updated', handleSyncEvent);
-    return () => window.removeEventListener('maisarah_recruits_updated', handleSyncEvent);
+
+    // Supabase Realtime subscription for instant updates across manager sessions
+    const channel = supabase
+      .channel('manager_placements_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_recruits' }, () => {
+        fetchPlacements();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_employees' }, () => {
+        fetchPlacements();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('maisarah_recruits_updated', handleSyncEvent);
+    };
   }, [fetchPlacements]);
 
   useEffect(() => {
