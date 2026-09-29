@@ -262,13 +262,13 @@ const EmployeeManagement = () => {
 
       // Also check hr_employees table for candidates forwarded by HR with status pending_placement
       try {
-        const { data: hrPending } = await supabase
+        const { data: hrPending, error: hrPendingErr } = await supabase
           .from('hr_employees')
-          .select('*')
-          .eq('status', 'pending_placement');
+          .select('*');
 
-        if (Array.isArray(hrPending)) {
-          hrPending.forEach(hp => {
+        if (Array.isArray(hrPending) && !hrPendingErr) {
+          const pendingList = hrPending.filter((hp: any) => hp.status === 'pending_placement');
+          pendingList.forEach(hp => {
             if (!recruits.some(r => r.id === hp.id || (r.email && hp.email && r.email.toLowerCase() === hp.email.toLowerCase()))) {
               recruits.push({
                 id: hp.id,
