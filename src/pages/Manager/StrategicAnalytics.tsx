@@ -54,7 +54,7 @@ const StrategicAnalytics = () => {
         supabase.from('invoices').select('id, amount, status, created_at, due_date').order('created_at', { ascending: true }),
         supabase.from('services').select('id, title, department_id, status, created_at, due_date'),
         supabase.from('clients').select('id, created_at').eq('is_archived', false),
-        supabase.from('profiles').select('id, role, department, created_at')
+        supabase.from('profiles').select('*')
       ]);
 
       setInvoices(invData || []);

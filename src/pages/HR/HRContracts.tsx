@@ -53,7 +53,7 @@ export default function HRContracts() {
       setLoading(true);
 
       const [{ data: profData }, { data: hrData }, { data: conData }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, role, department_id, department, created_at'),
+        supabase.from('profiles').select('*'),
         supabase.from('hr_employees').select('id, full_name, email, role, dept, joined_date'),
         supabase.from('hr_contracts').select('*').order('created_at', { ascending: false })
       ]);

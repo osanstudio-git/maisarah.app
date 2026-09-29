@@ -50,7 +50,7 @@ const ExecutiveReports = () => {
         supabase.from('services').select('*, clients(company_name), profiles:profiles!employee_id(full_name)').order('created_at', { ascending: false }),
         supabase.from('clients').select('*, assigned_employee:profiles!assigned_employee_id(full_name)').eq('is_archived', false).order('created_at', { ascending: false }),
         supabase.from('hr_contracts').select('*').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('id, full_name, email, role, department')
+        supabase.from('profiles').select('*')
       ]);
 
       setDbInvoices(invs || []);

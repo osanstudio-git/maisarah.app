@@ -51,7 +51,7 @@ export default function HRDisciplinary() {
       setLoading(true);
 
       const [{ data: profData }, { data: hrData }, { data: discData }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, role, department_id, department'),
+        supabase.from('profiles').select('*'),
         supabase.from('hr_employees').select('id, full_name, email, role, dept, disciplinaries, bonuses'),
         supabase.from('hr_disciplinary').select('*').order('created_at', { ascending: false })
       ]);

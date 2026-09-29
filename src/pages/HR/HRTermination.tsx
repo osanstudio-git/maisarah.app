@@ -55,7 +55,7 @@ export default function HRTermination() {
       setLoading(true);
 
       const [{ data: profData }, { data: hrData }, { data: termData }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, role, department_id, department'),
+        supabase.from('profiles').select('*'),
         supabase.from('hr_employees').select('id, full_name, email, role, dept'),
         supabase.from('hr_terminations').select('*').order('created_at', { ascending: false })
       ]);

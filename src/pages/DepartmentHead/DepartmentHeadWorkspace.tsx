@@ -168,7 +168,7 @@ const DepartmentHeadWorkspace = () => {
       if (!user) return;
       try {
         const [{ data: prof }, { data: emp }] = await Promise.all([
-          supabase.from('profiles').select('department_id, department').eq('id', user.id).maybeSingle(),
+          supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
           supabase.from('hr_employees').select('dept, department_id').eq('email', user.email).maybeSingle()
         ]);
 

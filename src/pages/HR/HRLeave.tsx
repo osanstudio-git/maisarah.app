@@ -67,7 +67,7 @@ export default function HRLeave() {
 
       // Fetch Profiles and HR Employees
       const [{ data: profData }, { data: hrData }, { data: leaveReqData }, { data: leaveBalData }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, role, department_id, department'),
+        supabase.from('profiles').select('*'),
         supabase.from('hr_employees').select('id, full_name, email, role, dept'),
         supabase.from('hr_leave_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('hr_leave_balances').select('*')

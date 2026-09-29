@@ -51,7 +51,7 @@ export default function HRAttendance() {
 
       // Fetch profiles, hr_employees, and today's attendance logs
       const [{ data: profData }, { data: hrData }, { data: attLogs }, { data: leaveReqs }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, role, department_id, department'),
+        supabase.from('profiles').select('*'),
         supabase.from('hr_employees').select('id, full_name, email, role, dept'),
         supabase.from('hr_attendance').select('*').eq('work_date', todayStr),
         supabase.from('hr_leave_requests').select('employee_id, start_date, end_date, hr_approval')

@@ -70,7 +70,7 @@ const ExecutiveApprovals = () => {
         supabase.from('quotations').select('*').order('created_at', { ascending: false }),
         supabase.from('hr_contracts').select('*').order('created_at', { ascending: false }),
         supabase.from('hr_requests').select('*').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('id, full_name, email, department')
+        supabase.from('profiles').select('*')
       ]);
 
       const profMap = new Map<string, string>();

@@ -85,7 +85,7 @@ export default function HRDashboard() {
         { data: recruits },
         { data: reviews }
       ] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, role, department_id, department, created_at'),
+        supabase.from('profiles').select('*'),
         supabase.from('hr_employees').select('id, full_name, role, dept, documents'),
         supabase.from('hr_attendance').select('*').eq('work_date', todayStr),
         supabase.from('hr_leave_requests').select('*'),

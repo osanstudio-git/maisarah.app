@@ -40,7 +40,7 @@ export default function HRPayroll() {
       setLoading(true);
 
       const [{ data: profData }, { data: hrData }, { data: runData }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, role, department_id, department'),
+        supabase.from('profiles').select('*'),
         supabase.from('hr_employees').select('*'),
         supabase.from('hr_payroll_runs').select('*')
       ]);

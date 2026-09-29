@@ -50,7 +50,7 @@ export default function HRReports() {
         { data: leaveBalances },
         { data: recruits }
       ] = await Promise.all([
-        supabase.from('profiles').select('id, role, department_id, department'),
+        supabase.from('profiles').select('*'),
         supabase.from('hr_employees').select('id, basic_salary, allowances, dept'),
         supabase.from('hr_attendance').select('*'),
         supabase.from('hr_leave_balances').select('annual, sick'),
