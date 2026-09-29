@@ -127,27 +127,61 @@ export function isRecruitDeleted(id?: string, email?: string, name?: string): bo
 }
 
 /**
- * Sync all recruits from Supabase DB directly (no edge function needed for reads).
+ * Sync all recruits from Supabase DB (trying edge function with fallback to direct table query).
  * Falls back to localStorage if the DB is unreachable.
  */
 export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
   try {
-    // Primary: direct table read — fast and no cold-start delay
+    let rawRecruits: any[] | null = null;
+
+    // 1. Direct table read
     const { data, error } = await supabase
       .from('hr_recruits')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (!error && Array.isArray(data)) {
-      // Filter out deleted/blacklisted candidates
-      const cleanDbData = data.filter(item => !isRecruitDeleted(item.id, item.email, item.name));
+      rawRecruits = data;
+    } else {
+      // 2. If direct table read hit RLS or network issue, fallback to edge function
+      try {
+        const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
+          body: { action: 'get_recruits' }
+        });
+        if (!edgeErr && edgeRes?.success && Array.isArray(edgeRes?.data)) {
+          rawRecruits = edgeRes.data;
+        }
+      } catch (e) {
+        console.warn('Edge function get_recruits fallback notice:', e);
+      }
+    }
+
+    if (Array.isArray(rawRecruits)) {
+      // Filter out deleted/blacklisted candidates and unpack dossier metadata
+      const cleanDbData: RecruitCandidate[] = rawRecruits
+        .filter(item => !isRecruitDeleted(item.id, item.email, item.name))
+        .map(item => {
+          const dossier = item.onboarding_tasks?.dossier || {};
+          return {
+            ...item,
+            civil_id: item.civil_id || dossier.civil_id || '',
+            passport_no: item.passport_no || dossier.passport_no || '',
+            residency_no: item.residency_no || dossier.residency_no || '',
+            nationality: item.nationality || dossier.nationality || 'Omani',
+            dob: item.dob || dossier.dob || '',
+            gender: item.gender || dossier.gender || 'Male',
+            marital_status: item.marital_status || dossier.marital_status || 'Single',
+            supervisor: item.supervisor || dossier.supervisor || '',
+            basic_salary: item.basic_salary !== undefined ? item.basic_salary : (dossier.basic_salary || 0),
+            accommodation_status: item.accommodation_status || dossier.accommodation_status || '',
+            company_phone: item.company_phone || dossier.company_phone || ''
+          };
+        });
 
       // Save database state directly to localStorage without dispatching recursive sync events
       saveLocalRecruits(cleanDbData, false);
       return cleanDbData;
     }
-
-    console.warn('Direct hr_recruits read error:', error?.message);
   } catch (e) {
     console.warn('Supabase recruits fetch notice, using local storage:', e);
   }
@@ -155,27 +189,47 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
 }
 
 function sanitizeRecruitForDb(candidate: any): any {
-  const allowedKeys = [
-    'id', 'name', 'role', 'dept', 'stage', 'score', 'email', 'phone',
-    'company_phone', 'civil_id', 'passport_no', 'residency_no', 'nationality',
-    'dob', 'gender', 'marital_status', 'supervisor', 'basic_salary', 'accommodation_status',
-    'resume_name', 'resume_url', 'employment_type', 'placement_status',
-    'onboarding_tasks', 'created_at'
+  // Guaranteed base schema columns of hr_recruits in Supabase
+  const baseKeys = [
+    'id', 'name', 'email', 'phone', 'role', 'dept',
+    'stage', 'score', 'resume_name', 'resume_url',
+    'employment_type', 'placement_status', 'created_at'
   ];
+
   const sanitized: any = {};
-  for (const key of allowedKeys) {
+  for (const key of baseKeys) {
     if (key in candidate && candidate[key] !== undefined) {
       sanitized[key] = candidate[key];
     }
   }
   sanitized.placement_status = sanitizePlacementStatus(candidate.placement_status);
+
+  // Preserve all extra dossier fields safely inside the JSONB onboarding_tasks column
+  const baseTasks = typeof candidate.onboarding_tasks === 'object' && candidate.onboarding_tasks !== null
+    ? { ...candidate.onboarding_tasks }
+    : { contract_signed: false, bank_details_submitted: false, documents_uploaded: false, it_assets_ready: false };
+
+  baseTasks.dossier = {
+    civil_id: candidate.civil_id || '',
+    passport_no: candidate.passport_no || '',
+    residency_no: candidate.residency_no || '',
+    nationality: candidate.nationality || 'Omani',
+    dob: candidate.dob || null,
+    gender: candidate.gender || 'Male',
+    marital_status: candidate.marital_status || 'Single',
+    supervisor: candidate.supervisor || '',
+    basic_salary: Number(candidate.basic_salary || 0),
+    accommodation_status: candidate.accommodation_status || '',
+    company_phone: candidate.company_phone || ''
+  };
+
+  sanitized.onboarding_tasks = baseTasks;
   return sanitized;
 }
 
 /**
- * Save a recruit to the DB directly.
+ * Save a recruit to the DB directly with edge function fallback.
  * Always updates localStorage immediately for instant UI response.
- * DB write happens concurrently (fire-and-forget style with logging).
  */
 export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Promise<RecruitCandidate> {
   // 1. Always save to localStorage first (instant, cross-page)
@@ -183,7 +237,7 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
 
   const sanitized = sanitizeRecruitForDb(candidate);
 
-  // 2. Try direct Supabase upsert (no edge function cold-start)
+  // 2. Try direct Supabase upsert
   try {
     const { data, error } = await supabase
       .from('hr_recruits')
@@ -196,9 +250,9 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
       return data;
     }
 
-    // If direct upsert fails (e.g. RLS), fall back to edge function
+    // 3. Fall back to edge function
     if (error) {
-      console.warn('Direct hr_recruits upsert failed, trying edge function:', error.message);
+      console.warn('Direct hr_recruits upsert fallback via edge function:', error.message);
       try {
         const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
           body: { action: 'upsert_recruit', recruit: sanitized }
