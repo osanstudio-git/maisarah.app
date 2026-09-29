@@ -179,7 +179,13 @@ export default function Transactions() {
 
       const { data, error } = await query;
       if (!error && data) {
-        setTasks(data as ServiceTask[]);
+        const formattedTasks: ServiceTask[] = (data as any[]).map((task: any) => ({
+          ...task,
+          clients: Array.isArray(task.clients)
+            ? (task.clients[0] || null)
+            : (task.clients || null)
+        }));
+        setTasks(formattedTasks);
       } else if (error) {
         console.warn('Error fetching employee tasks:', error.message);
       }
@@ -260,7 +266,7 @@ export default function Transactions() {
         if (invErr) console.warn('Draft invoice creation notice:', invErr.message);
 
         // Step C: Push Realtime Notification to Accounts Team
-        await supabase
+        const { error: notifErr } = await supabase
           .from('notifications')
           .insert([{
             sender_id: user?.id || null,
@@ -271,8 +277,8 @@ export default function Transactions() {
               ? `قام الموظف ببدء العمل على المهمة "${task.title}". تم إنشاء مسودة فاتورة بقيمة ${invoiceBudget.toFixed(3)} ر.ع جاهزة بالمحاسبة.`
               : `Work started on task "${task.title}". Draft invoice ${generatedInvNumber} (OMR ${invoiceBudget.toFixed(3)}) is ready in Accounts.`,
             type: 'task_started'
-          }])
-          .catch(nErr => console.warn('Notification notice:', nErr));
+          }]);
+        if (notifErr) console.warn('Notification notice:', notifErr);
       }
 
       setNotification({
@@ -370,7 +376,7 @@ export default function Transactions() {
       if (rcpErr) throw rcpErr;
 
       // Push Realtime notification to Accounts team for verification
-      await supabase
+      const { error: notifErr } = await supabase
         .from('notifications')
         .insert([{
           sender_id: user?.id || null,
@@ -382,8 +388,8 @@ export default function Transactions() {
             ? `تم تسجيل دفعة نقدية/بنكية بقيمة ${amountPaid.toFixed(3)} ر.ع للمهمة "${selectedTaskForPayment.title}". بانتظار اعتماد المحاسب والمزامنة في DSR.`
             : `Draft payment of OMR ${amountPaid.toFixed(3)} logged for "${selectedTaskForPayment.title}" (${generatedReceiptNo}). Awaiting verification.`,
           type: 'payment_logged'
-        }])
-        .catch(nErr => console.warn('Payment notification notice:', nErr));
+        }]);
+      if (notifErr) console.warn('Payment notification notice:', notifErr);
 
       // Close modal & reset
       setSelectedTaskForPayment(null);

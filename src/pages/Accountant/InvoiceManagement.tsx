@@ -87,6 +87,8 @@ export default function InvoiceManagement() {
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptRecord | null>(null);
+  const [alertModalOpen, setAlertModalOpen] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
 
   // Toast
   const [notification, setNotification] = useState<{ show: boolean; title: string; message: string; type: 'success' | 'error' }>({
@@ -305,7 +307,7 @@ export default function InvoiceManagement() {
 
       // Step E: Push Realtime Notification to the Collecting Employee
       if (receipt.collected_by) {
-        await supabase
+        const { error: notifErr } = await supabase
           .from('notifications')
           .insert([{
             sender_id: user?.id || null,
@@ -318,8 +320,8 @@ export default function InvoiceManagement() {
               ? `تم اعتماد الإيصال (${receipt.receipt_number}) بقيمة ${amountPaid.toFixed(3)} ر.ع وترحيل المعاملة إلى سجل المبيعات اليومي (DSR).`
               : `Your payment receipt ${receipt.receipt_number} (OMR ${amountPaid.toFixed(3)}) for "${serviceName}" has been verified and synced to the DSR Register.`,
             type: 'receipt_verified'
-          }])
-          .catch(nErr => console.warn('Employee notification notice:', nErr));
+          }]);
+        if (notifErr) console.warn('Employee notification notice:', notifErr);
       }
 
       setNotification({
