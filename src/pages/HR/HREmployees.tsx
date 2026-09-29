@@ -1008,45 +1008,13 @@ export default function HREmployees() {
           created_at: new Date().toISOString()
         };
 
-        // 1. Save to local storage & DB
+        // 1. Save to local storage & DB in background (non-blocking for instant UI response)
         upsertLocalRecruit(recruitPayload);
-        try {
-          await upsertRecruitToDatabase(recruitPayload);
-        } catch (rErr) {
-          console.warn('hr_recruits save notice:', rErr);
-        }
+        upsertRecruitToDatabase(recruitPayload).catch(rErr =>
+          console.warn('hr_recruits background save notice:', rErr)
+        );
 
-        // 2. Welcome email will be triggered from Manager Portal once placement is finalized
-
-        // 4. Notify Executive Manager about new placement request
-        supabase.functions.invoke('send-email', {
-          body: {
-            to: 'manager@maisarah.om',
-            subject: isAr
-              ? `طلب تسكين واعتماد تعيين جديد: ${cleanName}`
-              : `New Placement Review Pending: ${cleanName}`,
-            html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #1f2937; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff;">
-                <h2 style="color: #A11212; margin-top: 0;">
-                  ${isAr ? 'طلب تسكين وتعيين موظف جديد' : 'New Hire Placement Ready for Review'}
-                </h2>
-                <p>${isAr ? 'قام قسم الموارد البشرية بتسجيل موظف جديد وتحويل الملف للاعتماد والتسكين:' : 'HR has registered a new candidate and submitted their dossier for placement configuration:'}</p>
-                <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 16px 0;">
-                  <p style="margin: 4px 0;"><strong>${isAr ? 'الاسم:' : 'Name:'}</strong> ${cleanName}</p>
-                  <p style="margin: 4px 0;"><strong>${isAr ? 'البريد:' : 'Email:'}</strong> ${cleanEmail}</p>
-                  <p style="margin: 4px 0;"><strong>${isAr ? 'الهاتف:' : 'Phone:'}</strong> ${formData.phone || 'N/A'}</p>
-                  <p style="margin: 4px 0;"><strong>${isAr ? 'الرقم المدني:' : 'Civil ID:'}</strong> ${formData.civilId || 'N/A'}</p>
-                  <p style="margin: 4px 0;"><strong>${isAr ? 'التصنيف:' : 'Classification:'}</strong> ${formData.type || 'Experienced'}</p>
-                </div>
-                <a href="${window.location.origin}/manager/hr" style="display: inline-block; background-color: #A11212; color: #ffffff; padding: 12px 24px; border-radius: 10px; font-weight: 700; text-decoration: none; font-size: 13px;">
-                  ${isAr ? 'فتح قائمة التعيينات بالبوابة' : 'Open Placements Queue'}
-                </a>
-              </div>
-            `
-          }
-        }).catch(mErr => console.warn('Manager alert email notice:', mErr));
-
-        // 5. Fire cross-component and cross-portal sync events
+        // 2. Fire cross-component and cross-portal sync events immediately
         window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
         window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
 
@@ -1088,10 +1056,10 @@ export default function HREmployees() {
         // Show success and close modal IMMEDIATELY
         setNotification({
           show: true,
-          title: isAr ? 'تم إرسال الملف للاعتماد' : 'Forwarded to Manager',
+          title: isAr ? 'تم تسجيل الموظف بنجاح' : 'Employee Registered Successfully',
           message: isAr
-            ? `تم إرسال ملف ${cleanName} إلى قائمة التعيينات والاعتماد لدى المدير التنفيذي بنجاح.`
-            : `${cleanName} added to Manager's New Hire Placements queue for review.`,
+            ? `تم حفظ ملف ${cleanName} وإدراجه في قائمة التعيينات الجديدة بالبوابة للمراجعة والاعتماد.`
+            : `${cleanName} registered and queued under Manager Placements for placement review.`,
           type: 'success'
         });
 
@@ -2131,14 +2099,14 @@ export default function HREmployees() {
               {!isEditMode && (
                 <div className="flex items-center gap-3 bg-gradient-to-r from-red-50 to-orange-50 border border-red-100 rounded-2xl px-4 py-3 mb-1">
                   <div className="h-8 w-8 rounded-xl bg-[#A11212]/10 flex items-center justify-center shrink-0">
-                    <span className="text-base">📋</span>
+                    <span className="text-base">👤</span>
                   </div>
                   <div>
-                    <p className="text-xs font-black text-gray-900">{isAr ? 'إحالة للمدير التنفيذي للاعتماد' : 'Forward to Manager for Placement'}</p>
+                    <p className="text-xs font-black text-gray-900">{isAr ? 'تسجيل موظف جديد' : 'New Employee Registration'}</p>
                     <p className="text-[9px] text-gray-500 font-bold leading-tight mt-0.5">
                       {isAr
-                        ? 'سيتولى المدير التنفيذي تعيين المسمى الوظيفي والقسم والمشرف المباشر'
-                        : 'Manager will assign role, department & supervisor upon review'}
+                        ? 'سيتم إدراج الموظف في قائمة التعيينات الجديدة لدى المدير التنفيذي لاعتماد القسم والمسمى والراتب'
+                        : 'Dossier will be automatically queued in Manager Placements for role & department setup.'}
                     </p>
                   </div>
                   <div className="ml-auto flex items-center gap-1.5 text-[#A11212] bg-white border border-red-100 rounded-lg px-2.5 py-1 shadow-sm">
@@ -2608,13 +2576,14 @@ export default function HREmployees() {
                 {isSubmitting ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    <span>{isAr ? 'جاري الإرسال للمدير...' : 'Forwarding to Manager...'}</span>
+                    <span>{isAr ? 'جاري تسجيل الموظف...' : 'Registering Employee...'}</span>
                   </>
                 ) : (
-                  <span>
+                  <span className="flex items-center gap-2">
+                    <Plus size={15} />
                     {isEditMode
-                      ? (isAr ? 'حفظ التعديلات' : 'Save Modifications')
-                      : (isAr ? '📋 إرسال للمدير للاعتماد' : '📋 Forward to Manager')}
+                      ? (isAr ? 'حفظ التعديلات' : 'Save Changes')
+                      : (isAr ? 'تسجيل الموظف' : 'Register Employee')}
                   </span>
                 )}
               </button>

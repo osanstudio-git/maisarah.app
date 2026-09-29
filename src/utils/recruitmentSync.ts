@@ -230,7 +230,7 @@ function sanitizeRecruitForDb(candidate: any): any {
 }
 
 /**
- * Save a recruit to the DB directly with edge function priority.
+ * Save a recruit to the DB directly with edge function priority and strict timeout.
  * Always updates localStorage immediately for instant UI response.
  */
 export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Promise<RecruitCandidate> {
@@ -239,14 +239,15 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
 
   const sanitized = sanitizeRecruitForDb(candidate);
 
-  // 2. Try Edge Function first (guaranteed admin privilege)
+  // 2. Try Edge Function first with 4-second timeout
   try {
-    const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('manage-auth', {
-      body: { action: 'upsert_recruit', recruit: sanitized }
-    });
-    if (!edgeErr && edgeRes?.success && edgeRes?.data) {
-      upsertLocalRecruit(edgeRes.data);
-      return edgeRes.data;
+    const edgeRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
+      action: 'upsert_recruit',
+      recruit: sanitized
+    }, 4000);
+    if (!edgeRes.error && edgeRes.data?.success && edgeRes.data?.data) {
+      upsertLocalRecruit(edgeRes.data.data);
+      return edgeRes.data.data;
     }
   } catch (edgeE) {
     console.warn('Edge function upsert notice, trying direct table:', edgeE);
