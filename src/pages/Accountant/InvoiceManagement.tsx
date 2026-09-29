@@ -451,11 +451,10 @@ export default function InvoiceManagement() {
     <div className="space-y-6 pb-12" dir={isAr ? 'rtl' : 'ltr'}>
       {/* Toast Notification */}
       {notification.show && (
-        <div className={`fixed top-6 end-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${
-          notification.type === 'success'
+        <div className={`fixed top-6 end-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${notification.type === 'success'
             ? 'bg-emerald-900/95 text-emerald-100 border-emerald-500/30'
             : 'bg-red-900/95 text-red-100 border-red-500/30'
-        }`}>
+          }`}>
           {notification.type === 'success' ? <CheckCircle2 size={20} className="text-emerald-400 shrink-0" /> : <AlertTriangle size={20} className="text-red-400 shrink-0" />}
           <div>
             <p className="text-xs font-black uppercase tracking-wider">{notification.title}</p>
@@ -544,11 +543,10 @@ export default function InvoiceManagement() {
         <div className="flex bg-gray-100 p-1 rounded-xl w-full sm:w-auto">
           <button
             onClick={() => setActiveTab('receipts_queue')}
-            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-black transition-all ${
-              activeTab === 'receipts_queue'
+            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-black transition-all ${activeTab === 'receipts_queue'
                 ? 'bg-white text-gray-900 shadow-xs'
                 : 'text-gray-500 hover:text-gray-900'
-            }`}
+              }`}
           >
             <Receipt size={15} />
             <span>{isAr ? 'طابور التحقق من الدفعات' : 'Payment Verification Queue'}</span>
@@ -561,11 +559,10 @@ export default function InvoiceManagement() {
 
           <button
             onClick={() => setActiveTab('invoices')}
-            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-black transition-all ${
-              activeTab === 'invoices'
+            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-black transition-all ${activeTab === 'invoices'
                 ? 'bg-white text-gray-900 shadow-xs'
                 : 'text-gray-500 hover:text-gray-900'
-            }`}
+              }`}
           >
             <FileText size={15} />
             <span>{isAr ? 'سجل الفواتير (Invoices)' : 'Invoice Register'}</span>
@@ -593,33 +590,30 @@ export default function InvoiceManagement() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setReceiptFilter('draft')}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                receiptFilter === 'draft'
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${receiptFilter === 'draft'
                   ? 'bg-amber-500 text-white shadow-sm'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
+                }`}
             >
               {isAr ? 'مسودات قيد التحقق' : 'Drafts Pending Verification'} ({draftReceipts.length})
             </button>
 
             <button
               onClick={() => setReceiptFilter('verified')}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                receiptFilter === 'verified'
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${receiptFilter === 'verified'
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
+                }`}
             >
               {isAr ? 'المعتمدة والمرحلة لـ DSR' : 'Verified & Synced to DSR'} ({verifiedReceipts.length})
             </button>
 
             <button
               onClick={() => setReceiptFilter('all')}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                receiptFilter === 'all'
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${receiptFilter === 'all'
                   ? 'bg-gray-900 text-white shadow-sm'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
+                }`}
             >
               {isAr ? 'جميع الإيصالات' : 'All Receipts'} ({receipts.length})
             </button>
@@ -687,9 +681,8 @@ export default function InvoiceManagement() {
                             )}
                           </td>
                           <td className="py-4 px-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black inline-flex items-center gap-1 ${
-                              isDraft ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                            }`}>
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black inline-flex items-center gap-1 ${isDraft ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
                               {isDraft ? <Clock size={11} /> : <CheckCircle2 size={11} />}
                               {isDraft ? (isAr ? 'مسودة معلقة' : 'Draft Pending') : (isAr ? 'معتمد في DSR' : 'Verified in DSR')}
                             </span>
@@ -731,11 +724,10 @@ export default function InvoiceManagement() {
               <button
                 key={f}
                 onClick={() => setInvoiceFilter(f)}
-                className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                  invoiceFilter === f
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${invoiceFilter === f
                     ? 'bg-gray-900 text-white shadow-sm'
                     : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 {f === 'all' && (isAr ? 'جميع الفواتير' : 'All Invoices')}
                 {f === 'draft' && (isAr ? 'مسودات (بدء المهام)' : 'Drafts (Task Started)')}
@@ -782,11 +774,10 @@ export default function InvoiceManagement() {
                           {inv.due_date || 'N/A'}
                         </td>
                         <td className="py-4 px-4">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                            inv.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
-                            inv.status === 'partially_paid' ? 'bg-blue-100 text-blue-800' :
-                            inv.status === 'draft' ? 'bg-gray-100 text-gray-700' : 'bg-amber-100 text-amber-800'
-                          }`}>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${inv.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                              inv.status === 'partially_paid' ? 'bg-blue-100 text-blue-800' :
+                                inv.status === 'draft' ? 'bg-gray-100 text-gray-700' : 'bg-amber-100 text-amber-800'
+                            }`}>
                             {inv.status}
                           </span>
                         </td>

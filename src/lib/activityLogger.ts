@@ -5,6 +5,7 @@ export type ActivityType =
   | 'client_archived' 
   | 'service_created' 
   | 'service_updated' 
+  | 'service_deleted' 
   | 'invoice_created' 
   | 'invoice_paid' 
   | 'broadcast_sent'

@@ -155,7 +155,11 @@ const ServicesManager = () => {
         query,
         supabase.from('clients').select('id, company_name').order('company_name'),
       ]);
-      setServices((svcRes.data as ServiceRecord[]) || []);
+      const formattedServices: ServiceRecord[] = ((svcRes.data as any[]) || []).map(item => ({
+        ...item,
+        clients: Array.isArray(item.clients) ? item.clients[0] || null : item.clients || null,
+      }));
+      setServices(formattedServices);
       setClients((clientRes.data as Client[]) || []);
     } catch (err) {
       console.error(err);
@@ -229,7 +233,14 @@ const ServicesManager = () => {
         );
 
         setFormMsg({ type: 'ok', text: isAr ? 'تم تعيين الخدمة بنجاح' : 'Service assigned successfully' });
-        if (data) setServices(prev => [data as ServiceRecord, ...prev]);
+        if (data) {
+          const item: any = data;
+          const formatted: ServiceRecord = {
+            ...item,
+            clients: Array.isArray(item.clients) ? item.clients[0] || null : item.clients || null,
+          };
+          setServices(prev => [formatted, ...prev]);
+        }
       }
 
       setFormData({ title: '', custom_name: '', client_id: '', due_date: '', description: '', status: 'ongoing' });
@@ -243,7 +254,11 @@ const ServicesManager = () => {
   // ── Edit Trigger ─────────────────────────────────────────────────────────
   const openEditModal = (svc: ServiceRecord) => {
     setEditingService(svc);
-    const isMaster = (isAr ? MASTER_SERVICES : MASTER_SERVICES_EN).includes(svc.title);
+    const matchedCatalogItem = catalog.find(c => c.name === svc.title);
+    const isMaster = !!matchedCatalogItem;
+    if (matchedCatalogItem?.department_id) {
+      setSelectedDeptId(matchedCatalogItem.department_id);
+    }
     setFormData({
       title: isMaster ? svc.title : '',
       custom_name: isMaster ? '' : svc.title,
@@ -1106,10 +1121,12 @@ const ServicesManager = () => {
           clientData={{
             clientName: selectedInvoiceDsr.company_name,
             companyName: selectedInvoiceDsr.company_name,
+            crNumber: selectedInvoiceDsr.cr_number,
             registrationNumber: selectedInvoiceDsr.cr_number,
             totalAmount: selectedInvoiceDsr.amount,
             subtotal: selectedInvoiceDsr.amount,
             quoteNumber: selectedInvoiceDsr.invoice_number || 'INV-2026-8801',
+            serviceType: selectedInvoiceDsr.service,
             serviceName: selectedInvoiceDsr.service,
           }}
         />

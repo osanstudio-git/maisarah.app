@@ -5,12 +5,14 @@ interface TaxInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   clientData?: {
-    clientName: string;
+    clientName?: string;
     companyName?: string;
     crNumber?: string;
+    registrationNumber?: string;
     email?: string;
     phone?: string;
     serviceType?: string;
+    serviceName?: string;
     totalAmount?: number;
     subtotal?: number;
     vatAmount?: number;
@@ -28,7 +30,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
   const [invoiceDate, setInvoiceDate] = useState(todayStr);
   const [buyerName, setBuyerName] = useState(clientData?.companyName || clientData?.clientName || 'Amjaad');
   const [buyerCountry, setBuyerCountry] = useState('Sultanate of Oman');
-  const [serviceParticulars, setServiceParticulars] = useState(clientData?.serviceType || 'Feasibility Study / Accounting Retainer');
+  const [serviceParticulars, setServiceParticulars] = useState(clientData?.serviceType || clientData?.serviceName || 'Feasibility Study / Accounting Retainer');
   const [lineAmount, setLineAmount] = useState<number>(clientData?.subtotal || clientData?.totalAmount || 30.0);
   const [includeVat, setIncludeVat] = useState(true);
 
