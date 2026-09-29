@@ -259,7 +259,7 @@ ON public.hr_attendance FOR UPDATE USING (
 CREATE OR REPLACE FUNCTION public.handle_new_employee_setup()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.role IN ('employee', 'hr', 'department_head') THEN
+    IF NEW.role IN ('employee', 'hr', 'department_head', 'accountant', 'crm') THEN
         -- Insert initial leave balances
         INSERT INTO public.hr_leave_balances (employee_id, annual, sick, maternity, paternity)
         VALUES (NEW.id, 30, 15, 98, 7)
@@ -288,5 +288,5 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS setup_new_employee_trigger ON public.profiles;
 CREATE TRIGGER setup_new_employee_trigger
-AFTER INSERT OR UPDATE OF role ON public.profiles
+AFTER INSERT ON public.profiles
 FOR EACH ROW EXECUTE FUNCTION public.handle_new_employee_setup();

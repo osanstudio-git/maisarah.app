@@ -1053,51 +1053,7 @@ export default function HREmployees() {
           }
         })();
 
-        // 3. Send Candidate Offer Email (non-blocking)
-        supabase.functions.invoke('send-email', {
-          body: {
-            to: cleanEmail,
-            subject: isAr
-              ? 'مرحباً بك في مجموعة ميسرة - عرض العمل والخطوات القادمة'
-              : 'Welcome to Maisarah Group - Job Offer & Next Steps',
-            html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #1f2937; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff;">
-                <div style="text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #f3f4f6;">
-                  <h2 style="color: #A11212; margin: 0; font-size: 20px; font-weight: 800;">
-                    ${isAr ? 'مجموعة ميسرة للاستشارات المالية والتدقيق' : 'Maisarah Financial & Auditing Group'}
-                  </h2>
-                  <p style="color: #6b7280; font-size: 12px; margin-top: 4px; font-weight: 600;">
-                    ${isAr ? 'إشعار تسجيل ملف مرشح وعرض عمل' : 'Candidate Registration & Placement Notice'}
-                  </p>
-                </div>
-                <p style="font-size: 15px;">${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${cleanName}</strong>,</p>
-                <p>
-                  ${isAr
-                    ? 'يسعدنا جداً انضمامك إلى مجموعة ميسرة. نود إبلاغك بأنه قد تم تسجيل ملفك الوظيفي بنجاح وتوجيهه إلى المدير التنفيذي لاعتماد وتحديد القسم والمسمى الوظيفي والمشرف المباشر وتفعيل بيانات الدخول للبوابة.'
-                    : 'We are thrilled to welcome you to the Maisarah family. Your employee profile has been registered and forwarded to Executive Management for final department placement, role designation, and portal account activation.'}
-                </p>
-                <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 20px 0;">
-                  <h4 style="margin: 0 0 10px 0; color: #374151; font-size: 13px; font-weight: 700;">${isAr ? 'ملخص البيانات المسجلة:' : 'Submitted Registration Summary:'}</h4>
-                  <p style="margin: 4px 0; font-size: 12px;"><strong>${isAr ? 'الاسم:' : 'Name:'}</strong> ${cleanName}</p>
-                  <p style="margin: 4px 0; font-size: 12px;"><strong>${isAr ? 'البريد الإلكتروني:' : 'Corporate Email:'}</strong> ${cleanEmail}</p>
-                  <p style="margin: 4px 0; font-size: 12px;"><strong>${isAr ? 'رقم الهاتف:' : 'Phone:'}</strong> ${formData.phone || 'N/A'}</p>
-                  <p style="margin: 4px 0; font-size: 12px;"><strong>${isAr ? 'الرقم المدني:' : 'Civil ID:'}</strong> ${formData.civilId || 'N/A'}</p>
-                  <p style="margin: 4px 0; font-size: 12px;"><strong>${isAr ? 'الجنسية:' : 'Nationality:'}</strong> ${formData.nationality || 'Omani'}</p>
-                </div>
-                <p style="color: #4b5563;">
-                  ${isAr
-                    ? 'ستصلك رسالة إلكترونية ثانية تحتوي على بيانات تفعيل الحساب وكلمة المرور المؤقتة ورابط البوابة فور اعتماد التسكين من قبل الإدارة التنفيذية.'
-                    : 'You will receive a subsequent email with your secure portal login credentials and password as soon as the executive placement is finalized.'}
-                </p>
-                <br/>
-                <div style="border-top: 1px solid #f3f4f6; padding-top: 16px; color: #6b7280; font-size: 12px;">
-                  <p style="margin: 0;">${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
-                  <p style="margin: 2px 0 0 0; font-weight: 700; color: #111827;">${isAr ? 'قسم الموارد البشرية - ميسرة' : 'Human Resources Department · Maisarah'}</p>
-                </div>
-              </div>
-            `
-          }
-        }).catch(mailErr => console.warn('Offer email dispatch notice:', mailErr));
+        // 3. Welcome email will be triggered from Manager Portal once placement is finalized
 
         // 4. Notify Executive Manager about new placement request
         supabase.functions.invoke('send-email', {

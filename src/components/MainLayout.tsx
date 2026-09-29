@@ -32,8 +32,8 @@ export const MainLayout = () => {
           <Outlet />
         </main>
 
-        {/* Bottom Nav for clients on mobile */}
-        {isClient && <BottomNav />}
+        {/* Bottom Nav for clients on subroutes if not on root client dashboard */}
+        {isClient && window.location.pathname !== '/client' && <BottomNav />}
       </div>
     </div>
   );

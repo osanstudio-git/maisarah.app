@@ -187,78 +187,132 @@ Deno.serve(async (req) => {
 
     const cleanEmail = email.trim().toLowerCase()
 
-    // 1. Check if user already exists in auth.users
-    const { data, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
-    if (listErr) throw listErr
+    // Map system access role to a valid database role constraint
+    const validRoles = ['employee', 'manager', 'hr', 'accountant', 'client', 'department_head', 'crm']
+    const safeRole = validRoles.includes(role) ? role : 'employee'
+    const actualJobTitle = body.job_title || (validRoles.includes(role) ? 'Staff Member' : role)
 
-    const existingUser = data?.users?.find((u: any) => u.email?.toLowerCase() === cleanEmail)
-    let userId: string
+    // 1. Efficient user lookup / creation
+    let userId: string | null = null
 
-    if (existingUser) {
-      userId = existingUser.id
+    // Check existing profile first (fast indexed lookup)
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', cleanEmail)
+      .maybeSingle()
+
+    // Ensure secondary roles array contains primary role and valid items
+    const rawSecondary = Array.isArray(secondary_roles) ? secondary_roles : (secondary_roles ? [secondary_roles] : [])
+    const cleanSecondaryRoles = Array.from(new Set([safeRole, ...rawSecondary].filter(r => validRoles.includes(r))))
+
+    if (existingProfile?.id) {
+      userId = existingProfile.id
       const updateData: any = {
         user_metadata: {
           full_name,
-          role,
+          role: safeRole,
           department_id,
-          secondary_roles: Array.isArray(secondary_roles) ? secondary_roles : []
+          secondary_roles: cleanSecondaryRoles
         }
       }
       if (password) {
         updateData.password = password
       }
       const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, updateData)
-      if (updateErr) throw updateErr
+      if (updateErr) console.warn('Auth user update notice:', updateErr.message)
     } else {
+      // Create new Auth User
       const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
         email: cleanEmail,
-        password: password,
+        password: password || 'TempPass@' + Math.floor(1000 + Math.random() * 9000),
         email_confirm: true,
         user_metadata: {
           full_name,
-          role,
+          role: safeRole,
           department_id,
-          secondary_roles: Array.isArray(secondary_roles) ? secondary_roles : []
+          secondary_roles: cleanSecondaryRoles
         }
       })
-      if (createErr) throw createErr
-      userId = created.user.id
+
+      if (createErr) {
+        // If user already exists in auth.users, fetch from listUsers
+        if (createErr.message?.toLowerCase().includes('already') || createErr.status === 422) {
+          const { data: listData } = await supabaseAdmin.auth.admin.listUsers()
+          const matched = listData?.users?.find((u: any) => u.email?.toLowerCase() === cleanEmail)
+          if (matched) {
+            userId = matched.id
+            if (password) {
+              await supabaseAdmin.auth.admin.updateUserById(userId, { password })
+            }
+          } else {
+            throw createErr
+          }
+        } else {
+          throw createErr
+        }
+      } else {
+        userId = created.user.id
+      }
     }
 
-    // 2. Ensure profile record is upserted with correct role and secondary_roles
-    const { error: profErr } = await supabaseAdmin.from('profiles').upsert({
+    if (!userId) {
+      throw new Error('Failed to resolve or create Auth User ID')
+    }
+
+    // 2. Ensure profile record is upserted with valid role
+    const profileData: any = {
       id: userId,
       email: cleanEmail,
-      full_name,
-      role,
-      department_id,
-      secondary_roles: secondary_roles || []
-    }, { onConflict: 'id' })
+      full_name: full_name || '',
+      role: safeRole,
+      department_id: department_id || 'audit',
+      secondary_roles: cleanSecondaryRoles
+    }
+    if (body.client_type) profileData.client_type = body.client_type
+    if (body.company_name) profileData.company_name = body.company_name
+    if (body.phone) profileData.phone = body.phone
+
+    const { error: profErr } = await supabaseAdmin.from('profiles').upsert(profileData, { onConflict: 'id' })
 
     if (profErr) {
       console.warn('Profiles upsert warning:', profErr.message)
     }
 
-    // 3. Ensure hr_employees record is upserted with full info
-    const hrData: any = {
-      id: userId,
-      email: cleanEmail,
-      full_name: full_name || '',
-      phone: body.phone || '',
-      dept: body.dept || department_id || 'Audit',
-      role: body.job_title || role || 'Staff Member',
-      accessRole: role,
-      secondary_roles: secondary_roles || []
-    }
-    if (body.basic_salary) hrData.basic_salary = body.basic_salary
-    if (body.joined_date) hrData.joined_date = body.joined_date
-    if (body.immediate_supervisor) hrData.immediate_supervisor = body.immediate_supervisor
-    if (body.employee_type) hrData.employee_type = body.employee_type
+    // 3. If employee/staff, ensure hr_employees record is upserted with full dossier info
+    if (safeRole !== 'client') {
+      const hrData: any = {
+        id: userId,
+        email: cleanEmail,
+        full_name: full_name || '',
+        phone: body.phone || '',
+        dept: body.dept || department_id || 'Audit',
+        role: actualJobTitle,
+        accessRole: safeRole,
+        status: 'active',
+        secondary_roles: cleanSecondaryRoles
+      }
+      if (body.basic_salary !== undefined) hrData.basic_salary = Number(body.basic_salary)
+      if (body.joined_date) hrData.joined_date = body.joined_date
+      if (body.immediate_supervisor) hrData.immediate_supervisor = body.immediate_supervisor
+      if (body.employee_type) hrData.employee_type = body.employee_type
 
-    try {
-      await supabaseAdmin.from('hr_employees').upsert(hrData, { onConflict: 'id' })
-    } catch (hrErr: any) {
-      console.warn('hr_employees upsert warning in manage-auth:', hrErr.message)
+      try {
+        await supabaseAdmin.from('hr_employees').upsert(hrData, { onConflict: 'id' })
+      } catch (hrErr: any) {
+        console.warn('hr_employees upsert warning in manage-auth:', hrErr.message)
+      }
+
+      // 4. Ensure initial leave balances exist for staff
+      try {
+        await supabaseAdmin.from('hr_leave_balances').upsert({
+          employee_id: userId,
+          annual: 30,
+          sick: 15,
+          maternity: 98,
+          paternity: 7
+        }, { onConflict: 'employee_id', ignoreDuplicates: true })
+      } catch { }
     }
 
     return new Response(

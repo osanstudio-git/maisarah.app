@@ -855,7 +855,7 @@ const EmployeeManagement = () => {
 
     const userId: string = crypto.randomUUID();
     const cleanEmail = selectedPlacement.email.trim().toLowerCase();
-    const assignedSecondary = (placementData.secondaryRoles || []).filter((r: string) => r !== effectiveRole);
+    const fullSecondaryRoles = Array.from(new Set([effectiveRole, ...(placementData.secondaryRoles || [])]));
 
     const newEmployeeRecord = {
       id: userId,
@@ -864,6 +864,7 @@ const EmployeeManagement = () => {
       phone: selectedPlacement.phone || '+968 9000 0000',
       role: finalRole,
       accessRole: effectiveRole,
+      secondary_roles: fullSecondaryRoles,
       dept: targetDeptName,
       employee_type: selectedPlacement.employment_type || 'Experienced',
       joined_date: placementData.startDate || new Date().toISOString().split('T')[0],
@@ -930,14 +931,21 @@ const EmployeeManagement = () => {
     // 3. Background DB & Edge Function sync (completely non-blocking for smooth UX)
     (async () => {
       try {
-        // A. Auth user creation (5s timeout)
+        // A. Auth user creation & dossier upsert via manage-auth edge function (5s timeout)
         const authRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
           email: cleanEmail,
           password: tempPassword,
           full_name: activePlacement.name,
           role: effectiveRole,
           department_id: targetDeptKey,
-          secondary_roles: assignedSecondary
+          secondary_roles: fullSecondaryRoles,
+          job_title: finalRole,
+          dept: targetDeptName,
+          immediate_supervisor: finalSupervisor,
+          joined_date: placementData.startDate || new Date().toISOString().split('T')[0],
+          basic_salary: Number(activePlacement.basic_salary || 0),
+          phone: activePlacement.phone || '',
+          employee_type: activePlacement.employment_type || 'Experienced'
         }, 5000).catch(e => console.warn('Auth sync notice:', e));
 
         const finalUserId = authRes?.data?.userId || userId;
@@ -948,7 +956,8 @@ const EmployeeManagement = () => {
           full_name: activePlacement.name,
           email: activePlacement.email,
           role: effectiveRole,
-          department_id: targetDeptKey
+          department_id: targetDeptKey,
+          secondary_roles: fullSecondaryRoles
         }, { onConflict: 'id' });
         if (pErr) console.warn('Profiles upsert notice:', pErr);
 
@@ -964,38 +973,69 @@ const EmployeeManagement = () => {
           dept: targetDeptName
         }).catch(rErr => console.warn('Recruit status update notice:', rErr));
 
-        // E. Send Credentials Email (Email B)
+        // E. Send The Single Welcome & Credentials Email
+        const portalLoginUrl = `${window.location.origin}/login`;
         await supabase.functions.invoke('send-email', {
           body: {
             to: activePlacement.email,
             subject: isAr
-              ? 'مرحباً بك في مجموعة ميسرة - حساب الموظف الخاص بك جاهز!'
-              : 'Welcome to Maisarah - Your Employee Portal is Active!',
+              ? `مرحباً بك في مجموعة ميسرة - تفاصيل التعيين وحسابك بالبوابة الإلكترونية`
+              : `Welcome to Maisarah Group - Placement Details & Portal Access`,
             html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; color: #333;">
-                <h2 style="color: #A11212; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; text-align: center;">Welcome to Maisarah Group!</h2>
-                <p>Dear ${activePlacement.name},</p>
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #1f2937; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff;">
+                <div style="text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #f3f4f6;">
+                  <h2 style="color: #A11212; margin: 0; font-size: 20px; font-weight: 800;">
+                    ${isAr ? 'مجموعة ميسرة للاستشارات المالية والتدقيق' : 'Maisarah Financial & Auditing Group'}
+                  </h2>
+                  <p style="color: #6b7280; font-size: 12px; margin-top: 4px; font-weight: 600;">
+                    ${isAr ? 'إشعار اعتماد التعيين وتفعيل حساب الموظف' : 'Placement Confirmation & Portal Activation'}
+                  </p>
+                </div>
+                
+                <p style="font-size: 15px;">${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${activePlacement.name}</strong>,</p>
                 <p>
                   ${isAr
-                ? 'يسعدنا إبلاغك بأنه قد تم اعتماد تفاصيل تعيينك وتفعيل حساب الموظف الخاص بك بنجاح. يمكنك الآن تسجيل الدخول لتحديث ملفك والبدء بقائمة مهام التهيئة.'
-                : 'We are pleased to inform you that your department placement setup has been finalized and your corporate portal access is now active.'}
+                    ? 'يسعدنا جداً انضمامك رسمياً إلى فريق عمل مجموعة ميسرة. نود إبلاغك بأنه قد تم اعتماد تفاصيل تعيينك وتفعيل حسابك في بوابة الموظفين بنجاح.'
+                    : 'We are pleased to officially welcome you to the Maisarah Group family. Your department placement details have been approved, and your Employee Portal account is now active.'}
                 </p>
-                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb;">
-                  <h3 style="margin-top: 0; color: #555;">Your Access Credentials:</h3>
-                  <p style="margin: 6px 0;"><strong>Portal URL:</strong> <a href="${window.location.origin}/login" style="color: #A11212; font-weight: bold;">${window.location.origin}/login</a></p>
-                  <p style="margin: 6px 0;"><strong>Username/Email:</strong> ${activePlacement.email}</p>
-                  <p style="margin: 6px 0;"><strong>Temporary Password:</strong> <span style="font-family: monospace; background-color: #f3f4f6; padding: 3px 8px; border-radius: 4px; font-weight: bold; color: #111827; border: 1px solid #e5e7eb;">${tempPassword}</span></p>
-                  <p style="margin: 6px 0;"><strong>Assigned Role:</strong> ${finalRole}</p>
-                  <p style="margin: 6px 0;"><strong>Assigned Department:</strong> ${targetDeptName}</p>
+
+                <!-- Placement Summary Card -->
+                <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 20px 0;">
+                  <h4 style="margin: 0 0 10px 0; color: #374151; font-size: 13px; font-weight: 700;">${isAr ? 'تفاصيل التعيين المعتمدة:' : 'Approved Placement Details:'}</h4>
+                  <p style="margin: 4px 0; font-size: 13px;"><strong>${isAr ? 'القسم المعين:' : 'Assigned Department:'}</strong> ${targetDeptName}</p>
+                  <p style="margin: 4px 0; font-size: 13px;"><strong>${isAr ? 'المسمى الوظيفي:' : 'Job Title:'}</strong> ${finalRole}</p>
+                  <p style="margin: 4px 0; font-size: 13px;"><strong>${isAr ? 'المشرف المباشر:' : 'Immediate Supervisor:'}</strong> ${finalSupervisor}</p>
                 </div>
-                <p>${isAr ? 'يرجى تغيير كلمة المرور المؤقتة فور تسجيل الدخول لأول مرة.' : 'Please log in to complete your onboarding tasklist and change your temporary password for system security.'}</p>
+
+                <!-- Access Credentials Card -->
+                <div style="background-color: #fff8f8; border: 1px solid #fecaca; border-radius: 12px; padding: 16px; margin: 20px 0;">
+                  <h4 style="margin: 0 0 10px 0; color: #991b1b; font-size: 13px; font-weight: 700;">${isAr ? 'بيانات تسجيل الدخول:' : 'Your Access Credentials:'}</h4>
+                  <p style="margin: 6px 0; font-size: 13px;"><strong>${isAr ? 'رابط البوابة:' : 'Portal URL:'}</strong> <a href="${portalLoginUrl}" style="color: #A11212; font-weight: bold; text-decoration: underline;">${portalLoginUrl}</a></p>
+                  <p style="margin: 6px 0; font-size: 13px;"><strong>${isAr ? 'اسم المستخدم / البريد:' : 'Username / Email:'}</strong> <span style="font-family: monospace; font-weight: bold;">${activePlacement.email}</span></p>
+                  <p style="margin: 6px 0; font-size: 13px;"><strong>${isAr ? 'كلمة المرور المؤقتة:' : 'Temporary Password:'}</strong> <span style="font-family: monospace; background-color: #ffffff; padding: 4px 10px; border-radius: 6px; font-weight: bold; color: #111827; border: 1px solid #e5e7eb;">${tempPassword}</span></p>
+                </div>
+
+                <div style="text-align: center; margin: 24px 0;">
+                  <a href="${portalLoginUrl}" style="display: inline-block; background-color: #A11212; color: #ffffff; padding: 12px 28px; border-radius: 10px; font-weight: 700; text-decoration: none; font-size: 13px;">
+                    ${isAr ? 'تسجيل الدخول إلى البوابة' : 'Log In to Employee Portal'}
+                  </a>
+                </div>
+
+                <p style="font-size: 12px; color: #6b7280; margin-top: 16px;">
+                  ${isAr
+                    ? 'يرجى تغيير كلمة المرور المؤقتة فور تسجيل الدخول لأول مرة لحماية أمان الحساب.'
+                    : 'Please change your temporary password immediately upon your first login for system security.'}
+                </p>
+
                 <br/>
-                <p>${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
-                <p>${isAr ? 'إدارة العمليات والتنفيذ - ميسرة' : 'Maisarah Operations & Placement Management'}</p>
+                <div style="border-top: 1px solid #f3f4f6; padding-top: 16px; color: #6b7280; font-size: 12px;">
+                  <p style="margin: 0;">${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
+                  <p style="margin: 2px 0 0 0; font-weight: 700; color: #111827;">${isAr ? 'إدارة العمليات والتسكين · مجموعة ميسرة' : 'Operations & Placement Management · Maisarah Group'}</p>
+                </div>
               </div>
             `
           }
-        }).catch(emailErr => console.warn('Email B dispatch notice:', emailErr));
+        }).catch(emailErr => console.warn('Email dispatch notice:', emailErr));
       } catch (bgErr) {
         console.warn('Background placement sync notice:', bgErr);
       } finally {
