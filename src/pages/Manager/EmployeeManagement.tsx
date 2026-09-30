@@ -528,127 +528,16 @@ const EmployeeManagement = () => {
         }
       }
 
-      // Also merge hr_employee_records from localStorage (instant HR registration sync, excluding pending)
-      try {
-        const hrRecords: any[] = JSON.parse(localStorage.getItem('hr_employee_records') || '[]');
-        hrRecords.forEach(hr => {
-          if (hr.status === 'pending_placement' || hr.role === 'Pending Assignment') return;
-          if (hr.email && !mapped.some(m => m.id === hr.id || (m.email && m.email.toLowerCase() === hr.email.toLowerCase()))) {
-            let rawDept = hr.dept || '';
-            const resolvedRole = hr.systemRole || 'employee';
-            let normalizedDept = getNormalizedDepartmentId(rawDept, resolvedRole, hr.role);
-
-            const resolvedJobTitle = hr.role || (
-              resolvedRole === 'manager' ? 'Operations & Executive Manager' :
-                resolvedRole === 'hr' ? 'HR Specialist' :
-                  resolvedRole === 'crm' ? 'Client Relationship Officer' :
-                    resolvedRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
-            );
-
-            mapped.push({
-              id: hr.id || crypto.randomUUID(),
-              name_en: hr.name || 'Staff Member',
-              name_ar: hr.name || 'موظف',
-              email: hr.email,
-              phone: hr.phone || '',
-              role: resolvedRole,
-              job_title: resolvedJobTitle,
-              status: 'active',
-              tasksCompleted: 10,
-              activeJobs: 3,
-              delays: 0,
-              completionRate: 85,
-              joinedAt: hr.joinedDate || new Date().toISOString().split('T')[0],
-              department_id: normalizedDept,
-              civilId: hr.civilId || '',
-              passportNo: hr.passportNo || '',
-              residencyNo: hr.residencyNo || '',
-              nationality: hr.nationality || 'Omani',
-              dob: hr.dob || '',
-              gender: hr.gender || 'Male',
-              maritalStatus: hr.maritalStatus || 'Single',
-              immediateSupervisor: hr.immediateSupervisor || 'General Manager (Operations & Finance)',
-              basicSalary: Number(hr.basicSalary || 1000),
-              type: hr.type || 'Experienced',
-              accommodationStatus: hr.accommodationStatus || 'Lives with family',
-              accommodationDetails: hr.accommodationDetails || '',
-              allowances: hr.allowances || { transport: 150, housing: 250, other: 50 },
-              education: hr.education || [],
-              experience: hr.experience || [],
-              family: hr.family || [],
-              emergencyContact: hr.emergencyContact || { name: '', relation: '', phone: '' },
-              promotions: hr.promotions || [],
-              disciplinaries: hr.disciplinaries || [],
-              bonuses: hr.bonuses || []
-            });
-          }
-        });
-      } catch (hrRecErr) {
-        console.warn('Error reading hr_employee_records:', hrRecErr);
-      }
-
-      // Merge locally placed employees if not already in mapped array
-      try {
-        const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
-        localPlaced.forEach(lp => {
-          if (lp.email && !mapped.some(m => m.email.toLowerCase() === lp.email.toLowerCase())) {
-            let rawDept = lp.dept || '';
-            const resolvedAccessRole = lp.accessRole || (lp.role?.toLowerCase()?.includes('head') || lp.role?.toLowerCase()?.includes('hod') ? 'department_head' : lp.role?.toLowerCase() === 'accountant' ? 'accountant' : lp.role?.toLowerCase() === 'crm' ? 'crm' : lp.role?.toLowerCase() === 'hr' ? 'hr' : 'employee');
-            let normalizedDept = getNormalizedDepartmentId(rawDept, resolvedAccessRole, lp.job_title || lp.role);
-
-            const resolvedJobTitle = lp.job_title || lp.role || (
-              resolvedAccessRole === 'manager' ? 'Operations & Executive Manager' :
-                resolvedAccessRole === 'hr' ? 'HR Specialist' :
-                  resolvedAccessRole === 'crm' ? 'Client Relationship Officer' :
-                    resolvedAccessRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'
-            );
-
-            mapped.push({
-              id: lp.id || crypto.randomUUID(),
-              name_en: lp.full_name || 'Staff Member',
-              name_ar: lp.full_name || 'موظف',
-              email: lp.email,
-              phone: lp.phone || '',
-              role: resolvedAccessRole,
-              job_title: resolvedJobTitle,
-              status: 'active',
-              tasksCompleted: 12,
-              activeJobs: 4,
-              delays: 0,
-              completionRate: 95,
-              joinedAt: lp.joined_date || new Date().toISOString().split('T')[0],
-              department_id: normalizedDept,
-              civilId: '',
-              passportNo: '',
-              residencyNo: '',
-              nationality: 'Omani',
-              dob: '',
-              gender: 'Male',
-              maritalStatus: 'Single',
-              immediateSupervisor: lp.immediate_supervisor || 'General Manager (Operations & Finance)',
-              basicSalary: 850,
-              type: lp.employee_type || 'Experienced',
-              accommodationStatus: 'Lives with family',
-              accommodationDetails: '',
-              allowances: lp.allowances || { transport: 150, housing: 250, other: 50 },
-              education: [],
-              experience: [],
-              family: [],
-              emergencyContact: { name: '', relation: '', phone: '' },
-              promotions: [],
-              disciplinaries: [],
-              bonuses: []
-            });
-          }
-        });
-      } catch (e) {
-        console.warn('Error reading local placed employees:', e);
-      }
-
       // Filter out Executive manager profile in employee directory view
       setEmployees(mapped.filter(emp => emp.email !== 'manager@maisarah.om'));
     } catch (err: any) {
-      console.error(err);
+      console.error('Error fetching live employees, using offline fallback:', err);
+      try {
+        const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+        const hrRecords: any[] = JSON.parse(localStorage.getItem('hr_employee_records') || '[]');
+        const combined = [...localPlaced, ...hrRecords].filter(emp => emp.email !== 'manager@maisarah.om');
+        setEmployees(combined);
+      } catch {}
     } finally {
       if (!isSilent) setLoading(false);
     }
