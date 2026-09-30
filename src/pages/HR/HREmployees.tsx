@@ -509,10 +509,12 @@ export default function HREmployees() {
       loadEmployeesAndSync();
     };
     window.addEventListener('maisarah_recruits_updated', handleLocalSync);
+    window.addEventListener('maisarah_employees_updated', handleLocalSync);
 
     return () => {
       supabase.removeChannel(channel);
       window.removeEventListener('maisarah_recruits_updated', handleLocalSync);
+      window.removeEventListener('maisarah_employees_updated', handleLocalSync);
     };
   }, []);
 

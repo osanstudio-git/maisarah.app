@@ -808,21 +808,23 @@ const EmployeeManagement = () => {
 
     const rawDept = String(placement.dept || '').toLowerCase();
     const allDepts = getAllDepartments();
-    const matched = allDepts.find(d =>
-      d.id.toLowerCase() === rawDept ||
-      d.name.toLowerCase() === rawDept ||
-      rawDept.includes(d.id.toLowerCase()) ||
-      rawDept.includes(d.name.toLowerCase()) ||
-      (rawDept.includes('client') && d.id === 'client_success') ||
-      (rawDept.includes('crm') && d.id === 'client_success') ||
-      (rawDept.includes('advis') && d.id === 'business_advisory') ||
-      (rawDept.includes('tax') && d.id === 'tax_vat') ||
-      (rawDept.includes('audit') && d.id === 'audit') ||
-      (rawDept.includes('book') && d.id === 'bookkeeping') ||
-      (rawDept.includes('hr') && d.id === 'internal_support') ||
-      (rawDept.includes('innovat') && d.id === 'innovation_dev')
-    );
-    const defaultDept = matched ? matched.id : (placement.dept || 'client_success');
+    const matched = (rawDept && !rawDept.includes('pending'))
+      ? allDepts.find(d =>
+          d.id.toLowerCase() === rawDept ||
+          d.name.toLowerCase() === rawDept ||
+          rawDept.includes(d.id.toLowerCase()) ||
+          rawDept.includes(d.name.toLowerCase()) ||
+          (rawDept.includes('client') && d.id === 'client_success') ||
+          (rawDept.includes('crm') && d.id === 'client_success') ||
+          (rawDept.includes('advis') && d.id === 'business_advisory') ||
+          (rawDept.includes('tax') && d.id === 'tax_vat') ||
+          (rawDept.includes('audit') && d.id === 'audit') ||
+          (rawDept.includes('book') && d.id === 'bookkeeping') ||
+          (rawDept.includes('hr') && d.id === 'internal_support') ||
+          (rawDept.includes('innovat') && d.id === 'innovation_dev')
+        )
+      : null;
+    const defaultDept = matched ? matched.id : 'audit';
 
     const matchingHOD = employees.find(emp => {
       const isHead = emp.role === 'department_head' || emp.job_title?.toLowerCase().includes('head');
@@ -834,8 +836,12 @@ const EmployeeManagement = () => {
       ? `${matchingHOD.name_en} (${matchingHOD.job_title})`
       : 'General Manager (Operations & Finance)';
 
+    const suggestedRole = (placement.role && !placement.role.toLowerCase().includes('pending'))
+      ? placement.role
+      : (getJobPositionsByDepartment(defaultDept)[0] || 'Senior Auditor');
+
     setPlacementData({
-      role: placement.role || (getJobPositionsByDepartment(defaultDept)[0]) || 'Staff Member',
+      role: suggestedRole,
       customRole: '',
       dept: defaultDept,
       customDept: '',
@@ -856,9 +862,18 @@ const EmployeeManagement = () => {
     setPlacementError(null);
 
     const tempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
-    const targetDeptKey = placementData.dept === 'custom' ? (placementData.customDept || 'Operations') : placementData.dept;
-    const targetDeptName = targetDeptKey === 'tax_vat' ? 'Tax & VAT' : targetDeptKey === 'audit' ? 'Audit' : targetDeptKey === 'bookkeeping' ? 'Bookkeeping' : targetDeptKey;
-    const finalRole = placementData.role === 'custom' ? (placementData.customRole || 'Staff Member') : placementData.role;
+    const targetDeptKey = placementData.dept === 'custom' 
+      ? (placementData.customDept || 'Operations') 
+      : (placementData.dept === 'Pending Department' ? 'audit' : placementData.dept);
+    
+    const targetDeptObj = getAllDepartments().find(d => d.id === targetDeptKey);
+    const targetDeptName = targetDeptObj 
+      ? targetDeptObj.name 
+      : (targetDeptKey === 'tax_vat' ? 'Tax & VAT' : targetDeptKey === 'audit' ? 'Audit' : targetDeptKey === 'bookkeeping' ? 'Bookkeeping' : targetDeptKey === 'internal_support' ? 'Internal Support & Administration' : targetDeptKey === 'client_success' ? 'Client Success' : targetDeptKey === 'innovation_dev' ? 'Innovation & Development' : targetDeptKey === 'business_advisory' ? 'Business Advisory' : targetDeptKey);
+    
+    const finalRole = placementData.role === 'custom' 
+      ? (placementData.customRole || 'Staff Member') 
+      : (placementData.role === 'Pending Assignment' ? (getJobPositionsByDepartment(targetDeptKey)[0] || 'Senior Auditor') : placementData.role);
 
     // Effective access role (if isHOD is true and accessRole is standard employee, assign department_head; otherwise preserve chosen portal access role)
     const effectiveRole = (placementData.isHOD && placementData.accessRole === 'employee')
@@ -881,9 +896,11 @@ const EmployeeManagement = () => {
       accessRole: effectiveRole,
       secondary_roles: fullSecondaryRoles,
       dept: targetDeptName,
+      department_id: targetDeptKey,
       employee_type: selectedPlacement.employment_type || 'Experienced',
       joined_date: placementData.startDate || new Date().toISOString().split('T')[0],
       immediate_supervisor: finalSupervisor,
+      status: 'active',
       accommodation_status: 'Lives with family',
       allowances: { transport: 150, housing: 250, other: 50 },
       education: [],
@@ -906,11 +923,30 @@ const EmployeeManagement = () => {
       const localRecruits = JSON.parse(localStorage.getItem('maisarah_hr_recruits_v1') || '[]');
       const updatedRecruits = localRecruits.map((r: any) => {
         if (r.id === selectedPlacement.id || (r.email && r.email.toLowerCase() === cleanEmail)) {
-          return { ...r, placement_status: 'placed', role: finalRole, dept: targetDeptName };
+          return { ...r, placement_status: 'placed', role: finalRole, dept: targetDeptName, supervisor: finalSupervisor };
         }
         return r;
       });
       localStorage.setItem('maisarah_hr_recruits_v1', JSON.stringify(updatedRecruits));
+
+      // Also update HR portal employee cache
+      const rawHrCache = localStorage.getItem('hr_employee_records');
+      if (rawHrCache) {
+        const parsed = JSON.parse(rawHrCache);
+        const updatedHr = parsed.map((e: any) => {
+          if (e.id === selectedPlacement.id || (e.email && e.email.toLowerCase() === cleanEmail)) {
+            return {
+              ...e,
+              role: finalRole,
+              dept: targetDeptName,
+              immediateSupervisor: finalSupervisor,
+              status: 'active'
+            };
+          }
+          return e;
+        });
+        localStorage.setItem('hr_employee_records', JSON.stringify(updatedHr));
+      }
     } catch (lsErr) {
       console.warn('Local storage save notice:', lsErr);
     }
