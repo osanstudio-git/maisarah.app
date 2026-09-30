@@ -384,101 +384,10 @@ export default function HREmployees() {
           });
         };
 
-        // Merge locally placed employees from Manager workforce
-        try {
-          const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
-          localPlaced.forEach(lp => {
-            if (lp.email && !isDeleted(lp.id, lp.email, lp.full_name) && !liveEmployees.some(e => e.email && e.email.toLowerCase() === lp.email.toLowerCase())) {
-              liveEmployees.push({
-                id: lp.id || crypto.randomUUID(),
-                name: lp.full_name || 'Staff Member',
-                role: lp.role || 'Staff Member',
-                dept: lp.dept || 'Audit',
-                email: lp.email || '',
-                phone: lp.phone || '',
-                companyPhone: lp.company_phone || '+968 2456 0000',
-                civilId: lp.civil_id || '109876543',
-                passportNo: lp.passport_no || 'OM1234567',
-                residencyNo: lp.residency_no || 'PR9876543',
-                nationality: lp.nationality || 'Omani',
-                dob: lp.dob || '1995-01-01',
-                gender: lp.gender || 'Male',
-                maritalStatus: lp.marital_status || 'Single',
-                joinedDate: lp.joined_date || new Date().toISOString().split('T')[0],
-                immediateSupervisor: lp.immediate_supervisor || 'General Manager',
-                basicSalary: Number(lp.basic_salary || 1000),
-                type: (lp.employee_type || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
-                status: 'active',
-                accommodationStatus: lp.accommodation_status || 'Lives with family',
-                accommodationDetails: lp.accommodation_details || '',
-                allowances: lp.allowances || { transport: 150, housing: 250, other: 50 },
-                education: lp.education || [],
-                experience: lp.experience || [],
-                family: lp.family || [],
-                emergencyContact: lp.emergency_contact || { name: 'Emergency Contact', relation: 'Family', phone: lp.phone || '' },
-                documents: lp.documents || [],
-                promotions: lp.promotions || [],
-                disciplinaries: lp.disciplinaries || [],
-                bonuses: lp.bonuses || [],
-                transfers: lp.transfers || []
-              });
-            }
-          });
-        } catch (e) {
-          console.warn('Error merging placed employees in HR:', e);
-        }
-
-        // Merge offered / placed recruits from recruitment pipeline
-        try {
-          const recruits = await syncRecruitsFromSupabase();
-          recruits.forEach(r => {
-            if ((r.stage === 'offered' || r.placement_status === 'placed' || r.placement_status === 'pending_placement') && r.email && !isDeleted(r.id, r.email, r.name)) {
-              if (!liveEmployees.some(e => e.email && e.email.toLowerCase() === r.email.toLowerCase())) {
-                liveEmployees.push({
-                  id: r.id || crypto.randomUUID(),
-                  name: r.name || 'New Candidate',
-                  role: r.role || 'Pending Assignment',
-                  dept: r.dept || 'Pending Department',
-                  email: r.email,
-                  phone: r.phone || '',
-                  companyPhone: r.company_phone || '',
-                  civilId: r.civil_id || '',
-                  passportNo: r.passport_no || '',
-                  residencyNo: r.residency_no || '',
-                  nationality: r.nationality || 'Omani',
-                  dob: r.dob || '',
-                  gender: (r.gender as any) || 'Male',
-                  maritalStatus: r.marital_status || 'Single',
-                  joinedDate: r.created_at ? r.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
-                  immediateSupervisor: r.supervisor || 'To Be Assigned by Executive Manager',
-                  basicSalary: Number(r.basic_salary || 0),
-                  type: (r.employment_type || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
-                  status: r.placement_status === 'pending_placement' ? 'pending_placement' : 'active',
-                  accommodationStatus: r.accommodation_status || 'Lives with family',
-                  accommodationDetails: '',
-                  allowances: { transport: 0, housing: 0, other: 0 },
-                  education: [],
-                  experience: [],
-                  family: [],
-                  emergencyContact: { name: '', relation: '', phone: r.phone || '' },
-                  documents: r.resume_url ? [{ name: r.resume_name || 'Resume / CV', type: 'resume', expiry: 'N/A', status: 'active' }] : [],
-                  promotions: [],
-                  disciplinaries: [],
-                  bonuses: [],
-                  transfers: []
-                });
-              }
-            }
-          });
-        } catch (rErr) {
-          console.warn('Error reading recruits in HR:', rErr);
-        }
-
         // Filter all live employees through deleted blacklist
         const sanitizedEmployees = liveEmployees.filter(emp => !isDeleted(emp.id, emp.email, emp.name));
 
         setEmployees(sanitizedEmployees);
-        localStorage.setItem('hr_employee_records', JSON.stringify(sanitizedEmployees));
         if (sanitizedEmployees.length > 0) {
           setSelectedEmpId(prev => prev && sanitizedEmployees.some(e => e.id === prev) ? prev : sanitizedEmployees[0].id);
         }
@@ -1010,17 +919,48 @@ export default function HREmployees() {
           created_at: new Date().toISOString()
         };
 
-        // 1. Save to local storage & DB in background (non-blocking for instant UI response)
-        upsertLocalRecruit(recruitPayload);
-        upsertRecruitToDatabase(recruitPayload).catch(rErr =>
-          console.warn('hr_recruits background save notice:', rErr)
-        );
+        // 1. Direct DB Save to BOTH hr_recruits AND hr_employees in Supabase
+        await Promise.allSettled([
+          upsertRecruitToDatabase(recruitPayload),
+          supabase.from('hr_employees').upsert({
+            id: recruitId,
+            full_name: cleanName,
+            email: cleanEmail,
+            phone: formData.phone || '',
+            company_phone: formData.companyPhone || '',
+            civil_id: formData.civilId || '',
+            passport_no: formData.passportNo || '',
+            residency_no: formData.residencyNo || '',
+            nationality: formData.nationality || 'Omani',
+            dob: formData.dob || null,
+            gender: formData.gender || 'Male',
+            marital_status: formData.maritalStatus || 'Single',
+            joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
+            immediate_supervisor: formData.immediateSupervisor || 'To Be Assigned by Executive Manager',
+            basic_salary: Number(formData.basicSalary || 0),
+            employee_type: formData.type || 'Experienced',
+            accommodation_status: formData.accommodationStatus || 'Lives with family',
+            accommodation_details: formData.accommodationDetails || '',
+            allowances: {
+              transport: Number(formData.transportAllowance || 0),
+              housing: Number(formData.housingAllowance || 0),
+              other: Number(formData.otherAllowance || 0)
+            },
+            education: formData.degree ? [{ degree: formData.degree, field: formData.field, institution: formData.institution, year: formData.year }] : [],
+            experience: formData.prevRole ? [{ role: formData.prevRole, company: formData.prevCompany, duration: formData.prevDuration }] : [],
+            family: [],
+            emergency_contact: { name: formData.emergencyName || '', relation: formData.emergencyRelation || 'Parent', phone: formData.emergencyPhone || '' },
+            role: formData.role || 'Pending Assignment',
+            dept: formData.dept || 'Pending Department',
+            status: 'pending_placement'
+          }, { onConflict: 'id' })
+        ]);
 
         // 2. Fire cross-component and cross-portal sync events immediately
         window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
         window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
 
-        // 6. Also add to local HR employee list (status: pending_placement) so it shows in HR portal
+        // 3. Add to local state
         const pendingEmp: any = {
           id: recruitId,
           name: cleanName,
@@ -1043,7 +983,11 @@ export default function HREmployees() {
           status: 'pending_placement',
           accommodationStatus: formData.accommodationStatus || 'Lives with family',
           accommodationDetails: formData.accommodationDetails || '',
-          allowances: { transport: 0, housing: 0, other: 0 },
+          allowances: {
+            transport: Number(formData.transportAllowance || 0),
+            housing: Number(formData.housingAllowance || 0),
+            other: Number(formData.otherAllowance || 0)
+          },
           education: formData.degree ? [{ degree: formData.degree, field: formData.field, institution: formData.institution, year: formData.year }] : [],
           experience: formData.prevRole ? [{ role: formData.prevRole, company: formData.prevCompany, duration: formData.prevDuration }] : [],
           family: [],
@@ -1053,15 +997,14 @@ export default function HREmployees() {
         };
         const updatedEmpList = [pendingEmp, ...employees.filter(e => e.email?.toLowerCase() !== pendingEmp.email && e.id !== recruitId)];
         setEmployees(updatedEmpList);
-        localStorage.setItem('hr_employee_records', JSON.stringify(updatedEmpList));
 
-        // Show success and close modal IMMEDIATELY
+        // Show success and close modal
         setNotification({
           show: true,
           title: isAr ? 'تم تسجيل الموظف بنجاح' : 'Employee Registered Successfully',
           message: isAr
-            ? `تم حفظ ملف ${cleanName} وإدراجه في قائمة التعيينات الجديدة بالبوابة للمراجعة والاعتماد.`
-            : `${cleanName} registered and queued under Manager Placements for placement review.`,
+            ? `تم حفظ ملف ${cleanName} في قاعدة البيانات وإدراجه في قائمة التعيينات للمراجعة والاعتماد.`
+            : `${cleanName} saved directly to database and queued under Manager Placements for placement review.`,
           type: 'success'
         });
 
