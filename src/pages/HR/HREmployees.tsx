@@ -384,6 +384,53 @@ export default function HREmployees() {
           });
         };
 
+        // Load pending/offered recruits from hr_recruits in Supabase
+        try {
+          const dbRecruits = await syncRecruitsFromSupabase();
+          (dbRecruits || []).forEach(r => {
+            if ((r.stage === 'offered' || r.placement_status === 'pending_placement') && r.email && !isDeleted(r.id, r.email, r.name)) {
+              const alreadyInLive = liveEmployees.some(e => (r.email && e.email && e.email.toLowerCase() === r.email.toLowerCase()) || e.id === r.id);
+              if (!alreadyInLive) {
+                liveEmployees.push({
+                  id: r.id || crypto.randomUUID(),
+                  name: r.name || 'New Candidate',
+                  role: r.role || 'Pending Assignment',
+                  dept: r.dept || 'Pending Department',
+                  email: r.email,
+                  phone: r.phone || '',
+                  companyPhone: r.company_phone || '',
+                  civilId: r.civil_id || '',
+                  passportNo: r.passport_no || '',
+                  residencyNo: r.residency_no || '',
+                  nationality: r.nationality || 'Omani',
+                  dob: r.dob || '',
+                  gender: (r.gender as any) || 'Male',
+                  maritalStatus: r.marital_status || 'Single',
+                  joinedDate: r.created_at ? r.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+                  immediateSupervisor: r.supervisor || 'To Be Assigned by Executive Manager',
+                  basicSalary: Number(r.basic_salary || 0),
+                  type: (r.employment_type || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
+                  status: 'pending_placement',
+                  accommodationStatus: r.accommodation_status || 'Lives with family',
+                  accommodationDetails: '',
+                  allowances: { transport: 0, housing: 0, other: 0 },
+                  education: [],
+                  experience: [],
+                  family: [],
+                  emergencyContact: { name: '', relation: '', phone: r.phone || '' },
+                  documents: r.resume_url ? [{ name: r.resume_name || 'Resume / CV', type: 'resume', expiry: 'N/A', status: 'active' }] : [],
+                  promotions: [],
+                  disciplinaries: [],
+                  bonuses: [],
+                  transfers: []
+                });
+              }
+            }
+          });
+        } catch (rErr) {
+          console.warn('Error reading recruits in HR:', rErr);
+        }
+
         // Filter all live employees through deleted blacklist
         const sanitizedEmployees = liveEmployees.filter(emp => !isDeleted(emp.id, emp.email, emp.name));
 
@@ -919,42 +966,8 @@ export default function HREmployees() {
           created_at: new Date().toISOString()
         };
 
-        // 1. Direct DB Save to BOTH hr_recruits AND hr_employees in Supabase
-        await Promise.allSettled([
-          upsertRecruitToDatabase(recruitPayload),
-          supabase.from('hr_employees').upsert({
-            id: recruitId,
-            full_name: cleanName,
-            email: cleanEmail,
-            phone: formData.phone || '',
-            company_phone: formData.companyPhone || '',
-            civil_id: formData.civilId || '',
-            passport_no: formData.passportNo || '',
-            residency_no: formData.residencyNo || '',
-            nationality: formData.nationality || 'Omani',
-            dob: formData.dob || null,
-            gender: formData.gender || 'Male',
-            marital_status: formData.maritalStatus || 'Single',
-            joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
-            immediate_supervisor: formData.immediateSupervisor || 'To Be Assigned by Executive Manager',
-            basic_salary: Number(formData.basicSalary || 0),
-            employee_type: formData.type || 'Experienced',
-            accommodation_status: formData.accommodationStatus || 'Lives with family',
-            accommodation_details: formData.accommodationDetails || '',
-            allowances: {
-              transport: Number(formData.transportAllowance || 0),
-              housing: Number(formData.housingAllowance || 0),
-              other: Number(formData.otherAllowance || 0)
-            },
-            education: formData.degree ? [{ degree: formData.degree, field: formData.field, institution: formData.institution, year: formData.year }] : [],
-            experience: formData.prevRole ? [{ role: formData.prevRole, company: formData.prevCompany, duration: formData.prevDuration }] : [],
-            family: [],
-            emergency_contact: { name: formData.emergencyName || '', relation: formData.emergencyRelation || 'Parent', phone: formData.emergencyPhone || '' },
-            role: formData.role || 'Pending Assignment',
-            dept: formData.dept || 'Pending Department',
-            status: 'pending_placement'
-          }, { onConflict: 'id' })
-        ]);
+        // 1. Direct DB Save to hr_recruits in Supabase
+        await upsertRecruitToDatabase(recruitPayload);
 
         // 2. Fire cross-component and cross-portal sync events immediately
         window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
