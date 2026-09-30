@@ -52,7 +52,7 @@ const StrategicAnalytics = () => {
         { data: prfData }
       ] = await Promise.all([
         supabase.from('invoices').select('id, amount, status, created_at, due_date').order('created_at', { ascending: true }),
-        supabase.from('services').select('id, title, department_id, status, created_at, due_date'),
+        supabase.from('services').select('id, title, status, created_at, due_date'),
         supabase.from('clients').select('id, created_at').eq('is_archived', false),
         supabase.from('profiles').select('*')
       ]);

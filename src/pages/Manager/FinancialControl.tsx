@@ -77,7 +77,7 @@ const FinancialControl = () => {
           .order('created_at', { ascending: false }),
         supabase
           .from('services')
-          .select('id, title, department_id, client_id, status')
+          .select('id, title, client_id, status')
       ]);
 
       if (invErr) throw invErr;
@@ -326,7 +326,7 @@ const FinancialControl = () => {
             </div>
           </div>
 
-          <div className="flex-1 min-h-[300px]">
+          <div className="w-full min-w-0 h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={deptRevenueData} layout="vertical" margin={{ top: 0, right: 0, left: isAr ? 0 : 50, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#F3F4F6" />
@@ -382,7 +382,7 @@ const FinancialControl = () => {
             </div>
           </div>
 
-          <div className="flex-1 min-h-[300px]">
+          <div className="w-full min-w-0 h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={cashFlowData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
