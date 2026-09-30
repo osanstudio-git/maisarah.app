@@ -946,32 +946,15 @@ const EmployeeManagement = () => {
     // 3. Direct DB updates immediately + background auth & email dispatch
     (async () => {
       try {
-        // A. Immediate direct DB updates
-        const { accessRole: _accRole, ...dbEmployeeRecord } = { ...newEmployeeRecord, id: userId };
-        const [{ error: hrErr }, { error: pErr }] = await Promise.all([
-          supabase.from('hr_employees').upsert(dbEmployeeRecord, { onConflict: 'id' }),
-          supabase.from('profiles').upsert({
-            id: userId,
-            full_name: activePlacement.name,
-            email: activePlacement.email,
-            role: effectiveRole,
-            department_id: targetDeptKey,
-            secondary_roles: fullSecondaryRoles
-          }, { onConflict: 'id' })
-        ]);
-
-        if (hrErr) console.warn('HR Employees direct upsert notice:', hrErr);
-        if (pErr) console.warn('Profiles direct upsert notice:', pErr);
-
-        // B. Update hr_recruits status directly in Supabase
+        // A. Update hr_recruits status directly in Supabase (immediate)
         await updateRecruitStatus(activePlacement.id, {
           placement_status: 'placed',
           role: finalRole,
           dept: targetDeptName
         }).catch(rErr => console.warn('Recruit status update notice:', rErr));
 
-        // C. Auth account creation via manage-auth (background, short timeout)
-        invokeEdgeFunctionWithTimeout('manage-auth', {
+        // B. Auth account creation & profile sync via manage-auth (creates auth.users record + profiles + hr_employees)
+        await invokeEdgeFunctionWithTimeout('manage-auth', {
           email: cleanEmail,
           password: tempPassword,
           full_name: activePlacement.name,
@@ -985,7 +968,7 @@ const EmployeeManagement = () => {
           basic_salary: Number(activePlacement.basic_salary || 0),
           phone: activePlacement.phone || '',
           employee_type: activePlacement.employment_type || 'Experienced'
-        }, 4000).catch(e => console.warn('Auth sync notice:', e));
+        }, 6000).catch(e => console.warn('Auth sync notice:', e));
 
         // E. Send The Single Welcome & Credentials Email
         const portalLoginUrl = `${window.location.origin}/login`;
