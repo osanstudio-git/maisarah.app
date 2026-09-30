@@ -39,7 +39,7 @@ interface DelayIncident {
   id: string;
   created_at: string;
   user_name: string;
-  activity_type: string;
+  activity_type?: string;
   description_en: string;
   description_ar: string;
 }
@@ -210,7 +210,6 @@ const DepartmentPerformance = () => {
       const { data: actLogs, error: actError } = await supabase
         .from('activity_log')
         .select('*')
-        .in('activity_type', ['delay_action_logged', 'delay_escalated', 'task_dispatched'])
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -560,7 +559,7 @@ const DepartmentPerformance = () => {
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#A11212] uppercase tracking-wider">
                             <Clock size={11} />
-                            {incident.activity_type.replace(/_/g, ' ')}
+                            {(incident.activity_type || 'Activity Incident').replace(/_/g, ' ')}
                           </span>
                           <span className="text-[9px] font-bold text-gray-400">
                             {new Date(incident.created_at).toLocaleDateString()}

@@ -24,17 +24,14 @@ export const logActivity = async (
   try {
     const { error } = await supabase.from('activity_log').insert([
       {
-        user_id: userId,
-        user_name: userName,
-        activity_type: type,
+        user_name: userName || 'System User',
         description_en: detailsEn,
         description_ar: detailsAr,
       },
     ]);
 
     if (error) {
-      // If table doesn't exist, we fail silently to not break the app
-      console.warn('Activity log failed - table might not exist:', error.message);
+      console.warn('Activity log notice:', error.message);
     }
   } catch (err) {
     console.error('Activity Logger Error:', err);
