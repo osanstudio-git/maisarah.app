@@ -11,6 +11,7 @@ type AuthContextType = {
   sessionReady: boolean;
   signOut: () => Promise<void>;
   switchPortal: (targetRole: string) => void;
+  setActiveRole: (targetRole: string) => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -22,6 +23,7 @@ const AuthContext = createContext<AuthContextType>({
   sessionReady: false,
   signOut: async () => {},
   switchPortal: () => {},
+  setActiveRole: () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -42,8 +44,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState<boolean>(() => !localStorage.getItem('app_user_role'));
   
   // Track whether the initial getSession() call has completed.
-  // This prevents ProtectedRoute from seeing session=null (not yet loaded)
-  // and prematurely redirecting to /login on page refresh.
   const [sessionReady, setSessionReady] = useState(false);
   
   // Track if we are already fetching the role to avoid race conditions
@@ -74,12 +74,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const metaRole = initialSession.user.user_metadata?.role;
         const immediateRole = cachedRole || metaRole;
 
+        const cachedSec: string[] = (() => {
+          try { return JSON.parse(localStorage.getItem('app_user_secondary_roles') || '[]'); } catch { return []; }
+        })();
         const metaSecondary = Array.isArray(initialSession.user.user_metadata?.secondary_roles)
           ? initialSession.user.user_metadata.secondary_roles
           : [];
-        if (metaSecondary.length > 0) {
-          setSecondaryRoles(metaSecondary);
-          localStorage.setItem('app_user_secondary_roles', JSON.stringify(metaSecondary));
+        const combinedInitialSec = Array.from(new Set([...cachedSec, ...metaSecondary]));
+        if (combinedInitialSec.length > 0) {
+          setSecondaryRoles(combinedInitialSec);
+          localStorage.setItem('app_user_secondary_roles', JSON.stringify(combinedInitialSec));
         }
 
         if (immediateRole) {
@@ -163,36 +167,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         console.warn('Profiles query notice:', profileErr.message);
       }
       
+      const cachedSec: string[] = (() => {
+        try { return JSON.parse(localStorage.getItem('app_user_secondary_roles') || '[]'); } catch { return []; }
+      })();
       const metaSec = Array.isArray(liveUser.user_metadata?.secondary_roles) ? liveUser.user_metadata.secondary_roles : [];
-      const profileSec = (profileData && Array.isArray(profileData.secondary_roles) && profileData.secondary_roles.length > 0)
-        ? profileData.secondary_roles
-        : metaSec;
+      const profileSec = Array.isArray(profileData?.secondary_roles) ? profileData.secondary_roles : [];
+      const combinedSec = Array.from(new Set([...metaSec, ...profileSec, ...cachedSec]));
 
-      setSecondaryRoles(profileSec);
-      localStorage.setItem('app_user_secondary_roles', JSON.stringify(profileSec));
+      setSecondaryRoles(combinedSec);
+      localStorage.setItem('app_user_secondary_roles', JSON.stringify(combinedSec));
         
-      if (profileData?.role) {
-        localStorage.setItem('app_user_primary_role', profileData.role);
-        // Validate cached role against authorized roles for this user
-        const cachedRole = localStorage.getItem('app_user_role');
-        const isAuthorized = cachedRole && (
-          cachedRole === profileData.role || 
-          profileSec.includes(cachedRole) || 
-          profileData.role === 'manager'
-        );
+      const primaryRole = profileData?.role || liveUser.user_metadata?.role || localStorage.getItem('app_user_primary_role') || 'employee';
+      localStorage.setItem('app_user_primary_role', primaryRole);
 
-        const activeRole = isAuthorized ? cachedRole : profileData.role;
-        setRole(activeRole);
-        localStorage.setItem('app_user_role', activeRole);
-      } else {
-        const fallbackRole = currentUser.user_metadata?.role || localStorage.getItem('app_user_role') || null;
-        setRole(fallbackRole);
-        if (fallbackRole) {
-          localStorage.setItem('app_user_role', fallbackRole);
-        } else {
-          localStorage.removeItem('app_user_role');
-        }
-      }
+      // Validate cached role against authorized roles for this user
+      const cachedRole = localStorage.getItem('app_user_role');
+      const isAuthorized = cachedRole && (
+        cachedRole === primaryRole || 
+        combinedSec.includes(cachedRole) || 
+        primaryRole === 'manager'
+      );
+
+      const activeRole = isAuthorized ? cachedRole : primaryRole;
+      setRole(activeRole);
+      localStorage.setItem('app_user_role', activeRole);
     } catch (err) {
       console.warn("Notice during user role fetch:", err);
       const fallbackRole = currentUser.user_metadata?.role || localStorage.getItem('app_user_role') || null;
@@ -204,6 +202,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSessionReady(true);
       setLoading(false);
     }
+  };
+
+  const setActiveRole = (targetRole: string) => {
+    localStorage.setItem('app_user_role', targetRole);
+    setRole(targetRole);
   };
 
   const switchPortal = (targetRole: string) => {
@@ -240,7 +243,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, role, secondaryRoles, loading, sessionReady, signOut, switchPortal }}>
+    <AuthContext.Provider value={{ session, user, role, secondaryRoles, loading, sessionReady, signOut, switchPortal, setActiveRole }}>
       {children}
     </AuthContext.Provider>
   );

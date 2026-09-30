@@ -7,7 +7,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
-  const { session, role, secondaryRoles, loading, sessionReady } = useAuth();
+  const { session, role, secondaryRoles, loading, sessionReady, setActiveRole } = useAuth();
 
   // CRITICAL: Wait until the initial session check is fully complete.
   // Without this, on page refresh session is null while getSession() is still
@@ -46,8 +46,8 @@ export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
   }
 
   // If currently active role is not in allowedRoles but matching secondary role is, auto-sync active role
-  if (allowedRoles && role && !allowedRoles.includes(role) && matchingRole) {
-    localStorage.setItem('app_user_role', matchingRole);
+  if (allowedRoles && role && !allowedRoles.includes(role) && matchingRole && matchingRole !== role) {
+    setActiveRole(matchingRole);
   }
 
   // Logged in and authorized
