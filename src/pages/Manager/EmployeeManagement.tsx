@@ -754,84 +754,37 @@ const EmployeeManagement = () => {
       transfers: []
     };
 
-    // 1. Instant local storage sync & UI responsiveness
-    try {
-      const localEmps = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
-      const filtered = localEmps.filter((e: any) => e.email?.toLowerCase() !== cleanEmail && e.id !== userId);
-      filtered.push(newEmployeeRecord);
-      localStorage.setItem('maisarah_placed_employees', JSON.stringify(filtered));
-
-      const localRecruits = JSON.parse(localStorage.getItem('maisarah_hr_recruits_v1') || '[]');
-      const updatedRecruits = localRecruits.map((r: any) => {
-        if (r.id === selectedPlacement.id || (r.email && r.email.toLowerCase() === cleanEmail)) {
-          return { ...r, placement_status: 'placed', role: finalRole, dept: targetDeptName, supervisor: finalSupervisor };
-        }
-        return r;
-      });
-      localStorage.setItem('maisarah_hr_recruits_v1', JSON.stringify(updatedRecruits));
-
-      // Also update HR portal employee cache
-      const rawHrCache = localStorage.getItem('hr_employee_records');
-      if (rawHrCache) {
-        const parsed = JSON.parse(rawHrCache);
-        const updatedHr = parsed.map((e: any) => {
-          if (e.id === selectedPlacement.id || (e.email && e.email.toLowerCase() === cleanEmail)) {
-            return {
-              ...e,
-              role: finalRole,
-              dept: targetDeptName,
-              immediateSupervisor: finalSupervisor,
-              status: 'active'
-            };
-          }
-          return e;
-        });
-        localStorage.setItem('hr_employee_records', JSON.stringify(updatedHr));
-      }
-    } catch (lsErr) {
-      console.warn('Local storage save notice:', lsErr);
-    }
-
-    // 2. Open Success Credentials Modal IMMEDIATELY — zero UI lag
-    setIsPlacing(false);
-    setNotification({
-      show: true,
-      title: isAr ? 'تم تأكيد التعيين' : 'Placement Finalized',
-      message: isAr
-        ? `تم تفعيل حساب الموظف لـ ${selectedPlacement.name} بنجاح وإرسال البريد الإلكتروني.`
-        : `Placement confirmed for ${selectedPlacement.name}! Dispatched credentials to ${selectedPlacement.email}.`,
-      type: 'success'
-    });
-
-    setCredentialsModal({
-      show: true,
-      name: selectedPlacement.name,
-      email: selectedPlacement.email,
-      password: tempPassword,
-      role: finalRole,
-      dept: targetDeptName,
-      supervisor: finalSupervisor
-    });
-
     const activePlacement = selectedPlacement;
-    setPendingPlacements(prev => prev.filter(p => p.id !== activePlacement.id && p.email?.toLowerCase() !== cleanEmail));
-    setSelectedPlacement(null);
 
-    window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
-    window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
-
-    // 3. Direct DB updates immediately + background auth & email dispatch
-    (async () => {
-      try {
-        // A. Update hr_recruits status directly in Supabase (immediate)
-        await updateRecruitStatus(activePlacement.id, {
+    try {
+      // 1. Update hr_recruits status directly in Supabase DB
+      const { error: recruitUpdateErr } = await supabase
+        .from('hr_recruits')
+        .update({
           placement_status: 'placed',
           role: finalRole,
           dept: targetDeptName
-        }).catch(rErr => console.warn('Recruit status update notice:', rErr));
+        })
+        .or(`id.eq.${activePlacement.id},email.eq.${cleanEmail}`);
 
-        // B. Auth account creation & profile sync via manage-auth (creates auth.users record + profiles + hr_employees)
-        await invokeEdgeFunctionWithTimeout('manage-auth', {
+      if (recruitUpdateErr) {
+        console.warn('Direct recruit status update notice, using manage-auth fallback:', recruitUpdateErr.message);
+        await supabase.functions.invoke('manage-auth', {
+          body: {
+            action: 'update_recruit',
+            recruit_id: activePlacement.id,
+            updates: {
+              placement_status: 'placed',
+              role: finalRole,
+              dept: targetDeptName
+            }
+          }
+        }).catch(e => console.warn('manage-auth recruit update fallback error:', e));
+      }
+
+      // 2. Auth account creation & profile sync via manage-auth (creates auth.users record + profiles + hr_employees)
+      const authRes = await supabase.functions.invoke('manage-auth', {
+        body: {
           email: cleanEmail,
           password: tempPassword,
           full_name: activePlacement.name,
@@ -845,77 +798,148 @@ const EmployeeManagement = () => {
           basic_salary: Number(activePlacement.basic_salary || 0),
           phone: activePlacement.phone || '',
           employee_type: activePlacement.employment_type || 'Experienced'
-        }, 6000).catch(e => console.warn('Auth sync notice:', e));
+        }
+      });
+      console.log('manage-auth placement response:', authRes);
 
-        // E. Send The Single Welcome & Credentials Email
-        const portalLoginUrl = `${window.location.origin}/login`;
-        await supabase.functions.invoke('send-email', {
-          body: {
-            to: activePlacement.email,
-            subject: isAr
-              ? `مرحباً بك في مجموعة ميسرة - تفاصيل التعيين وحسابك بالبوابة الإلكترونية`
-              : `Welcome to Maisarah Group - Placement Details & Portal Access`,
-            html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #1f2937; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff;">
-                <div style="text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #f3f4f6;">
-                  <h2 style="color: #A11212; margin: 0; font-size: 20px; font-weight: 800;">
-                    ${isAr ? 'مجموعة ميسرة للاستشارات المالية والتدقيق' : 'Maisarah Financial & Auditing Group'}
-                  </h2>
-                  <p style="color: #6b7280; font-size: 12px; margin-top: 4px; font-weight: 600;">
-                    ${isAr ? 'إشعار اعتماد التعيين وتفعيل حساب الموظف' : 'Placement Confirmation & Portal Activation'}
-                  </p>
-                </div>
-                
-                <p style="font-size: 15px;">${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${activePlacement.name}</strong>,</p>
-                <p>
-                  ${isAr
-                    ? 'يسعدنا جداً انضمامك رسمياً إلى فريق عمل مجموعة ميسرة. نود إبلاغك بأنه قد تم اعتماد تفاصيل تعيينك وتفعيل حسابك في بوابة الموظفين بنجاح.'
-                    : 'We are pleased to officially welcome you to the Maisarah Group family. Your department placement details have been approved, and your Employee Portal account is now active.'}
+      // 3. Send The Single Welcome & Credentials Email via Resend
+      const portalLoginUrl = `${window.location.origin}/login`;
+      const emailRes = await supabase.functions.invoke('send-email', {
+        body: {
+          to: activePlacement.email,
+          subject: isAr
+            ? `مرحباً بك في مجموعة ميسرة - تفاصيل التعيين وحسابك بالبوابة الإلكترونية`
+            : `Welcome to Maisarah Group - Placement Details & Portal Access`,
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'}; font-size: 14px; line-height: 1.6; color: #1f2937; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff;">
+              <div style="text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #f3f4f6;">
+                <h2 style="color: #A11212; margin: 0; font-size: 20px; font-weight: 800;">
+                  ${isAr ? 'مجموعة ميسرة للاستشارات المالية والتدقيق' : 'Maisarah Financial & Auditing Group'}
+                </h2>
+                <p style="color: #6b7280; font-size: 12px; margin-top: 4px; font-weight: 600;">
+                  ${isAr ? 'إشعار اعتماد التعيين وتفعيل حساب الموظف' : 'Placement Confirmation & Portal Activation'}
                 </p>
-
-                <!-- Placement Summary Card -->
-                <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 20px 0;">
-                  <h4 style="margin: 0 0 10px 0; color: #374151; font-size: 13px; font-weight: 700;">${isAr ? 'تفاصيل التعيين المعتمدة:' : 'Approved Placement Details:'}</h4>
-                  <p style="margin: 4px 0; font-size: 13px;"><strong>${isAr ? 'القسم المعين:' : 'Assigned Department:'}</strong> ${targetDeptName}</p>
-                  <p style="margin: 4px 0; font-size: 13px;"><strong>${isAr ? 'المسمى الوظيفي:' : 'Job Title:'}</strong> ${finalRole}</p>
-                  <p style="margin: 4px 0; font-size: 13px;"><strong>${isAr ? 'المشرف المباشر:' : 'Immediate Supervisor:'}</strong> ${finalSupervisor}</p>
-                </div>
-
-                <!-- Access Credentials Card -->
-                <div style="background-color: #fff8f8; border: 1px solid #fecaca; border-radius: 12px; padding: 16px; margin: 20px 0;">
-                  <h4 style="margin: 0 0 10px 0; color: #991b1b; font-size: 13px; font-weight: 700;">${isAr ? 'بيانات تسجيل الدخول:' : 'Your Access Credentials:'}</h4>
-                  <p style="margin: 6px 0; font-size: 13px;"><strong>${isAr ? 'رابط البوابة:' : 'Portal URL:'}</strong> <a href="${portalLoginUrl}" style="color: #A11212; font-weight: bold; text-decoration: underline;">${portalLoginUrl}</a></p>
-                  <p style="margin: 6px 0; font-size: 13px;"><strong>${isAr ? 'اسم المستخدم / البريد:' : 'Username / Email:'}</strong> <span style="font-family: monospace; font-weight: bold;">${activePlacement.email}</span></p>
-                  <p style="margin: 6px 0; font-size: 13px;"><strong>${isAr ? 'كلمة المرور المؤقتة:' : 'Temporary Password:'}</strong> <span style="font-family: monospace; background-color: #ffffff; padding: 4px 10px; border-radius: 6px; font-weight: bold; color: #111827; border: 1px solid #e5e7eb;">${tempPassword}</span></p>
-                </div>
-
-                <div style="text-align: center; margin: 24px 0;">
-                  <a href="${portalLoginUrl}" style="display: inline-block; background-color: #A11212; color: #ffffff; padding: 12px 28px; border-radius: 10px; font-weight: 700; text-decoration: none; font-size: 13px;">
-                    ${isAr ? 'تسجيل الدخول إلى البوابة' : 'Log In to Employee Portal'}
-                  </a>
-                </div>
-
-                <p style="font-size: 12px; color: #6b7280; margin-top: 16px;">
-                  ${isAr
-                    ? 'يرجى تغيير كلمة المرور المؤقتة فور تسجيل الدخول لأول مرة لحماية أمان الحساب.'
-                    : 'Please change your temporary password immediately upon your first login for system security.'}
-                </p>
-
-                <br/>
-                <div style="border-top: 1px solid #f3f4f6; padding-top: 16px; color: #6b7280; font-size: 12px;">
-                  <p style="margin: 0;">${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
-                  <p style="margin: 2px 0 0 0; font-weight: 700; color: #111827;">${isAr ? 'إدارة العمليات والتسكين · مجموعة ميسرة' : 'Operations & Placement Management · Maisarah Group'}</p>
-                </div>
               </div>
-            `
+              
+              <p style="font-size: 15px;">${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${activePlacement.name}</strong>,</p>
+              <p>
+                ${isAr
+                  ? 'يسعدنا جداً انضمامك رسمياً إلى فريق عمل مجموعة ميسرة. نود إبلاغك بأنه قد تم اعتماد تفاصيل تعيينك وتفعيل حسابك في بوابة الموظفين بنجاح.'
+                  : 'We are pleased to officially welcome you to the Maisarah Group family. Your department placement details have been approved, and your Employee Portal account is now active.'}
+              </p>
+
+              <!-- Placement Summary Card -->
+              <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 20px 0;">
+                <h4 style="margin: 0 0 10px 0; color: #374151; font-size: 13px; font-weight: 700;">${isAr ? 'تفاصيل التعيين المعتمدة:' : 'Approved Placement Details:'}</h4>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>${isAr ? 'القسم المعين:' : 'Assigned Department:'}</strong> ${targetDeptName}</p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>${isAr ? 'المسمى الوظيفي:' : 'Job Title:'}</strong> ${finalRole}</p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>${isAr ? 'المشرف المباشر:' : 'Immediate Supervisor:'}</strong> ${finalSupervisor}</p>
+              </div>
+
+              <!-- Access Credentials Card -->
+              <div style="background-color: #fff8f8; border: 1px solid #fecaca; border-radius: 12px; padding: 16px; margin: 20px 0;">
+                <h4 style="margin: 0 0 10px 0; color: #991b1b; font-size: 13px; font-weight: 700;">${isAr ? 'بيانات تسجيل الدخول:' : 'Your Access Credentials:'}</h4>
+                <p style="margin: 6px 0; font-size: 13px;"><strong>${isAr ? 'رابط البوابة:' : 'Portal URL:'}</strong> <a href="${portalLoginUrl}" style="color: #A11212; font-weight: bold; text-decoration: underline;">${portalLoginUrl}</a></p>
+                <p style="margin: 6px 0; font-size: 13px;"><strong>${isAr ? 'اسم المستخدم / البريد:' : 'Username / Email:'}</strong> <span style="font-family: monospace; font-weight: bold;">${activePlacement.email}</span></p>
+                <p style="margin: 6px 0; font-size: 13px;"><strong>${isAr ? 'كلمة المرور المؤقتة:' : 'Temporary Password:'}</strong> <span style="font-family: monospace; background-color: #ffffff; padding: 4px 10px; border-radius: 6px; font-weight: bold; color: #111827; border: 1px solid #e5e7eb;">${tempPassword}</span></p>
+              </div>
+
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="${portalLoginUrl}" style="display: inline-block; background-color: #A11212; color: #ffffff; padding: 12px 28px; border-radius: 10px; font-weight: 700; text-decoration: none; font-size: 13px;">
+                  ${isAr ? 'تسجيل الدخول إلى البوابة' : 'Log In to Employee Portal'}
+                </a>
+              </div>
+
+              <p style="font-size: 12px; color: #6b7280; margin-top: 16px;">
+                ${isAr
+                  ? 'يرجى تغيير كلمة المرور المؤقتة فور تسجيل الدخول لأول مرة لحماية أمان الحساب.'
+                  : 'Please change your temporary password immediately upon your first login for system security.'}
+              </p>
+
+              <br/>
+              <div style="border-top: 1px solid #f3f4f6; padding-top: 16px; color: #6b7280; font-size: 12px;">
+                <p style="margin: 0;">${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p>
+                <p style="margin: 2px 0 0 0; font-weight: 700; color: #111827;">${isAr ? 'إدارة العمليات والتسكين · مجموعة ميسرة' : 'Operations & Placement Management · Maisarah Group'}</p>
+              </div>
+            </div>
+          `
+        }
+      });
+      console.log('send-email placement response:', emailRes);
+
+      // 4. Update Local Storage for instantaneous client offline caching
+      try {
+        const localEmps = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+        const filtered = localEmps.filter((e: any) => e.email?.toLowerCase() !== cleanEmail && e.id !== userId);
+        filtered.push(newEmployeeRecord);
+        localStorage.setItem('maisarah_placed_employees', JSON.stringify(filtered));
+
+        const localRecruits = JSON.parse(localStorage.getItem('maisarah_hr_recruits_v1') || '[]');
+        const updatedRecruits = localRecruits.map((r: any) => {
+          if (r.id === activePlacement.id || (r.email && r.email.toLowerCase() === cleanEmail)) {
+            return { ...r, placement_status: 'placed', role: finalRole, dept: targetDeptName, supervisor: finalSupervisor };
           }
-        }).catch(emailErr => console.warn('Email dispatch notice:', emailErr));
-      } catch (bgErr) {
-        console.warn('Background placement sync notice:', bgErr);
-      } finally {
-        fetchEmployees();
+          return r;
+        });
+        localStorage.setItem('maisarah_hr_recruits_v1', JSON.stringify(updatedRecruits));
+
+        const rawHrCache = localStorage.getItem('hr_employee_records');
+        if (rawHrCache) {
+          const parsed = JSON.parse(rawHrCache);
+          const updatedHr = parsed.map((e: any) => {
+            if (e.id === activePlacement.id || (e.email && e.email.toLowerCase() === cleanEmail)) {
+              return {
+                ...e,
+                role: finalRole,
+                dept: targetDeptName,
+                immediateSupervisor: finalSupervisor,
+                status: 'active'
+              };
+            }
+            return e;
+          });
+          localStorage.setItem('hr_employee_records', JSON.stringify(updatedHr));
+        }
+      } catch (lsErr) {
+        console.warn('Local storage save notice:', lsErr);
       }
-    })();
+
+      // 5. Open Success Credentials Modal and update UI state
+      setPendingPlacements(prev => prev.filter(p => p.id !== activePlacement.id && p.email?.toLowerCase() !== cleanEmail));
+      setSelectedPlacement(null);
+
+      setNotification({
+        show: true,
+        title: isAr ? 'تم تأكيد التعيين' : 'Placement Finalized',
+        message: isAr
+          ? `تم تفعيل حساب الموظف لـ ${activePlacement.name} بنجاح وإرسال البريد الإلكتروني.`
+          : `Placement confirmed for ${activePlacement.name}! Dispatched credentials to ${activePlacement.email}.`,
+        type: 'success'
+      });
+
+      setCredentialsModal({
+        show: true,
+        name: activePlacement.name,
+        email: activePlacement.email,
+        password: tempPassword,
+        role: finalRole,
+        dept: targetDeptName,
+        supervisor: finalSupervisor
+      });
+
+      window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+      window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
+
+      await Promise.allSettled([
+        fetchEmployees(),
+        fetchPlacements()
+      ]);
+    } catch (err: any) {
+      console.error('Placement confirmation error:', err);
+      setPlacementError(err?.message || 'Failed to finalize placement. Please try again.');
+    } finally {
+      setIsPlacing(false);
+    }
   };
 
   const openEditModal = (emp: Employee) => {
