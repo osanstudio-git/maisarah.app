@@ -155,7 +155,7 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
       try {
         const edgeRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
           action: 'get_recruits'
-        }, 8000);
+        }, 3000);
         if (!edgeRes.error && edgeRes.data?.success && Array.isArray(edgeRes.data.data)) {
           rawRecruits = edgeRes.data.data;
         }

@@ -943,11 +943,35 @@ const EmployeeManagement = () => {
     window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
     window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
 
-    // 3. Background DB & Edge Function sync (completely non-blocking for smooth UX)
+    // 3. Direct DB updates immediately + background auth & email dispatch
     (async () => {
       try {
-        // A. Auth user creation & dossier upsert via manage-auth edge function (5s timeout)
-        const authRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
+        // A. Immediate direct DB updates
+        const { accessRole: _accRole, ...dbEmployeeRecord } = { ...newEmployeeRecord, id: userId };
+        const [{ error: hrErr }, { error: pErr }] = await Promise.all([
+          supabase.from('hr_employees').upsert(dbEmployeeRecord, { onConflict: 'id' }),
+          supabase.from('profiles').upsert({
+            id: userId,
+            full_name: activePlacement.name,
+            email: activePlacement.email,
+            role: effectiveRole,
+            department_id: targetDeptKey,
+            secondary_roles: fullSecondaryRoles
+          }, { onConflict: 'id' })
+        ]);
+
+        if (hrErr) console.warn('HR Employees direct upsert notice:', hrErr);
+        if (pErr) console.warn('Profiles direct upsert notice:', pErr);
+
+        // B. Update hr_recruits status directly in Supabase
+        await updateRecruitStatus(activePlacement.id, {
+          placement_status: 'placed',
+          role: finalRole,
+          dept: targetDeptName
+        }).catch(rErr => console.warn('Recruit status update notice:', rErr));
+
+        // C. Auth account creation via manage-auth (background, short timeout)
+        invokeEdgeFunctionWithTimeout('manage-auth', {
           email: cleanEmail,
           password: tempPassword,
           full_name: activePlacement.name,
@@ -961,32 +985,7 @@ const EmployeeManagement = () => {
           basic_salary: Number(activePlacement.basic_salary || 0),
           phone: activePlacement.phone || '',
           employee_type: activePlacement.employment_type || 'Experienced'
-        }, 5000).catch(e => console.warn('Auth sync notice:', e));
-
-        const finalUserId = authRes?.data?.userId || userId;
-
-        // B. Profiles table upsert
-        const { error: pErr } = await supabase.from('profiles').upsert({
-          id: finalUserId,
-          full_name: activePlacement.name,
-          email: activePlacement.email,
-          role: effectiveRole,
-          department_id: targetDeptKey,
-          secondary_roles: fullSecondaryRoles
-        }, { onConflict: 'id' });
-        if (pErr) console.warn('Profiles upsert notice:', pErr);
-
-        // C. HR Employees table upsert
-        const { accessRole: _accRole, ...dbEmployeeRecord } = { ...newEmployeeRecord, id: finalUserId };
-        const { error: hrErr } = await supabase.from('hr_employees').upsert(dbEmployeeRecord, { onConflict: 'id' });
-        if (hrErr) console.warn('HR Employees upsert notice:', hrErr);
-
-        // D. Update hr_recruits status
-        await updateRecruitStatus(activePlacement.id, {
-          placement_status: 'placed',
-          role: finalRole,
-          dept: targetDeptName
-        }).catch(rErr => console.warn('Recruit status update notice:', rErr));
+        }, 4000).catch(e => console.warn('Auth sync notice:', e));
 
         // E. Send The Single Welcome & Credentials Email
         const portalLoginUrl = `${window.location.origin}/login`;
