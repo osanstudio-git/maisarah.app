@@ -165,9 +165,8 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
     }
 
     if (Array.isArray(rawRecruits)) {
-      // Filter out deleted/blacklisted candidates and unpack dossier metadata
+      // Unpack dossier metadata directly from Supabase
       const cleanDbData: RecruitCandidate[] = rawRecruits
-        .filter(item => !isRecruitDeleted(item.id, item.email, item.name))
         .map(item => {
           const dossier = item.onboarding_tasks?.dossier || {};
           return {

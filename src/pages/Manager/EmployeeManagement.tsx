@@ -243,86 +243,38 @@ const EmployeeManagement = () => {
   const fetchPlacements = useCallback(async () => {
     setLoadingPlacements(true);
     try {
-      const deletedBlacklist: string[] = JSON.parse(localStorage.getItem('maisarah_deleted_employees') || '[]');
-      const isDeleted = (empId?: string, empEmail?: string, empName?: string) => {
-        const idLower = (empId || '').trim().toLowerCase();
-        const emailLower = (empEmail || '').trim().toLowerCase();
-        const nameLower = (empName || '').trim().toLowerCase();
-        return deletedBlacklist.some(d => {
-          const dLower = d.trim().toLowerCase();
-          return (idLower && dLower === idLower) ||
-            (emailLower && dLower === emailLower) ||
-            (nameLower && dLower === nameLower);
-        });
-      };
+      const [dbRecruits, { data: profiles }] = await Promise.all([
+        syncRecruitsFromSupabase(),
+        supabase.from('profiles').select('id, email')
+      ]);
 
-      const dbData = await syncRecruitsFromSupabase();
-      let recruits: any[] = Array.isArray(dbData) ? [...dbData] : [...getLocalRecruits()];
-      const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+      const profileEmails = new Set((profiles || []).map(p => (p.email || '').trim().toLowerCase()).filter(Boolean));
+      const profileIds = new Set((profiles || []).map(p => p.id));
 
-      // Also check hr_employees table for candidates forwarded by HR with status pending_placement
-      try {
-        const { data: hrPending, error: hrPendingErr } = await supabase
-          .from('hr_employees')
-          .select('*');
+      const recruits: any[] = Array.isArray(dbRecruits) ? [...dbRecruits] : [...getLocalRecruits()];
 
-        if (Array.isArray(hrPending) && !hrPendingErr) {
-          const pendingList = hrPending.filter((hp: any) => hp.status === 'pending_placement');
-          pendingList.forEach(hp => {
-            if (!recruits.some(r => r.id === hp.id || (r.email && hp.email && r.email.toLowerCase() === hp.email.toLowerCase()))) {
-              recruits.push({
-                id: hp.id,
-                name: hp.full_name || 'Candidate',
-                role: hp.role || 'Pending Assignment',
-                dept: hp.dept || 'Pending Department',
-                stage: 'offered',
-                score: 90,
-                email: hp.email,
-                phone: hp.phone || '',
-                company_phone: hp.company_phone || '',
-                civil_id: hp.civil_id || '',
-                passport_no: hp.passport_no || '',
-                residency_no: hp.residency_no || '',
-                nationality: hp.nationality || 'Omani',
-                dob: hp.dob || '',
-                gender: hp.gender || 'Male',
-                marital_status: hp.marital_status || 'Single',
-                supervisor: hp.immediate_supervisor || 'To Be Assigned by Executive Manager',
-                basic_salary: Number(hp.basic_salary || 0),
-                employment_type: hp.employee_type || 'Experienced',
-                placement_status: 'pending_placement',
-                created_at: hp.created_at || new Date().toISOString()
-              });
-            }
-          });
-        }
-      } catch (hrPendingErr) {
-        console.warn('Error checking pending hr_employees:', hrPendingErr);
-      }
-
-      const isAlreadyPlaced = (c: any) => {
-        if (c.placement_status === 'placed') return true;
+      const filtered = recruits.filter((c: any) => {
+        // Must be in offered stage or pending_placement status
+        if (c.placement_status === 'placed') return false;
+        if (c.stage !== 'offered' && c.placement_status !== 'pending_placement') return false;
+        
         const cEmail = (c.email || '').trim().toLowerCase();
-        const cId = (c.id || '').trim().toLowerCase();
-        if (cEmail && localPlaced.some(lp => lp.email && lp.email.trim().toLowerCase() === cEmail)) return true;
-        if (cId && localPlaced.some(lp => lp.id && lp.id.trim().toLowerCase() === cId)) return true;
-        return false;
-      };
+        const cId = c.id;
 
-      const filtered = recruits.filter((c: any) =>
-        (c.stage === 'offered' || c.placement_status === 'pending_placement') &&
-        !isAlreadyPlaced(c) &&
-        !isDeleted(c.id, c.email, c.name)
-      );
+        // If candidate already exists in profiles, they have already been placed
+        if (cEmail && profileEmails.has(cEmail)) return false;
+        if (cId && profileIds.has(cId)) return false;
+
+        return true;
+      });
+
       setPendingPlacements(filtered);
     } catch (err) {
       console.error('Error fetching pending placements:', err);
       const local = getLocalRecruits();
-      const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
       setPendingPlacements(local.filter((c: any) =>
         (c.stage === 'offered' || c.placement_status === 'pending_placement') &&
-        c.placement_status !== 'placed' &&
-        !(c.email && localPlaced.some(lp => lp.email && lp.email.trim().toLowerCase() === c.email.trim().toLowerCase()))
+        c.placement_status !== 'placed'
       ));
     } finally {
       setLoadingPlacements(false);
