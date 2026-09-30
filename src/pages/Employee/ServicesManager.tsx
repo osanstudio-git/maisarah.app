@@ -36,10 +36,10 @@ interface Client {
 // Config
 // ---------------------------------------------------------------------------
 const STATUS_MAP: Record<string, { label_ar: string; label_en: string; icon: React.ReactNode; cls: string; bar: string }> = {
-  ongoing:      { label_ar: 'قيد التنفيذ', label_en: 'Ongoing',      icon: <PlayCircle size={13} />,   cls: 'bg-blue-100 text-blue-700',   bar: 'bg-blue-400' },
-  under_review: { label_ar: 'قيد المراجعة', label_en: 'Under Review', icon: <Clock size={13} />,        cls: 'bg-amber-100 text-amber-700', bar: 'bg-amber-400' },
-  completed:    { label_ar: 'مكتمل',        label_en: 'Completed',    icon: <CheckCircle2 size={13} />, cls: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
-  delayed:      { label_ar: 'متأخر',        label_en: 'Delayed',      icon: <AlertTriangle size={13} />,cls: 'bg-red-100 text-red-700',     bar: 'bg-brand-dark' },
+  ongoing: { label_ar: 'قيد التنفيذ', label_en: 'Ongoing', icon: <PlayCircle size={13} />, cls: 'bg-blue-100 text-blue-700', bar: 'bg-blue-400' },
+  under_review: { label_ar: 'قيد المراجعة', label_en: 'Under Review', icon: <Clock size={13} />, cls: 'bg-amber-100 text-amber-700', bar: 'bg-amber-400' },
+  completed: { label_ar: 'مكتمل', label_en: 'Completed', icon: <CheckCircle2 size={13} />, cls: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
+  delayed: { label_ar: 'متأخر', label_en: 'Delayed', icon: <AlertTriangle size={13} />, cls: 'bg-red-100 text-red-700', bar: 'bg-brand-dark' },
 };
 
 const useServiceCatalog = (isAr: boolean) => {
@@ -52,7 +52,7 @@ const useServiceCatalog = (isAr: boolean) => {
           .from('service_catalog')
           .select('id, name_ar, name_en, department_id')
           .order('name_en');
-        
+
         if (data && data.length > 0) {
           setCatalog(data.map(d => ({
             id: d.id,
@@ -94,14 +94,14 @@ const ServicesManager = () => {
   const isAr = i18n.language === 'ar';
   const catalog = useServiceCatalog(isAr);
 
-  const [services, setServices]         = useState<ServiceRecord[]>([]);
-  const [clients, setClients]           = useState<Client[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [searchTerm, setSearchTerm]     = useState('');
+  const [services, setServices] = useState<ServiceRecord[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [isModalOpen, setIsModalOpen]   = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formMsg, setFormMsg]           = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [formMsg, setFormMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -167,8 +167,8 @@ const ServicesManager = () => {
     setLoading(false);
   }, [user?.id, loadDSR]);
 
-  useEffect(() => { 
-    fetchData(); 
+  useEffect(() => {
+    fetchData();
 
     // Live Realtime sync for employee tasks
     const channel = supabase
@@ -201,12 +201,12 @@ const ServicesManager = () => {
 
     try {
       const payload: any = {
-        title:          name,
-        status:         formData.status,
-        description:    formData.description || null,
-        due_date:       formData.due_date || null,
-        client_id:      formData.client_id || null,
-        employee_id:    user?.id, // Digital Signature: Tag the employee who created it
+        title: name,
+        status: formData.status,
+        description: formData.description || null,
+        due_date: formData.due_date || null,
+        client_id: formData.client_id || null,
+        employee_id: user?.id, // Digital Signature: Tag the employee who created it
       };
 
       if (editingService) {
@@ -220,7 +220,7 @@ const ServicesManager = () => {
           .insert([payload])
           .select('id, title, status, description, due_date, created_at, client_id, clients(company_name)')
           .single();
-          
+
         if (error) throw error;
 
         // Log the activity
@@ -352,7 +352,7 @@ const ServicesManager = () => {
   // ── DSR Matcher Helper ───────────────────────────────────────────────────
   const getDSRForService = (svc: ServiceRecord) => {
     const cName = svc.clients?.company_name?.toLowerCase() || '';
-    return dsrEntries.find(d => 
+    return dsrEntries.find(d =>
       (cName && d.company_name.toLowerCase().includes(cName)) ||
       (cName && cName.includes(d.company_name.toLowerCase())) ||
       (svc.title.toLowerCase().includes(d.service.toLowerCase()))
@@ -440,10 +440,10 @@ const ServicesManager = () => {
 
   // ── Stat counts ───────────────────────────────────────────────────────────
   const counts = {
-    ongoing:      services.filter(s => s.status === 'ongoing').length,
+    ongoing: services.filter(s => s.status === 'ongoing').length,
     under_review: services.filter(s => s.status === 'under_review').length,
-    completed:    services.filter(s => s.status === 'completed').length,
-    delayed:      services.filter(s => s.status === 'delayed').length,
+    completed: services.filter(s => s.status === 'completed').length,
+    delayed: services.filter(s => s.status === 'delayed').length,
   };
 
   return (
@@ -476,11 +476,10 @@ const ServicesManager = () => {
           <button
             key={key}
             onClick={() => setFilterStatus(filterStatus === key ? 'all' : key)}
-            className={`flex items-center justify-between p-5 rounded-3xl border-2 transition-all duration-300 shadow-sm ${
-              filterStatus === key
+            className={`flex items-center justify-between p-5 rounded-3xl border-2 transition-all duration-300 shadow-sm ${filterStatus === key
                 ? 'border-brand-dark bg-red-50/50 shadow-md translate-y-[-2px]'
                 : 'border-gray-100 bg-white hover:border-gray-200'
-            }`}
+              }`}
           >
             <div className={isAr ? 'text-right' : 'text-left'}>
               <div className="text-3xl font-black text-gray-900 tracking-tight">{counts[key as keyof typeof counts]}</div>
@@ -580,128 +579,128 @@ const ServicesManager = () => {
                             ))}
                           </select>
                         </td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                              {/* Payment & Receipt Action */}
-                              {(() => {
-                                const dsr = getDSRForService(svc);
-                                if (dsr && dsr.invoice_issued) {
-                                  return (
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        onClick={() => setSelectedInvoiceDsr(dsr)}
-                                        className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[10px] rounded-lg transition flex items-center gap-1 border border-blue-200"
-                                        title={isAr ? 'عرض الفاتورة الضريبية' : 'View Tax Invoice'}
-                                      >
-                                        <FileText size={12} />
-                                        {isAr ? 'الفاتورة' : 'Invoice'}
-                                      </button>
-                                      <button
-                                        onClick={() => setSelectedReceiptDsr(dsr)}
-                                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] rounded-lg transition flex items-center gap-1 border border-emerald-200"
-                                        title={isAr ? 'عرض سند القبض' : 'View Receipt'}
-                                      >
-                                        <Receipt size={12} />
-                                        {isAr ? 'السند' : 'Receipt'}
-                                      </button>
-                                    </div>
-                                  );
-                                }
+                        <td className="px-5 py-4">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {/* Payment & Receipt Action */}
+                            {(() => {
+                              const dsr = getDSRForService(svc);
+                              if (dsr && dsr.invoice_issued) {
                                 return (
-                                  <button
-                                    onClick={() => openPaymentModal(svc)}
-                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-sm transition flex items-center gap-1"
-                                    title={isAr ? 'تسجيل استلام الدفعة' : 'Record Client Payment'}
-                                  >
-                                    <DollarSign size={12} />
-                                    {isAr ? 'تسجيل دفعة' : 'Record Payment'}
-                                  </button>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => setSelectedInvoiceDsr(dsr)}
+                                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[10px] rounded-lg transition flex items-center gap-1 border border-blue-200"
+                                      title={isAr ? 'عرض الفاتورة الضريبية' : 'View Tax Invoice'}
+                                    >
+                                      <FileText size={12} />
+                                      {isAr ? 'الفاتورة' : 'Invoice'}
+                                    </button>
+                                    <button
+                                      onClick={() => setSelectedReceiptDsr(dsr)}
+                                      className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] rounded-lg transition flex items-center gap-1 border border-emerald-200"
+                                      title={isAr ? 'عرض سند القبض' : 'View Receipt'}
+                                    >
+                                      <Receipt size={12} />
+                                      {isAr ? 'السند' : 'Receipt'}
+                                    </button>
+                                  </div>
                                 );
-                              })()}
+                              }
+                              return (
+                                <button
+                                  onClick={() => openPaymentModal(svc)}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-sm transition flex items-center gap-1"
+                                  title={isAr ? 'تسجيل استلام الدفعة' : 'Record Client Payment'}
+                                >
+                                  <DollarSign size={12} />
+                                  {isAr ? 'تسجيل دفعة' : 'Record Payment'}
+                                </button>
+                              );
+                            })()}
 
-                              <button
-                                onClick={() => setViewingService(svc)}
-                                className="p-1.5 text-gray-400 hover:text-brand-dark hover:bg-red-50 rounded-lg transition-all"
-                                title={isAr ? 'عرض التفاصيل' : 'View Details'}
-                              >
-                                <Eye size={15} />
-                              </button>
-                              <button
-                                onClick={() => openEditModal(svc)}
-                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                title={isAr ? 'تعديل' : 'Edit'}
-                              >
-                                <Edit size={15} />
-                              </button>
-                              <button
-                                onClick={() => setDeletingService(svc)}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                title={isAr ? 'حذف الخدمة' : 'Delete Service'}
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                            <button
+                              onClick={() => setViewingService(svc)}
+                              className="p-1.5 text-gray-400 hover:text-brand-dark hover:bg-red-50 rounded-lg transition-all"
+                              title={isAr ? 'عرض التفاصيل' : 'View Details'}
+                            >
+                              <Eye size={15} />
+                            </button>
+                            <button
+                              onClick={() => openEditModal(svc)}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                              title={isAr ? 'تعديل' : 'Edit'}
+                            >
+                              <Edit size={15} />
+                            </button>
+                            <button
+                              onClick={() => setDeletingService(svc)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title={isAr ? 'حذف الخدمة' : 'Delete Service'}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-              {/* Mobile Cards */}
-              <div className="md:hidden divide-y divide-gray-50">
-                {filtered.map(svc => (
-                  <div key={svc.id} className="p-4 space-y-3">
-                    <div className="flex justify-between items-start gap-2">
-                      <div>
-                        <p className="font-semibold text-sm text-gray-800">{svc.title}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{svc.clients?.company_name || '—'}</p>
-                      </div>
-                      <StatusBadge status={svc.status} isAr={isAr} />
+            {/* Mobile Cards */}
+            <div className="md:hidden divide-y divide-gray-50">
+              {filtered.map(svc => (
+                <div key={svc.id} className="p-4 space-y-3">
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <p className="font-semibold text-sm text-gray-800">{svc.title}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{svc.clients?.company_name || '—'}</p>
                     </div>
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-xs text-gray-400">
-                        {svc.due_date ? new Date(svc.due_date).toLocaleDateString() : '—'}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const dsr = getDSRForService(svc);
-                          if (dsr && dsr.invoice_issued) {
-                            return (
-                              <button
-                                onClick={() => setSelectedReceiptDsr(dsr)}
-                                className="px-2 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg"
-                              >
-                                {isAr ? 'السند والفاتورة' : 'Receipt & Invoice'}
-                              </button>
-                            );
-                          }
+                    <StatusBadge status={svc.status} isAr={isAr} />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-xs text-gray-400">
+                      {svc.due_date ? new Date(svc.due_date).toLocaleDateString() : '—'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const dsr = getDSRForService(svc);
+                        if (dsr && dsr.invoice_issued) {
                           return (
                             <button
-                              onClick={() => openPaymentModal(svc)}
-                              className="px-2 py-1 bg-emerald-600 text-white font-bold text-[10px] rounded-lg flex items-center gap-1"
+                              onClick={() => setSelectedReceiptDsr(dsr)}
+                              className="px-2 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg"
                             >
-                              <DollarSign size={10} />
-                              {isAr ? 'تسجيل دفعة' : 'Payment'}
+                              {isAr ? 'السند والفاتورة' : 'Receipt & Invoice'}
                             </button>
                           );
-                        })()}
-                        <select
-                          value={svc.status}
-                          onChange={e => updateStatus(svc.id, e.target.value)}
-                          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none
+                        }
+                        return (
+                          <button
+                            onClick={() => openPaymentModal(svc)}
+                            className="px-2 py-1 bg-emerald-600 text-white font-bold text-[10px] rounded-lg flex items-center gap-1"
+                          >
+                            <DollarSign size={10} />
+                            {isAr ? 'تسجيل دفعة' : 'Payment'}
+                          </button>
+                        );
+                      })()}
+                      <select
+                        value={svc.status}
+                        onChange={e => updateStatus(svc.id, e.target.value)}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none
                             focus:border-red-700 bg-white text-gray-600"
-                        >
-                          {Object.entries(STATUS_MAP).map(([k, v]) => (
-                            <option key={k} value={k}>{isAr ? v.label_ar : v.label_en}</option>
-                          ))}
-                        </select>
-                      </div>
+                      >
+                        {Object.entries(STATUS_MAP).map(([k, v]) => (
+                          <option key={k} value={k}>{isAr ? v.label_ar : v.label_en}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
+            </div>
           </>
         )}
       </div>
@@ -713,7 +712,7 @@ const ServicesManager = () => {
             <div className="flex justify-between items-center p-5 border-b border-gray-100 sticky top-0 bg-white z-10">
               <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
                 <Briefcase size={20} className="text-brand-dark" />
-                {editingService 
+                {editingService
                   ? (isAr ? 'تعديل الخدمة' : 'Edit Service')
                   : (isAr ? 'تعيين خدمة جديدة' : 'Assign New Service')}
               </h3>
@@ -880,11 +879,11 @@ const ServicesManager = () => {
                   {isSubmitting
                     ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
                     : <>
-                        {editingService ? <Edit size={16} /> : <Plus size={16} />}
-                        {editingService 
-                          ? (isAr ? 'حفظ التغييرات' : 'Save Changes') 
-                          : (isAr ? 'تعيين الخدمة' : 'Assign Service')}
-                      </>}
+                      {editingService ? <Edit size={16} /> : <Plus size={16} />}
+                      {editingService
+                        ? (isAr ? 'حفظ التغييرات' : 'Save Changes')
+                        : (isAr ? 'تعيين الخدمة' : 'Assign Service')}
+                    </>}
                 </button>
               </form>
             </div>
@@ -952,12 +951,12 @@ const ServicesManager = () => {
                   {isAr ? 'هل أنت متأكد؟' : 'Are you sure?'}
                 </h3>
                 <p className="text-sm text-gray-500 font-medium leading-relaxed">
-                  {isAr 
-                    ? `سيتم حذف الخدمة "${deletingService.title}" نهائياً. لا يمكن التراجع عن هذا الإجراء.` 
+                  {isAr
+                    ? `سيتم حذف الخدمة "${deletingService.title}" نهائياً. لا يمكن التراجع عن هذا الإجراء.`
                     : `This will permanently delete the service "${deletingService.title}". This action cannot be undone.`}
                 </p>
               </div>
-              
+
               <div className="bg-red-50/50 p-6 rounded-3xl border border-red-100 space-y-4">
                 <p className="text-[10px] font-black text-red-700 uppercase tracking-widest">
                   {isAr ? 'لتأكيد الحذف، يرجى كتابة اسم الخدمة:' : 'To confirm, please type the service name:'}

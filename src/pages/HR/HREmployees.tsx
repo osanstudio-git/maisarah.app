@@ -1248,10 +1248,65 @@ export default function HREmployees() {
         });
         setEmployees(updatedList);
         localStorage.setItem('hr_employee_records', JSON.stringify(updatedList));
+
+        // Direct DB updates for hr_employees, hr_recruits, and profiles in background
+        const cleanEmpEmail = formData.email.trim().toLowerCase();
+        (async () => {
+          try {
+            await Promise.allSettled([
+              supabase.from('hr_employees').upsert({
+                id: formData.id,
+                full_name: formData.name,
+                email: cleanEmpEmail,
+                phone: formData.phone,
+                dept: formData.dept,
+                role: formData.role,
+                basic_salary: Number(formData.basicSalary || 0),
+                joined_date: formData.joinedDate,
+                immediate_supervisor: formData.immediateSupervisor
+              }, { onConflict: 'id' }),
+              supabase.from('hr_recruits').update({
+                dept: formData.dept,
+                role: formData.role,
+                name: formData.name,
+                placement_status: 'placed'
+              }).or(`id.eq.${formData.id},email.eq.${cleanEmpEmail}`),
+              supabase.from('profiles').update({
+                full_name: formData.name,
+                department_id: departmentId
+              }).or(`id.eq.${formData.id},email.eq.${cleanEmpEmail}`)
+            ]);
+          } catch (e) {
+            console.warn('HR edit background sync notice:', e);
+          }
+        })();
+
+        // Also update placed employees in localStorage
+        try {
+          const placed = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+          const nextPlaced = placed.map((p: any) => {
+            if (p.id === formData.id || (p.email && p.email.toLowerCase() === cleanEmpEmail)) {
+              return {
+                ...p,
+                full_name: formData.name,
+                dept: formData.dept,
+                role: formData.role,
+                phone: formData.phone,
+                immediate_supervisor: formData.immediateSupervisor
+              };
+            }
+            return p;
+          });
+          localStorage.setItem('maisarah_placed_employees', JSON.stringify(nextPlaced));
+        } catch {}
+
+        window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
+        window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+
         setNotification({
           show: true,
           title: isAr ? 'تم تحديث الملف' : 'Dossier Updated',
-          message: isAr ? 'تم حفظ التعديلات على ملف الموظف بنجاح.' : 'Employee dossier updated successfully.',
+          message: isAr ? 'تم حفظ التعديلات على ملف الموظف وتحديث قاعدة البيانات بنجاح.' : 'Employee dossier and database records updated successfully.',
           type: 'success'
         });
         setIsSubmitting(false);

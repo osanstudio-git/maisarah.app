@@ -1112,40 +1112,14 @@ const EmployeeManagement = () => {
       const effectiveSecondary = Array.from(new Set([formData.role, ...(formData.secondaryRoles || [])]));
 
       if (editingEmployee) {
-        // 1. Sync Supabase Auth user metadata & profile via manage-auth edge function
-        try {
-          await supabase.functions.invoke('manage-auth', {
-            body: {
-              email: cleanEmail,
-              full_name: formData.fullName,
-              role: formData.role,
-              department_id: formData.department_id,
-              secondary_roles: effectiveSecondary
-            }
-          });
-        } catch (authEdgeErr) {
-          console.warn('manage-auth invoke notice during edit:', authEdgeErr);
-        }
-
-        // 2. Update security access profiles table
+        // 1. Direct DB updates immediately (profiles, hr_employees, hr_recruits)
         const profileUpdate: any = {
           full_name: formData.fullName,
           role: formData.role,
-          department_id: formData.department_id
+          department_id: formData.department_id,
+          secondary_roles: effectiveSecondary
         };
-        try {
-          await supabase
-            .from('profiles')
-            .upsert({
-              id: editingEmployee.id,
-              email: cleanEmail,
-              ...profileUpdate
-            }, { onConflict: 'id' });
-        } catch (pErr) {
-          console.warn('Profiles upsert during edit notice:', pErr);
-        }
 
-        // 3. Upsert/Update core employee records table (hr_employees)
         const hrEmployeeData = {
           id: editingEmployee.id,
           full_name: formData.fullName,
@@ -1156,18 +1130,34 @@ const EmployeeManagement = () => {
         };
 
         try {
-          await supabase
-            .from('hr_employees')
-            .upsert(hrEmployeeData, { onConflict: 'id' });
-        } catch (hrErr) {
-          console.warn('hr_employees upsert notice:', hrErr);
+          await Promise.allSettled([
+            supabase.from('profiles').update(profileUpdate).or(`id.eq.${editingEmployee.id},email.eq.${cleanEmail}`),
+            supabase.from('hr_employees').upsert(hrEmployeeData, { onConflict: 'id' }),
+            supabase.from('hr_recruits').update({ 
+              dept: targetDeptName, 
+              role: targetJobTitle, 
+              name: formData.fullName,
+              placement_status: 'placed'
+            }).or(`id.eq.${editingEmployee.id},email.eq.${cleanEmail}`)
+          ]);
+        } catch (dbErr) {
+          console.warn('Direct edit DB update notice:', dbErr);
         }
 
-        // 4. Update local storage placed employees & recruits cache
+        // 2. Background auth sync with strict 3s timeout (non-blocking)
+        invokeEdgeFunctionWithTimeout('manage-auth', {
+          email: cleanEmail,
+          full_name: formData.fullName,
+          role: formData.role,
+          department_id: formData.department_id,
+          secondary_roles: effectiveSecondary
+        }, 3000).catch(authEdgeErr => console.warn('manage-auth invoke notice during edit:', authEdgeErr));
+
+        // 3. Update local storage placed employees & recruits cache
         try {
           const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
           const updatedPlaced = localPlaced.map(lp => {
-            if (lp.email && lp.email.toLowerCase() === cleanEmail) {
+            if ((lp.email && lp.email.toLowerCase() === cleanEmail) || lp.id === editingEmployee.id) {
               return {
                 ...lp,
                 full_name: formData.fullName,
@@ -1181,20 +1171,58 @@ const EmployeeManagement = () => {
             return lp;
           });
           localStorage.setItem('maisarah_placed_employees', JSON.stringify(updatedPlaced));
+
+          // Also update HR cache
+          const rawHrCache = localStorage.getItem('hr_employee_records');
+          if (rawHrCache) {
+            const parsed = JSON.parse(rawHrCache);
+            const updatedHr = parsed.map((e: any) => {
+              if ((e.email && e.email.toLowerCase() === cleanEmail) || e.id === editingEmployee.id) {
+                return {
+                  ...e,
+                  name: formData.fullName,
+                  phone: formData.phone,
+                  dept: targetDeptName,
+                  role: targetJobTitle
+                };
+              }
+              return e;
+            });
+            localStorage.setItem('hr_employee_records', JSON.stringify(updatedHr));
+          }
+
+          // Also update recruits cache
+          const rawRecruits = localStorage.getItem('maisarah_hr_recruits_v1');
+          if (rawRecruits) {
+            const parsed = JSON.parse(rawRecruits);
+            const updatedRecruits = parsed.map((r: any) => {
+              if ((r.email && r.email.toLowerCase() === cleanEmail) || r.id === editingEmployee.id) {
+                return {
+                  ...r,
+                  name: formData.fullName,
+                  dept: targetDeptName,
+                  role: targetJobTitle,
+                  placement_status: 'placed'
+                };
+              }
+              return r;
+            });
+            localStorage.setItem('maisarah_hr_recruits_v1', JSON.stringify(updatedRecruits));
+          }
         } catch (e) {
-          console.warn('Error updating local placed employees:', e);
+          console.warn('Error updating local caches during edit:', e);
         }
 
-        // 5. Log activity
+        // 4. Log activity
         await logActivity(
           editingEmployee.id,
           formData.fullName,
           'service_updated',
           `Manager updated employee '${formData.fullName}': Role -> '${formData.role}', Dept -> '${targetDeptName}', Position -> '${targetJobTitle}'`,
           `قام المدير بتحديث بيانات الموظف '${formData.fullName}': الصلاحية -> '${formData.role}'، القسم -> '${targetDeptName}'، المسمى -> '${targetJobTitle}'`
-        );
+        ).catch(() => {});
 
-        // 6. Update local state
+        // 5. Update local state
         setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? {
           ...emp,
           name_en: formData.fullName,
@@ -1213,8 +1241,12 @@ const EmployeeManagement = () => {
           type: 'success'
         });
 
+        setIsSubmitting(false);
         setIsModalOpen(false);
         setEditingEmployee(null);
+
+        window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
+        window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
         return;
       }
 
