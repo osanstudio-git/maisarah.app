@@ -477,8 +477,8 @@ const ServicesManager = () => {
             key={key}
             onClick={() => setFilterStatus(filterStatus === key ? 'all' : key)}
             className={`flex items-center justify-between p-5 rounded-3xl border-2 transition-all duration-300 shadow-sm ${filterStatus === key
-                ? 'border-brand-dark bg-red-50/50 shadow-md translate-y-[-2px]'
-                : 'border-gray-100 bg-white hover:border-gray-200'
+              ? 'border-brand-dark bg-red-50/50 shadow-md translate-y-[-2px]'
+              : 'border-gray-100 bg-white hover:border-gray-200'
               }`}
           >
             <div className={isAr ? 'text-right' : 'text-left'}>
