@@ -37,6 +37,18 @@ const STORAGE_KEY = 'maisarah_hr_recruits_v1';
 
 export const DEFAULT_OFFERED_RECRUITS: RecruitCandidate[] = [];
 
+let syncBroadcastChannel: BroadcastChannel | null = null;
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    syncBroadcastChannel = new BroadcastChannel('maisarah_sync_channel');
+    syncBroadcastChannel.onmessage = (msg) => {
+      if (msg.data?.type === 'recruits_updated') {
+        window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+      }
+    };
+  }
+} catch { }
+
 export function getLocalRecruits(): RecruitCandidate[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -55,7 +67,10 @@ export function saveLocalRecruits(recruits: RecruitCandidate[], shouldDispatch: 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(recruits));
     if (shouldDispatch) {
-      window.dispatchEvent(new Event('maisarah_recruits_updated'));
+      window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+      if (syncBroadcastChannel) {
+        syncBroadcastChannel.postMessage({ type: 'recruits_updated' });
+      }
     }
   } catch (e) {
     console.warn('Failed to save local recruits:', e);
@@ -181,7 +196,11 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
             supervisor: item.supervisor || dossier.supervisor || '',
             basic_salary: item.basic_salary !== undefined ? item.basic_salary : (dossier.basic_salary || 0),
             accommodation_status: item.accommodation_status || dossier.accommodation_status || '',
-            company_phone: item.company_phone || dossier.company_phone || ''
+            company_phone: item.company_phone || dossier.company_phone || '',
+            allowances: item.allowances || dossier.allowances || { transport: 0, housing: 0, other: 0 },
+            education: item.education || dossier.education || [],
+            experience: item.experience || dossier.experience || [],
+            emergency_contact: item.emergency_contact || dossier.emergency_contact || { name: '', relation: 'Parent', phone: '' }
           };
         });
 
@@ -239,7 +258,11 @@ function sanitizeRecruitForDb(candidate: any): any {
     supervisor: candidate.supervisor || '',
     basic_salary: Number(candidate.basic_salary || 0),
     accommodation_status: candidate.accommodation_status || candidate.accommodationStatus || '',
-    company_phone: candidate.company_phone || ''
+    company_phone: candidate.company_phone || '',
+    allowances: candidate.allowances || { transport: 0, housing: 0, other: 0 },
+    education: candidate.education || [],
+    experience: candidate.experience || [],
+    emergency_contact: candidate.emergency_contact || { name: '', relation: 'Parent', phone: '' }
   };
 
   sanitized.onboarding_tasks = baseTasks;

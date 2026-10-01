@@ -388,7 +388,7 @@ export default function HREmployees() {
         try {
           const dbRecruits = await syncRecruitsFromSupabase();
           (dbRecruits || []).forEach(r => {
-            if ((r.stage === 'offered' || r.placement_status === 'pending_placement') && r.email && !isDeleted(r.id, r.email, r.name)) {
+            if (r.placement_status !== 'placed' && (r.stage === 'offered' || r.placement_status === 'pending_placement') && r.email && !isDeleted(r.id, r.email, r.name)) {
               const alreadyInLive = liveEmployees.some(e => (r.email && e.email && e.email.toLowerCase() === r.email.toLowerCase()) || e.id === r.id);
               if (!alreadyInLive) {
                 liveEmployees.push({
@@ -413,11 +413,11 @@ export default function HREmployees() {
                   status: 'pending_placement',
                   accommodationStatus: r.accommodation_status || 'Lives with family',
                   accommodationDetails: '',
-                  allowances: { transport: 0, housing: 0, other: 0 },
-                  education: [],
-                  experience: [],
+                  allowances: r.allowances || { transport: 0, housing: 0, other: 0 },
+                  education: r.education || [],
+                  experience: r.experience || [],
                   family: [],
-                  emergencyContact: { name: '', relation: '', phone: r.phone || '' },
+                  emergencyContact: r.emergency_contact || { name: '', relation: 'Parent', phone: r.phone || '' },
                   documents: r.resume_url ? [{ name: r.resume_name || 'Resume / CV', type: 'resume', expiry: 'N/A', status: 'active' }] : [],
                   promotions: [],
                   disciplinaries: [],
@@ -956,6 +956,14 @@ export default function HREmployees() {
           supervisor: formData.immediateSupervisor || 'To Be Assigned by Executive Manager',
           basic_salary: Number(formData.basicSalary || 0),
           accommodation_status: formData.accommodationStatus || 'Lives with family',
+          allowances: {
+            transport: Number(formData.transportAllowance || 0),
+            housing: Number(formData.housingAllowance || 0),
+            other: Number(formData.otherAllowance || 0)
+          },
+          education: formData.degree ? [{ degree: formData.degree, field: formData.field, institution: formData.institution, year: formData.year }] : [],
+          experience: formData.prevRole ? [{ role: formData.prevRole, company: formData.prevCompany, duration: formData.prevDuration }] : [],
+          emergency_contact: { name: formData.emergencyName || '', relation: formData.emergencyRelation || 'Parent', phone: formData.emergencyPhone || '' },
           score: 90,
           onboarding_tasks: {
             contract_signed: false,
