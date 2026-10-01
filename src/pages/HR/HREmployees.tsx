@@ -929,8 +929,8 @@ export default function HREmployees() {
     setFormError(null);
 
     try {
-      // 1. If Manager Placement workflow is chosen for a new candidate:
-      if (!isEditMode && formData.activationMode === 'manager_placement') {
+      // 1. All new candidate registrations -> Saved to hr_recruits and queued for Manager Placement:
+      if (!isEditMode) {
         const recruitId = crypto.randomUUID();
         const cleanName = formData.name.trim();
         const cleanEmail = formData.email.trim().toLowerCase();
