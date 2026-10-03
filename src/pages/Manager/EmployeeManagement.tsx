@@ -497,6 +497,64 @@ const EmployeeManagement = () => {
         }
       }
 
+      // Also include placed candidates from hr_recruits & local placed cache
+      try {
+        const dbRecruits = await syncRecruitsFromSupabase();
+        const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+        const allPlacedSources = [...(dbRecruits || []), ...localPlaced];
+
+        for (const p of allPlacedSources) {
+          if (p.placement_status === 'placed' || p.status === 'active') {
+            const pEmail = (p.email || '').trim().toLowerCase();
+            if (pEmail && !mapped.some(m => m.id === p.id || (m.email && m.email.toLowerCase() === pEmail))) {
+              let rawDept = p.department_id || p.dept || '';
+              const resolvedAccessRole = p.accessRole || (p.role?.toLowerCase().includes('head') ? 'department_head' : p.role?.toLowerCase().includes('hr') ? 'hr' : p.role?.toLowerCase().includes('crm') ? 'crm' : p.role?.toLowerCase().includes('accountant') ? 'accountant' : 'employee');
+              let normalizedDept = getNormalizedDepartmentId(rawDept, resolvedAccessRole, p.role);
+
+              mapped.push({
+                id: p.id || crypto.randomUUID(),
+                name_en: p.name || p.full_name || 'Placed Employee',
+                name_ar: p.full_name || p.name || 'موظف',
+                email: pEmail,
+                phone: p.phone || '',
+                role: resolvedAccessRole,
+                job_title: p.role || p.job_title || 'Staff Member',
+                secondaryRoles: Array.isArray(p.secondary_roles) ? p.secondary_roles : [resolvedAccessRole, 'employee'],
+                status: 'active',
+                tasksCompleted: 12,
+                activeJobs: 2,
+                delays: 0,
+                completionRate: 90,
+                joinedAt: p.joined_date || (p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
+                department_id: normalizedDept,
+                civilId: p.civil_id || '',
+                passportNo: p.passport_no || '',
+                residencyNo: p.residency_no || '',
+                nationality: p.nationality || 'Omani',
+                dob: p.dob || '',
+                gender: p.gender || 'Male',
+                maritalStatus: p.marital_status || 'Single',
+                immediateSupervisor: p.supervisor || p.immediate_supervisor || 'Executive Management & Board of Directors',
+                basicSalary: Number(p.basic_salary || 1000),
+                type: p.employment_type || 'Experienced',
+                accommodationStatus: p.accommodation_status || 'Lives with family',
+                accommodationDetails: '',
+                allowances: p.allowances || { transport: 150, housing: 250, other: 50 },
+                education: p.education || [],
+                experience: p.experience || [],
+                family: [],
+                emergencyContact: p.emergency_contact || { name: '', relation: '', phone: '' },
+                promotions: [],
+                disciplinaries: [],
+                bonuses: []
+              });
+            }
+          }
+        }
+      } catch (pErr) {
+        console.warn('Placed recruits merge notice in fetchEmployees:', pErr);
+      }
+
       // Filter out Executive manager profile in employee directory view
       setEmployees(mapped.filter(emp => emp.email !== 'manager@maisarah.om'));
     } catch (err: any) {
