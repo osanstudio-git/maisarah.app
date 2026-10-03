@@ -12,12 +12,21 @@ envText.split('\n').forEach(line => {
 
 const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
 
-async function checkRecruits() {
-  console.log("Checking all hr_recruits in Supabase...");
-  const { data: recruits, error } = await supabase.from('hr_recruits').select('*');
-  console.log("Recruits count:", recruits ? recruits.length : 0);
-  console.log("Recruits data:", JSON.stringify(recruits, null, 2));
-  if (error) console.error("Error fetching hr_recruits:", error);
+async function checkAllRecruits() {
+  console.log("Fetching all rows from hr_recruits in Supabase...");
+  const { data, error } = await supabase.from('hr_recruits').select('*');
+  console.log("Total rows in hr_recruits:", data ? data.length : 0);
+  console.log("Error:", error);
+  if (data) {
+    console.log("Rows:", JSON.stringify(data, null, 2));
+  }
+
+  console.log("\nFetching all profiles in Supabase...");
+  const { data: profs, error: profErr } = await supabase.from('profiles').select('id, email, full_name, role');
+  console.log("Total profiles:", profs ? profs.length : 0);
+  if (profs) {
+    console.log("Profiles:", JSON.stringify(profs, null, 2));
+  }
 }
 
-checkRecruits();
+checkAllRecruits();

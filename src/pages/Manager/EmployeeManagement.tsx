@@ -245,25 +245,42 @@ const EmployeeManagement = () => {
     try {
       const [dbRecruits, { data: profiles }] = await Promise.all([
         syncRecruitsFromSupabase(),
-        supabase.from('profiles').select('id, email')
+        supabase.from('profiles').select('id, email, role')
       ]);
 
-      const profileEmails = new Set((profiles || []).map(p => (p.email || '').trim().toLowerCase()).filter(Boolean));
-      const profileIds = new Set((profiles || []).map(p => p.id));
+      const activeProfileEmails = new Set(
+        (profiles || [])
+          .filter(p => p.role && p.role !== 'client')
+          .map(p => (p.email || '').trim().toLowerCase())
+          .filter(Boolean)
+      );
+      const activeProfileIds = new Set((profiles || []).filter(p => p.role && p.role !== 'client').map(p => p.id));
 
-      const recruits: any[] = Array.isArray(dbRecruits) ? [...dbRecruits] : [...getLocalRecruits()];
+      const localRecruits = getLocalRecruits();
+      const mergedMap = new Map<string, any>();
+      localRecruits.forEach(r => {
+        const k = (r.id || r.email || '').toLowerCase().trim();
+        if (k) mergedMap.set(k, r);
+      });
+      if (Array.isArray(dbRecruits)) {
+        dbRecruits.forEach(r => {
+          const k = (r.id || r.email || '').toLowerCase().trim();
+          if (k) mergedMap.set(k, r);
+        });
+      }
+
+      const recruits: any[] = Array.from(mergedMap.values());
 
       const filtered = recruits.filter((c: any) => {
-        // Must be in offered stage or pending_placement status
+        // Must NOT be placed
         if (c.placement_status === 'placed') return false;
-        if (c.stage !== 'offered' && c.placement_status !== 'pending_placement') return false;
-        
+
         const cEmail = (c.email || '').trim().toLowerCase();
         const cId = c.id;
 
-        // If candidate already exists in profiles, they have already been placed
-        if (cEmail && profileEmails.has(cEmail)) return false;
-        if (cId && profileIds.has(cId)) return false;
+        // If candidate already exists as an active staff profile in profiles, they have already been placed
+        if (cEmail && activeProfileEmails.has(cEmail)) return false;
+        if (cId && activeProfileIds.has(cId)) return false;
 
         return true;
       });
@@ -681,6 +698,22 @@ const EmployeeManagement = () => {
       ? placement.role
       : (getJobPositionsByDepartment(defaultDept)[0] || 'Senior Auditor');
 
+    let derivedAccessRole: 'employee' | 'accountant' | 'department_head' | 'hr' | 'manager' | 'crm' = 'employee';
+    const sLower = (suggestedRole || '').toLowerCase();
+    const dLower = (defaultDept || '').toLowerCase();
+
+    if (sLower.includes('head') || sLower.includes('hod') || sLower.includes('director')) {
+      derivedAccessRole = 'department_head';
+    } else if (sLower.includes('manager') || dLower.includes('management')) {
+      derivedAccessRole = 'manager';
+    } else if (sLower.includes('accountant') || dLower.includes('bookkeeping') || dLower.includes('tax')) {
+      derivedAccessRole = 'accountant';
+    } else if (sLower.includes('hr') || dLower.includes('internal_support')) {
+      derivedAccessRole = 'hr';
+    } else if (sLower.includes('crm') || sLower.includes('client') || dLower.includes('client_success')) {
+      derivedAccessRole = 'crm';
+    }
+
     setPlacementData({
       role: suggestedRole,
       customRole: '',
@@ -689,9 +722,9 @@ const EmployeeManagement = () => {
       supervisor: defaultHOD,
       customSupervisor: '',
       startDate: new Date().toISOString().split('T')[0],
-      accessRole: 'employee',
-      secondaryRoles: ['employee'],
-      isHOD: false
+      accessRole: derivedAccessRole,
+      secondaryRoles: Array.from(new Set(['employee', derivedAccessRole])),
+      isHOD: derivedAccessRole === 'department_head'
     });
     setPlacementError(null);
   };
