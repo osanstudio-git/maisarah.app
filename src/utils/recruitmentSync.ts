@@ -146,10 +146,19 @@ export function isRecruitDeleted(id?: string, email?: string, name?: string): bo
  * Falls back to localStorage if the DB is unreachable.
  */
 export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
+  const localRecruits = getLocalRecruits();
+  const mergedMap = new Map<string, RecruitCandidate>();
+
+  // 1. Seed with local recruits first so unsynced data is never lost
+  localRecruits.forEach(r => {
+    const key = (r.id || r.email || '').toLowerCase().trim();
+    if (key) mergedMap.set(key, r);
+  });
+
   try {
     let rawRecruits: any[] | null = null;
 
-    // 1. Direct table read first (instant, reliable, no cold start)
+    // 2. Direct table read first (instant, reliable, no cold start)
     try {
       const { data, error } = await supabase
         .from('hr_recruits')
@@ -165,7 +174,7 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
       console.warn('Direct hr_recruits select notice:', e);
     }
 
-    // 2. Edge function fallback if direct table failed
+    // 3. Edge function fallback if direct table failed
     if (rawRecruits === null) {
       try {
         const edgeRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
@@ -179,39 +188,39 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
       }
     }
 
-    if (Array.isArray(rawRecruits)) {
+    if (Array.isArray(rawRecruits) && rawRecruits.length > 0) {
       // Unpack dossier metadata directly from Supabase
-      const cleanDbData: RecruitCandidate[] = rawRecruits
-        .map(item => {
-          const dossier = item.onboarding_tasks?.dossier || {};
-          return {
-            ...item,
-            civil_id: item.civil_id || dossier.civil_id || '',
-            passport_no: item.passport_no || dossier.passport_no || '',
-            residency_no: item.residency_no || dossier.residency_no || '',
-            nationality: item.nationality || dossier.nationality || 'Omani',
-            dob: item.dob || dossier.dob || '',
-            gender: item.gender || dossier.gender || 'Male',
-            marital_status: item.marital_status || dossier.marital_status || 'Single',
-            supervisor: item.supervisor || dossier.supervisor || '',
-            basic_salary: item.basic_salary !== undefined ? item.basic_salary : (dossier.basic_salary || 0),
-            accommodation_status: item.accommodation_status || dossier.accommodation_status || '',
-            company_phone: item.company_phone || dossier.company_phone || '',
-            allowances: item.allowances || dossier.allowances || { transport: 0, housing: 0, other: 0 },
-            education: item.education || dossier.education || [],
-            experience: item.experience || dossier.experience || [],
-            emergency_contact: item.emergency_contact || dossier.emergency_contact || { name: '', relation: 'Parent', phone: '' }
-          };
-        });
-
-      // Save database state directly to localStorage without dispatching recursive sync events
-      saveLocalRecruits(cleanDbData, false);
-      return cleanDbData;
+      rawRecruits.forEach(item => {
+        const dossier = item.onboarding_tasks?.dossier || {};
+        const cleanItem: RecruitCandidate = {
+          ...item,
+          civil_id: item.civil_id || dossier.civil_id || '',
+          passport_no: item.passport_no || dossier.passport_no || '',
+          residency_no: item.residency_no || dossier.residency_no || '',
+          nationality: item.nationality || dossier.nationality || 'Omani',
+          dob: item.dob || dossier.dob || '',
+          gender: item.gender || dossier.gender || 'Male',
+          marital_status: item.marital_status || dossier.marital_status || 'Single',
+          supervisor: item.supervisor || dossier.supervisor || '',
+          basic_salary: item.basic_salary !== undefined ? item.basic_salary : (dossier.basic_salary || 0),
+          accommodation_status: item.accommodation_status || dossier.accommodation_status || '',
+          company_phone: item.company_phone || dossier.company_phone || '',
+          allowances: item.allowances || dossier.allowances || { transport: 0, housing: 0, other: 0 },
+          education: item.education || dossier.education || [],
+          experience: item.experience || dossier.experience || [],
+          emergency_contact: item.emergency_contact || dossier.emergency_contact || { name: '', relation: 'Parent', phone: '' }
+        };
+        const key = (cleanItem.id || cleanItem.email || '').toLowerCase().trim();
+        if (key) mergedMap.set(key, cleanItem);
+      });
     }
   } catch (e) {
     console.warn('Supabase recruits fetch notice, using local storage:', e);
   }
-  return getLocalRecruits();
+
+  const finalRecruits = Array.from(mergedMap.values());
+  saveLocalRecruits(finalRecruits, false);
+  return finalRecruits;
 }
 
 function sanitizeRecruitForDb(candidate: any): any {
@@ -270,48 +279,66 @@ function sanitizeRecruitForDb(candidate: any): any {
 }
 
 /**
- * Save a recruit to the DB directly (fastest, zero cold start).
- * Edge function fallback is used if direct write fails.
- * Always updates localStorage immediately for instant UI response.
+ * Save a recruit to the DB.
+ * Saves to localStorage FIRST so the UI updates instantly without lag.
+ * Performs background sync to Supabase (onConflict email then id, with edge function fallback).
  */
 export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Promise<RecruitCandidate> {
-  // 1. Always save to localStorage first (instant, cross-page)
+  // 1. Save to localStorage FIRST — instant, never fails
   upsertLocalRecruit(candidate);
 
   const sanitized = sanitizeRecruitForDb(candidate);
 
-  // 2. Direct table upsert FIRST (Fastest, < 100ms)
-  try {
-    const { data, error } = await supabase
-      .from('hr_recruits')
-      .upsert(sanitized, { onConflict: 'id' })
-      .select()
-      .single();
+  // 2. Background DB Sync
+  const backgroundSync = async () => {
+    // 2a. Try direct table upsert onConflict: email
+    try {
+      const { data, error } = await supabase
+        .from('hr_recruits')
+        .upsert(sanitized, { onConflict: 'email' })
+        .select()
+        .maybeSingle();
 
-    if (!error && data) {
-      upsertLocalRecruit(data);
-      return data;
-    }
-    if (error) {
-      console.warn('Direct recruit DB upsert error, falling back to edge function:', error.message);
-    }
-  } catch (e) {
-    console.warn('Direct recruit DB upsert notice:', e);
-  }
+      if (!error && data) {
+        upsertLocalRecruit(data);
+        return;
+      }
+      if (error) {
+        console.warn('[recruitSync] Direct email upsert notice, trying id:', error.message);
+        const { data: dataId, error: errorId } = await supabase
+          .from('hr_recruits')
+          .upsert(sanitized, { onConflict: 'id' })
+          .select()
+          .maybeSingle();
 
-  // 3. Edge function fallback with 8-second timeout
-  try {
-    const edgeRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
-      action: 'upsert_recruit',
-      recruit: sanitized
-    }, 8000);
-    if (!edgeRes.error && edgeRes.data?.success && edgeRes.data?.data) {
-      upsertLocalRecruit(edgeRes.data.data);
-      return edgeRes.data.data;
+        if (!errorId && dataId) {
+          upsertLocalRecruit(dataId);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[recruitSync] Direct upsert exception:', e);
     }
-  } catch (edgeE) {
-    console.warn('Edge function upsert notice:', edgeE);
-  }
+
+    // 2b. Edge function fallback (handles RLS-restricted environments)
+    try {
+      const edgeRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
+        action: 'upsert_recruit',
+        recruit: sanitized
+      }, 8000);
+
+      if (!edgeRes.error && edgeRes.data?.success && edgeRes.data?.data) {
+        upsertLocalRecruit(edgeRes.data.data);
+      } else if (edgeRes.error) {
+        console.warn('[recruitSync] Edge function upsert failed:', edgeRes.error);
+      }
+    } catch (edgeE) {
+      console.warn('[recruitSync] Edge function exception:', edgeE);
+    }
+  };
+
+  // Run background sync safely
+  backgroundSync().catch(e => console.warn('[recruitSync] Background sync notice:', e));
 
   return candidate;
 }

@@ -928,8 +928,13 @@ export default function HREmployees() {
     setIsSubmitting(true);
     setFormError(null);
 
+    // Safety net: force-reset isSubmitting after 5s so button never stays stuck
+    const safetyTimer = setTimeout(() => {
+      setIsSubmitting(false);
+    }, 5000);
+
     try {
-      // 1. All new candidate registrations -> Saved to hr_recruits and queued for Manager Placement:
+      // 1. All new candidate registrations -> Saved to hr_recruits (non-blocking) and queued for Manager Placement:
       if (!isEditMode) {
         const recruitId = crypto.randomUUID();
         const cleanName = formData.name.trim();
@@ -1030,6 +1035,7 @@ export default function HREmployees() {
         });
 
         setIsSubmitting(false);
+        clearTimeout(safetyTimer);
         setShowModal(false);
         return;
       }
@@ -1379,6 +1385,7 @@ export default function HREmployees() {
           emailDispatched: true
         });
         setIsSubmitting(false);
+        clearTimeout(safetyTimer);
         setShowCredentialsModal(true);
         setShowModal(false);
       }
@@ -1386,6 +1393,7 @@ export default function HREmployees() {
       console.error('Employee registration error:', err);
       setFormError(err.message || (isAr ? 'فشل تسجيل الموظف. يرجى المحاولة مجدداً.' : 'Failed to register employee. Please try again.'));
     } finally {
+      clearTimeout(safetyTimer);
       setIsSubmitting(false);
     }
   };
