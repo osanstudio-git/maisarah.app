@@ -815,6 +815,29 @@ const EmployeeManagement = () => {
         }).catch(e => console.warn('manage-auth recruit update fallback error:', e));
       }
 
+      // 1b. Direct table upsert to hr_employees table so employee shows in roster immediately
+      try {
+        await supabase.from('hr_employees').upsert({
+          id: userId,
+          full_name: activePlacement.name,
+          email: cleanEmail,
+          phone: activePlacement.phone || '',
+          dept: targetDeptName,
+          role: finalRole,
+          status: 'active',
+          basic_salary: Number(activePlacement.basic_salary || 0),
+          joined_date: placementData.startDate || new Date().toISOString().split('T')[0],
+          immediate_supervisor: finalSupervisor,
+          employee_type: activePlacement.employment_type || 'Experienced',
+          civil_id: activePlacement.civil_id || '',
+          passport_no: activePlacement.passport_no || '',
+          residency_no: activePlacement.residency_no || '',
+          nationality: activePlacement.nationality || 'Omani'
+        }, { onConflict: 'email' });
+      } catch (hrErr) {
+        console.warn('Direct hr_employees upsert notice:', hrErr);
+      }
+
       // 2. Auth account creation & profile sync via manage-auth (creates auth.users record + profiles + hr_employees)
       const authRes = await supabase.functions.invoke('manage-auth', {
         body: {

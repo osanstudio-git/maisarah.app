@@ -384,11 +384,11 @@ export default function HREmployees() {
           });
         };
 
-        // Load pending/offered recruits from hr_recruits in Supabase
+        // Load pending/offered/placed recruits from hr_recruits in Supabase
         try {
           const dbRecruits = await syncRecruitsFromSupabase();
           (dbRecruits || []).forEach(r => {
-            if (r.placement_status !== 'placed' && (r.stage === 'offered' || r.placement_status === 'pending_placement') && r.email && !isDeleted(r.id, r.email, r.name)) {
+            if (r.email && !isDeleted(r.id, r.email, r.name)) {
               const alreadyInLive = liveEmployees.some(e => (r.email && e.email && e.email.toLowerCase() === r.email.toLowerCase()) || e.id === r.id);
               if (!alreadyInLive) {
                 liveEmployees.push({
@@ -410,7 +410,7 @@ export default function HREmployees() {
                   immediateSupervisor: r.supervisor || 'To Be Assigned by Executive Manager',
                   basicSalary: Number(r.basic_salary || 0),
                   type: (r.employment_type || 'Experienced') as 'Experienced' | 'Trainee' | 'Worker',
-                  status: 'pending_placement',
+                  status: r.placement_status === 'placed' ? 'active' : 'pending_placement',
                   accommodationStatus: r.accommodation_status || 'Lives with family',
                   accommodationDetails: '',
                   allowances: r.allowances || { transport: 0, housing: 0, other: 0 },
