@@ -65,4 +65,8 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react-is'],
   },
+  build: {
+    chunkSizeWarningLimit: 3000,
+    sourcemap: false,
+  }
 });
