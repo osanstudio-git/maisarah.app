@@ -343,6 +343,32 @@ const EmployeeManagement = () => {
   const [showCredentials, setShowCredentials] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState({ email: '', password: '' });
 
+  // Helper for normalizing cross-portal secondary roles across different DB representations
+  const normalizeSecondaryRoles = (rawRoles: any, primaryRole?: string): string[] => {
+    let roles: string[] = [];
+    if (Array.isArray(rawRoles)) {
+      roles = rawRoles.map(r => String(r || '').trim()).filter(Boolean);
+    } else if (typeof rawRoles === 'string' && rawRoles.trim()) {
+      try {
+        const parsed = JSON.parse(rawRoles);
+        if (Array.isArray(parsed)) roles = parsed.map(r => String(r || '').trim()).filter(Boolean);
+        else roles = rawRoles.split(',').map(s => s.trim().replace(/^['"\[\]{}]+|['"\[\]{}]+$/g, '')).filter(Boolean);
+      } catch {
+        roles = rawRoles.split(',').map(s => s.trim().replace(/^['"\[\]{}]+|['"\[\]{}]+$/g, '')).filter(Boolean);
+      }
+    }
+    if (primaryRole) {
+      const cleanPrimary = primaryRole.trim();
+      if (cleanPrimary && !roles.includes(cleanPrimary)) {
+        roles.unshift(cleanPrimary);
+      }
+    }
+    if (!roles.includes('employee')) {
+      roles.push('employee');
+    }
+    return Array.from(new Set(roles.filter(Boolean)));
+  };
+
   // ── Data Fetching ──────────────────────────────────────────────────────────
   const fetchEmployees = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -391,7 +417,11 @@ const EmployeeManagement = () => {
         let normalizedDept = getNormalizedDepartmentId(rawDept, p.role || hrEmp?.role, hrEmp?.role);
 
         const realPhone = hrEmp?.phone || p.phone || '';
-        const secRoles = Array.isArray(p.secondary_roles) ? p.secondary_roles : (Array.isArray(hrEmp?.secondary_roles) ? hrEmp.secondary_roles : []);
+        const effectivePrimaryRole = p.role || hrEmp?.accessRole || hrEmp?.role || 'employee';
+        const secRoles = normalizeSecondaryRoles(
+          p.secondary_roles || hrEmp?.secondary_roles,
+          effectivePrimaryRole
+        );
 
         const resolvedJobTitle = hrEmp?.role || (
           p.role === 'manager' ? 'Operations & Executive Manager' :
@@ -407,7 +437,7 @@ const EmployeeManagement = () => {
           name_ar: p.full_name || hrEmp?.full_name || 'غير معروف',
           email: p.email || hrEmp?.email || '',
           phone: realPhone,
-          role: p.role || 'employee', // access role
+          role: effectivePrimaryRole, // access role
           job_title: resolvedJobTitle,
           secondaryRoles: secRoles,
           status: hrEmp?.status || 'active',
@@ -465,7 +495,7 @@ const EmployeeManagement = () => {
             phone: h.phone || '',
             role: resolvedAccessRole,
             job_title: resolvedJobTitle,
-            secondaryRoles: Array.isArray(h.secondary_roles) ? h.secondary_roles : [],
+            secondaryRoles: normalizeSecondaryRoles(h.secondary_roles, resolvedAccessRole),
             status: h.status || 'active',
             tasksCompleted: 10,
             activeJobs: 3,
@@ -519,7 +549,7 @@ const EmployeeManagement = () => {
                 phone: p.phone || '',
                 role: resolvedAccessRole,
                 job_title: p.role || p.job_title || 'Staff Member',
-                secondaryRoles: Array.isArray(p.secondary_roles) ? p.secondary_roles : [resolvedAccessRole, 'employee'],
+                secondaryRoles: normalizeSecondaryRoles(p.secondary_roles, resolvedAccessRole),
                 status: 'active',
                 tasksCompleted: 12,
                 activeJobs: 2,
@@ -978,9 +1008,7 @@ const EmployeeManagement = () => {
   const openEditModal = (emp: Employee) => {
     setEditingEmployee(emp);
     const primaryRole = emp.role || 'employee';
-    const initialSec = Array.isArray(emp.secondaryRoles) && emp.secondaryRoles.length > 0
-      ? emp.secondaryRoles
-      : [primaryRole];
+    const secRoles = normalizeSecondaryRoles(emp.secondaryRoles, primaryRole);
 
     setFormData({
       fullName: emp.name_en || emp.name_ar,
@@ -990,7 +1018,7 @@ const EmployeeManagement = () => {
       role: primaryRole,
       jobTitle: emp.job_title || 'Auditor',
       department_id: emp.department_id || 'audit',
-      secondaryRoles: Array.from(new Set([primaryRole, ...initialSec]))
+      secondaryRoles: secRoles
     });
     setIsModalOpen(true);
     setShowCredentials(false);
@@ -1007,11 +1035,13 @@ const EmployeeManagement = () => {
       const deptConfig = getDepartmentById(formData.department_id);
       const targetDeptName = deptConfig?.name || formData.department_id;
       const targetJobTitle = formData.jobTitle || 'Staff Member';
-      const effectiveSecondary = Array.from(new Set([formData.role, ...(formData.secondaryRoles || [])]));
+      const effectiveSecondary = normalizeSecondaryRoles(formData.secondaryRoles, formData.role);
 
       if (editingEmployee) {
         // 1. Direct DB updates immediately (profiles, hr_employees, hr_recruits)
         const profileUpdate: any = {
+          id: editingEmployee.id,
+          email: cleanEmail,
           full_name: formData.fullName,
           role: formData.role,
           department_id: formData.department_id,
@@ -1024,18 +1054,22 @@ const EmployeeManagement = () => {
           email: cleanEmail,
           phone: formData.phone,
           dept: targetDeptName,
-          role: targetJobTitle
+          department_id: formData.department_id,
+          role: targetJobTitle,
+          secondary_roles: effectiveSecondary,
+          accessRole: formData.role
         };
 
         try {
           await Promise.allSettled([
-            supabase.from('profiles').update(profileUpdate).or(`id.eq.${editingEmployee.id},email.eq.${cleanEmail}`),
+            supabase.from('profiles').upsert(profileUpdate, { onConflict: 'id' }),
             supabase.from('hr_employees').upsert(hrEmployeeData, { onConflict: 'id' }),
             supabase.from('hr_recruits').update({ 
               dept: targetDeptName, 
               role: targetJobTitle, 
               name: formData.fullName,
-              placement_status: 'placed'
+              placement_status: 'placed',
+              secondary_roles: effectiveSecondary
             }).or(`id.eq.${editingEmployee.id},email.eq.${cleanEmail}`)
           ]);
         } catch (dbErr) {
@@ -1081,7 +1115,8 @@ const EmployeeManagement = () => {
                   name: formData.fullName,
                   phone: formData.phone,
                   dept: targetDeptName,
-                  role: targetJobTitle
+                  role: targetJobTitle,
+                  secondary_roles: effectiveSecondary
                 };
               }
               return e;
@@ -1100,7 +1135,8 @@ const EmployeeManagement = () => {
                   name: formData.fullName,
                   dept: targetDeptName,
                   role: targetJobTitle,
-                  placement_status: 'placed'
+                  placement_status: 'placed',
+                  secondary_roles: effectiveSecondary
                 };
               }
               return r;
@@ -1145,6 +1181,7 @@ const EmployeeManagement = () => {
 
         window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
         window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+        Promise.allSettled([fetchEmployees(true), fetchPlacements()]);
         return;
       }
 
@@ -1520,18 +1557,18 @@ const EmployeeManagement = () => {
                                     {isOnline && <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />}
                                   </div>
                                   <div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center flex-wrap gap-1.5">
                                       <button
                                         type="button"
                                         onClick={() => setViewingEmployee(emp)}
-                                        className="font-black text-gray-900 text-sm hover:text-brand-dark hover:underline focus:outline-none text-left cursor-pointer"
+                                        className="font-black text-gray-900 text-sm hover:text-brand-dark hover:underline focus:outline-none text-left cursor-pointer mr-1"
                                       >
                                         {isAr ? emp.name_ar : emp.name_en}
                                       </button>
                                       {isHOD && (
                                         <span className="inline-flex items-center gap-1 bg-red-50 text-[#A11212] border border-red-200 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
                                           <ShieldCheck size={10} />
-                                          {isAr ? 'رئيس قسم' : 'HOD Head'}
+                                          {isAr ? 'رئيس قسم' : 'HOD'}
                                         </span>
                                       )}
                                       {emp.role === 'accountant' && (
@@ -1544,6 +1581,30 @@ const EmployeeManagement = () => {
                                           {isAr ? 'موارد بشرية' : 'HR'}
                                         </span>
                                       )}
+                                      {emp.role === 'crm' && (
+                                        <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                          {isAr ? 'علاقات عملاء' : 'CRM'}
+                                        </span>
+                                      )}
+                                      {emp.role === 'manager' && (
+                                        <span className="bg-slate-900 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                          {isAr ? 'مدير تنفيذي' : 'Management'}
+                                        </span>
+                                      )}
+
+                                      {/* Cross-Portal Multi-Role Secondary Badges */}
+                                      {Array.isArray(emp.secondaryRoles) && emp.secondaryRoles
+                                        .filter(r => r && r !== emp.role && (emp.role === 'employee' ? r !== 'employee' : true))
+                                        .map(secRole => (
+                                          <span
+                                            key={secRole}
+                                            className="inline-flex items-center gap-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-250 text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider transition-colors"
+                                            title={isAr ? `صلاحية دخول إضافية: ${secRole}` : `Cross-Portal Access: ${secRole}`}
+                                          >
+                                            <span className="text-[#A11212] font-black">+</span>
+                                            {secRole === 'crm' ? 'CRM' : secRole === 'accountant' ? (isAr ? 'محاسبة' : 'Accountant') : secRole === 'department_head' ? 'HOD' : secRole === 'hr' ? 'HR' : secRole === 'employee' ? (isAr ? 'موظف' : 'Staff') : secRole}
+                                          </span>
+                                        ))}
                                     </div>
                                     <p className="text-[10px] font-bold text-gray-400">
                                       {emp.email} {emp.phone ? `· ${emp.phone}` : ''}
@@ -2710,8 +2771,27 @@ const EmployeeManagement = () => {
                         <span className="font-bold text-gray-900">{viewingEmployee.immediateSupervisor || 'N/A'}</span>
                       </div>
                       <div>
-                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'مستوى الصلاحية في النظام:' : 'System Access Role:'}</span>
+                        <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'مستوى الصلاحية الأساسي:' : 'Primary System Access:'}</span>
                         <span className="font-bold text-brand-dark capitalize">{viewingEmployee.role}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block font-bold mb-1">{isAr ? 'صلاحيات البوابات الإضافية (Cross-Portal):' : 'Cross-Portal Access Permissions:'}</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Array.isArray(viewingEmployee.secondaryRoles) && viewingEmployee.secondaryRoles.length > 0 ? (
+                            viewingEmployee.secondaryRoles.map(sec => (
+                              <span key={sec} className="bg-red-50 text-[#A11212] border border-red-200 text-[10px] font-black px-2 py-0.5 rounded-lg uppercase">
+                                {sec === 'accountant' ? (isAr ? '💼 محاسب' : '💼 Accountant') :
+                                  sec === 'crm' ? (isAr ? '🤝 علاقات العملاء' : '🤝 CRM') :
+                                  sec === 'department_head' ? (isAr ? '👑 رئيس قسم' : '👑 HOD') :
+                                  sec === 'hr' ? (isAr ? '📋 موارد بشرية' : '📋 HR') :
+                                  sec === 'manager' ? (isAr ? '🏛️ إدارة تنفيذية' : '🏛️ Management') :
+                                  (isAr ? '👤 موظف' : '👤 Staff')}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-gray-400 text-xs italic">{isAr ? 'الصلاحية القياسية فقط' : 'Standard Access Only'}</span>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <span className="text-gray-400 block font-bold mb-0.5">{isAr ? 'تاريخ التوظيف:' : 'Joined Date:'}</span>
