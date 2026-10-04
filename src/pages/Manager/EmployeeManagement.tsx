@@ -868,7 +868,7 @@ const EmployeeManagement = () => {
       }
 
       // 1b. Upsert into hr_employees so employee appears in roster immediately
-      await supabase.from('hr_employees').upsert({
+      const { error: hrErr } = await supabase.from('hr_employees').upsert({
         id: userId,
         full_name: activePlacement.name,
         email: cleanEmail,
@@ -886,7 +886,11 @@ const EmployeeManagement = () => {
         passport_no: activePlacement.passport_no || '',
         residency_no: activePlacement.residency_no || '',
         nationality: activePlacement.nationality || 'Omani'
-      }, { onConflict: 'email' }).catch((hrErr: any) => console.warn('hr_employees upsert notice:', hrErr));
+      }, { onConflict: 'email' });
+
+      if (hrErr) {
+        console.warn('hr_employees upsert notice:', hrErr.message || hrErr);
+      }
 
       // ═══════════════════════════════════════════════════════════════
       // LAYER 2 — ZERO-WAIT UI UPDATE (instant, ~0ms)
