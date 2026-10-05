@@ -172,13 +172,13 @@ const DepartmentHeadWorkspace = () => {
           supabase.from('hr_employees').select('dept, department_id').eq('email', user.email).maybeSingle()
         ]);
 
-        const deptValue = prof?.department_id || prof?.department || emp?.dept || emp?.department_id || user.user_metadata?.department_id;
+        const deptValue = prof?.department_id || prof?.department || emp?.dept || emp?.department_id || user.user_metadata?.department_id || (user.email?.includes('crm') ? 'client_success' : null);
         if (deptValue) {
           let dept = deptValue.trim().toLowerCase();
           if (dept.includes('tax') || dept.includes('vat')) dept = 'tax_vat';
           else if (dept.includes('book') || dept.includes('account') || dept.includes('ledger')) dept = 'bookkeeping';
           else if (dept.includes('advis') || dept.includes('consult')) dept = 'business_advisory';
-          else if (dept.includes('success') || dept.includes('client') || dept.includes('operat')) dept = 'client_success';
+          else if (dept.includes('success') || dept.includes('client') || dept.includes('operat') || dept.includes('crm') || dept.includes('sales')) dept = 'client_success';
           else if (dept.includes('audit')) dept = 'audit';
           setDeptContext(dept);
         }
@@ -321,7 +321,7 @@ const DepartmentHeadWorkspace = () => {
         if (val.includes('tax') || val.includes('vat')) return 'tax_vat';
         if (val.includes('book') || val.includes('account') || val.includes('ledger')) return 'bookkeeping';
         if (val.includes('advis') || val.includes('consult')) return 'business_advisory';
-        if (val.includes('success') || val.includes('client') || val.includes('operat')) return 'client_success';
+        if (val.includes('success') || val.includes('client') || val.includes('operat') || val.includes('crm') || val.includes('sales')) return 'client_success';
         if (val.includes('audit')) return 'audit';
         return val;
       };
@@ -335,7 +335,7 @@ const DepartmentHeadWorkspace = () => {
           id: h.id,
           full_name: h.full_name || 'Staff Member',
           role: h.role || 'employee',
-          department_id: normalizeDept(h.dept || h.department_id || 'audit'),
+          department_id: normalizeDept(h.dept || h.department_id),
           email: h.email,
           phone: h.phone
         });
@@ -344,13 +344,14 @@ const DepartmentHeadWorkspace = () => {
       (pData || []).forEach((p: any) => {
         const key = (p.email || p.id || '').toLowerCase();
         const existing = combinedMap.get(key);
+        const pDept = normalizeDept(p.department_id || p.department);
         if (existing) {
           combinedMap.set(key, {
             ...existing,
             id: p.id || existing.id,
             full_name: p.full_name || existing.full_name,
             role: p.role || existing.role,
-            department_id: normalizeDept(p.department_id || p.department || existing.department_id),
+            department_id: pDept || existing.department_id,
             email: p.email || existing.email,
             phone: p.phone || existing.phone
           });
@@ -359,7 +360,7 @@ const DepartmentHeadWorkspace = () => {
             id: p.id,
             full_name: p.full_name || 'Staff Member',
             role: p.role || 'employee',
-            department_id: normalizeDept(p.department_id || p.department || 'audit'),
+            department_id: pDept,
             email: p.email,
             phone: p.phone
           });
@@ -373,7 +374,7 @@ const DepartmentHeadWorkspace = () => {
           const key = (lp.email || lp.id || '').toLowerCase();
           if (key) {
             const existing = combinedMap.get(key);
-            const dept = normalizeDept(lp.dept || lp.department_id || lp.department || 'audit');
+            const dept = normalizeDept(lp.dept || lp.department_id || lp.department);
             if (existing) {
               combinedMap.set(key, {
                 ...existing,
@@ -406,7 +407,7 @@ const DepartmentHeadWorkspace = () => {
           if (r.email && (r.stage === 'offered' || r.placement_status === 'placed' || r.placement_status === 'pending_placement' || r.dept)) {
             const key = (r.email || r.id || '').toLowerCase();
             const existing = combinedMap.get(key);
-            const dept = normalizeDept(r.dept || 'audit');
+            const dept = normalizeDept(r.dept);
             if (existing) {
               combinedMap.set(key, {
                 ...existing,
@@ -432,10 +433,11 @@ const DepartmentHeadWorkspace = () => {
 
       const allProfiles: EmployeeProfile[] = Array.from(combinedMap.values());
 
-      // Filter employees by department
+      // Filter employees strictly by department
       const deptEmployees = allProfiles.filter(p => {
         const d = normalizeDept(p.department_id);
-        return d === currentDeptId || d.includes(currentDeptId) || currentDeptId.includes(d);
+        const hasSecondary = Array.isArray((p as any).secondary_roles) && (p as any).secondary_roles.some((r: string) => normalizeDept(r) === currentDeptId);
+        return d === currentDeptId || hasSecondary;
       });
 
       // Map services for this department
@@ -445,11 +447,11 @@ const DepartmentHeadWorkspace = () => {
         const empDept = normalizeDept(emp?.department_id);
         const matchesEmp = emp && (empDept === currentDeptId || empDept.includes(currentDeptId) || currentDeptId.includes(empDept));
         const matchesTitle = deptConfig?.services.some(srv => s.title.toLowerCase().includes(srv.toLowerCase()));
-        return matchesEmp || matchesTitle || allServices.length <= 5;
+        return matchesEmp || matchesTitle;
       });
 
-      // Calculate real workload & stats per employee
-      const calculatedPersonnel: EmployeeProfile[] = (deptEmployees.length > 0 ? deptEmployees : allProfiles.slice(0, 5)).map(emp => {
+      // Calculate real workload & stats per employee strictly within this department
+      const calculatedPersonnel: EmployeeProfile[] = deptEmployees.map(emp => {
         const empTasks = deptServices.filter(s => s.employee_id === emp.id);
         const activeTasks = empTasks.filter(s => s.status === 'ongoing' || s.status === 'under_review').length;
         const tasksCompleted = empTasks.filter(s => s.status === 'completed').length;
@@ -468,7 +470,7 @@ const DepartmentHeadWorkspace = () => {
       });
 
       setPersonnel(calculatedPersonnel);
-      setServices(deptServices.length > 0 ? deptServices : allServices);
+      setServices(deptServices);
       if (cData) setClients(cData);
       if (lData) setHodLeaveRequests(lData);
 
@@ -1192,65 +1194,77 @@ const DepartmentHeadWorkspace = () => {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {personnel.map(emp => {
-            const isOverloaded = (emp.load || 50) > 80;
-            return (
-              <div key={emp.id} className="border border-gray-100 rounded-2xl p-5 hover:border-gray-200 transition-all bg-gray-50/40 flex flex-col justify-between">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-2xl bg-brand-dark/10 text-brand-dark font-black flex items-center justify-center text-sm">
-                        {emp.full_name ? emp.full_name.charAt(0).toUpperCase() : '?'}
+        {personnel.length === 0 ? (
+          <div className="text-center py-12 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+            <Users className="mx-auto text-gray-300 mb-3" size={36} />
+            <h3 className="text-sm font-bold text-gray-700">
+              {isAr ? 'لا يوجد موظفون مخصصون لهذا القسم حالياً' : 'No staff members assigned to this department yet'}
+            </h3>
+            <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+              {isAr ? 'يمكن للمدير التنفيذي تعيين موظفين لهذا القسم من خلال بوابة إدارة الموظفين.' : 'The Executive Manager can assign staff members to this department from the HR / Employee Management portal.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {personnel.map(emp => {
+              const isOverloaded = (emp.load || 50) > 80;
+              return (
+                <div key={emp.id} className="border border-gray-100 rounded-2xl p-5 hover:border-gray-200 transition-all bg-gray-50/40 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-2xl bg-brand-dark/10 text-brand-dark font-black flex items-center justify-center text-sm">
+                          {emp.full_name ? emp.full_name.charAt(0).toUpperCase() : '?'}
+                        </div>
+                        <div>
+                          <h4 className="font-black text-sm text-gray-900">{emp.full_name}</h4>
+                          <p className="text-[10px] text-gray-400 font-bold capitalize">{emp.role}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-black text-sm text-gray-900">{emp.full_name}</h4>
-                        <p className="text-[10px] text-gray-400 font-bold capitalize">{emp.role}</p>
+                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${
+                        isOverloaded 
+                          ? 'bg-red-50 text-red-700 border-red-150' 
+                          : 'bg-green-50 text-green-700 border-green-150'
+                      }`}>
+                        {isOverloaded ? 'High Load' : 'Optimal'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 pt-2">
+                      <div className="flex justify-between text-[10px] font-bold text-gray-500">
+                        <span>{isAr ? 'عبء العمل' : 'Allocation Load'}</span>
+                        <span className={isOverloaded ? 'text-red-600 font-black' : 'text-gray-700 font-black'}>{emp.load}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all duration-500 ${isOverloaded ? 'bg-red-500' : 'bg-green-500'}`} 
+                          style={{ width: `${emp.load}%` }}
+                        />
                       </div>
                     </div>
-                    <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${
-                      isOverloaded 
-                        ? 'bg-red-50 text-red-700 border-red-150' 
-                        : 'bg-green-50 text-green-700 border-green-150'
-                    }`}>
-                      {isOverloaded ? 'High Load' : 'Optimal'}
-                    </span>
                   </div>
 
-                  <div className="space-y-1.5 pt-2">
-                    <div className="flex justify-between text-[10px] font-bold text-gray-500">
-                      <span>{isAr ? 'عبء العمل' : 'Allocation Load'}</span>
-                      <span className={isOverloaded ? 'text-red-600 font-black' : 'text-gray-700 font-black'}>{emp.load}%</span>
+                  <div className="grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 mt-4 text-center">
+                    <div className="bg-white p-2 rounded-xl border border-gray-100">
+                      <span className="text-[9px] text-gray-400 font-bold block">{isAr ? 'نشط' : 'Active'}</span>
+                      <span className="text-xs font-black text-gray-900">{emp.activeTasks || 0}</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all duration-500 ${isOverloaded ? 'bg-red-500' : 'bg-green-500'}`} 
-                        style={{ width: `${emp.load}%` }}
-                      />
+                    <div className="bg-white p-2 rounded-xl border border-gray-100">
+                      <span className="text-[9px] text-gray-400 font-bold block">{isAr ? 'منجز' : 'Done'}</span>
+                      <span className="text-xs font-black text-green-600">{emp.tasksCompleted || 0}</span>
+                    </div>
+                    <div className="bg-white p-2 rounded-xl border border-gray-100">
+                      <span className="text-[9px] text-gray-400 font-bold block">{isAr ? 'متأخر' : 'Delayed'}</span>
+                      <span className={`text-xs font-black ${emp.delayed && emp.delayed > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                        {emp.delayed || 0}
+                      </span>
                     </div>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 mt-4 text-center">
-                  <div className="bg-white p-2 rounded-xl border border-gray-100">
-                    <span className="text-[9px] text-gray-400 font-bold block">{isAr ? 'نشط' : 'Active'}</span>
-                    <span className="text-xs font-black text-gray-900">{emp.activeTasks || 0}</span>
-                  </div>
-                  <div className="bg-white p-2 rounded-xl border border-gray-100">
-                    <span className="text-[9px] text-gray-400 font-bold block">{isAr ? 'منجز' : 'Done'}</span>
-                    <span className="text-xs font-black text-green-600">{emp.tasksCompleted || 0}</span>
-                  </div>
-                  <div className="bg-white p-2 rounded-xl border border-gray-100">
-                    <span className="text-[9px] text-gray-400 font-bold block">{isAr ? 'متأخر' : 'Delayed'}</span>
-                    <span className={`text-xs font-black ${emp.delayed && emp.delayed > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                      {emp.delayed || 0}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* HOD Team Leave Approvals Section */}
         <div className="border-t border-gray-100 pt-6 space-y-4">
