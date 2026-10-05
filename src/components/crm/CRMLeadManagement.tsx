@@ -93,7 +93,7 @@ const SOURCES = [
 const COLUMNS: { id: LeadStatus; labelEn: string; labelAr: string; color: string; border: string; bg: string }[] = [
   { id: 'new', labelEn: 'New Leads', labelAr: 'فرص جديدة', color: 'text-blue-700', border: 'border-blue-200', bg: 'bg-blue-50/60' },
   { id: 'contacted', labelEn: 'Contacted', labelAr: 'تم التواصل', color: 'text-amber-700', border: 'border-amber-200', bg: 'bg-amber-50/60' },
-  { id: 'quoted', labelEn: 'Quoted', labelAr: 'تم تقديم عرض', color: 'text-purple-700', border: 'border-purple-200', bg: 'bg-purple-50/60' },
+  { id: 'quoted', labelEn: 'Quoted', labelAr: 'تم تقديم عرض', color: 'text-[#A11212]', border: 'border-red-200', bg: 'bg-red-50/60' },
   { id: 'accepted', labelEn: 'Accepted', labelAr: 'تم القبول', color: 'text-emerald-700', border: 'border-emerald-200', bg: 'bg-emerald-50/60' },
   { id: 'rejected', labelEn: 'Rejected / Lost', labelAr: 'مرفوضة / ملغاة', color: 'text-red-700', border: 'border-red-200', bg: 'bg-red-50/60' }
 ];
@@ -801,12 +801,12 @@ export default function CRMLeadManagement() {
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs">
-            <p className="text-[10px] font-black uppercase tracking-widest text-purple-600">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#A11212]">
               {isAr ? 'عروض الأسعار والتفاوض' : 'Quoted & Negotiation'}
             </p>
             <div className="flex items-baseline justify-between mt-1">
-              <p className="text-2xl font-black text-purple-800">{stats.activePipeline}</p>
-              <span className="text-[11px] font-bold text-purple-600">{isAr ? 'عروض جاهزة' : 'Proposals Active'}</span>
+              <p className="text-2xl font-black text-[#A11212]">{stats.activePipeline}</p>
+              <span className="text-[11px] font-bold text-[#A11212]">{isAr ? 'عروض جاهزة' : 'Proposals Active'}</span>
             </div>
           </div>
 
@@ -912,7 +912,7 @@ export default function CRMLeadManagement() {
                     <span className={`w-2.5 h-2.5 rounded-full ${
                       col.id === 'new' ? 'bg-blue-500' :
                       col.id === 'contacted' ? 'bg-amber-500' :
-                      col.id === 'quoted' ? 'bg-purple-500' :
+                      col.id === 'quoted' ? 'bg-[#A11212]' :
                       col.id === 'accepted' ? 'bg-emerald-500' : 'bg-red-500'
                     }`}></span>
                     <h3 className={`font-black text-xs uppercase tracking-wider ${col.color}`}>
@@ -1349,8 +1349,8 @@ export default function CRMLeadManagement() {
                 />
               </div>
 
-              <div className="bg-purple-50/40 p-4 rounded-2xl border border-purple-100 space-y-3">
-                <h4 className="text-[11px] font-black uppercase text-purple-900 flex items-center gap-1.5">
+              <div className="bg-red-50/40 p-4 rounded-2xl border border-red-100 space-y-3">
+                <h4 className="text-[11px] font-black uppercase text-[#A11212] flex items-center gap-1.5">
                   <DollarSign size={14} />
                   <span>{isAr ? 'البيانات المالية وضريبة القيمة المضافة (5%)' : 'Financial Breakdown & 5% Oman VAT'}</span>
                 </h4>
@@ -1490,10 +1490,10 @@ export default function CRMLeadManagement() {
                 <button
                   type="submit"
                   disabled={isSavingQuote}
-                  className={`flex-1 text-white py-3 rounded-xl font-black text-xs uppercase transition-all shadow-md disabled:opacity-50 ${
+                  className={`flex-1 text-white py-3 rounded-xl font-black text-xs uppercase transition-all shadow-md disabled:opacity-50 cursor-pointer ${
                     quoteForm.status === 'accepted'
                       ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
-                      : 'bg-purple-700 hover:bg-purple-800 shadow-purple-700/20'
+                      : 'bg-[#A11212] hover:bg-[#800e0e] shadow-[#A11212]/20'
                   }`}
                 >
                   {isSavingQuote 

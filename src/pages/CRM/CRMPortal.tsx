@@ -1787,7 +1787,7 @@ export default function CRMPortal() {
           {/* Header Banner & Quick Action */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-purple-100 text-purple-700 rounded-2xl">
+              <div className="p-3 bg-red-50 text-[#A11212] rounded-2xl border border-red-100">
                 <FileText size={24} />
               </div>
               <div>
@@ -1805,7 +1805,7 @@ export default function CRMPortal() {
             <button
               type="button"
               onClick={() => openQuotationModalForLead()}
-              className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-black uppercase tracking-wider px-5 py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-purple-700/20 active:scale-95 transition-all"
+              className="bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider px-5 py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-[#A11212]/20 active:scale-95 transition-all cursor-pointer"
             >
               <DollarSign size={16} />
               <span>{isAr ? '+ إنشاء عرض سعر تفاعلي' : '+ Build Interactive Quotation'}</span>
@@ -1819,7 +1819,7 @@ export default function CRMPortal() {
                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'إجمالي عروض الأسعار' : 'Total Quotations'}</p>
                 <p className="text-xl font-black text-gray-900 mt-1">{quotations.length}</p>
               </div>
-              <div className="p-3 bg-purple-50 text-purple-600 rounded-xl"><FileText size={20} /></div>
+              <div className="p-3 bg-red-50 text-[#A11212] rounded-xl"><FileText size={20} /></div>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex justify-between items-center">
@@ -1845,11 +1845,11 @@ export default function CRMPortal() {
             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex justify-between items-center">
               <div>
                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'إجمالي قيمة العروض' : 'Total Pipeline Value'}</p>
-                <p className="text-xl font-black text-purple-700 mt-1">
+                <p className="text-xl font-black text-[#A11212] mt-1">
                   OMR {quotations.reduce((sum, q) => sum + (q.budget || 0), 0).toLocaleString()}
                 </p>
               </div>
-              <div className="p-3 bg-purple-50 text-purple-700 rounded-xl"><DollarSign size={20} /></div>
+              <div className="p-3 bg-red-50 text-[#A11212] rounded-xl"><DollarSign size={20} /></div>
             </div>
           </div>
 
@@ -1861,8 +1861,8 @@ export default function CRMPortal() {
                   key={st}
                   type="button"
                   onClick={() => setQuotationStatusFilter(st)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${quotationStatusFilter === st
-                    ? 'bg-purple-700 text-white shadow-xs'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${quotationStatusFilter === st
+                    ? 'bg-[#A11212] text-white shadow-xs'
                     : 'text-gray-600 hover:text-gray-900'
                     }`}
                 >
@@ -1877,7 +1877,7 @@ export default function CRMPortal() {
                 placeholder={isAr ? 'بحث برقم العرض، اسم العميل...' : 'Search by quote # or client name...'}
                 value={quotationSearchQuery}
                 onChange={e => setQuotationSearchQuery(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-bold outline-none focus:border-purple-600"
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
               />
             </div>
           </div>
@@ -1896,7 +1896,7 @@ export default function CRMPortal() {
                   <div className="space-y-2 max-w-xl">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="text-base font-black text-gray-900">{q.clientName}</h4>
-                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-lg font-black">{q.quoteNumber || q.id}</span>
+                      <span className="text-xs bg-red-50 text-[#A11212] border border-red-100 px-2 py-0.5 rounded-lg font-black">{q.quoteNumber || q.id}</span>
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-lg font-black uppercase">{q.type}</span>
                       <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase border ${q.status === 'approved' || q.status === 'invoiced'
                         ? 'bg-green-50 text-green-700 border-green-200'
@@ -1917,13 +1917,13 @@ export default function CRMPortal() {
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-end mr-2">
                       <p className="text-[9px] font-black uppercase text-gray-400">Total Budget</p>
-                      <p className="text-lg font-black text-purple-700">OMR {q.budget.toLocaleString()}</p>
+                      <p className="text-lg font-black text-[#A11212]">OMR {q.budget.toLocaleString()}</p>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => openEditQuotationModal(q)}
-                      className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-black uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
+                      className="bg-red-50 hover:bg-red-100 text-[#A11212] border border-red-200 text-xs font-black uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <Edit size={14} /> {isAr ? 'فتح الاستوديو والتعديل' : 'Open Studio & Edit'}
                     </button>
@@ -3084,7 +3084,7 @@ export default function CRMPortal() {
             {/* Studio Header Bar */}
             <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex flex-wrap justify-between items-center gap-4 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-purple-600/20 border border-purple-500/30 text-purple-400 rounded-xl">
+                <div className="p-2.5 bg-red-600/20 border border-red-500/30 text-red-400 rounded-xl">
                   <DollarSign size={22} />
                 </div>
                 <div>
@@ -3093,7 +3093,7 @@ export default function CRMPortal() {
                       {isAr ? 'استوديو عروض الأسعار التفاعلي' : 'Interactive Quotation Builder'}
                     </h3>
                     {quoteForm.leadId && !editingQuoteId && (
-                      <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                      <span className="text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-2.5 py-0.5 rounded-full font-bold">
                         Pre-filled from Lead #{quoteForm.leadId}
                       </span>
                     )}
@@ -3109,8 +3109,8 @@ export default function CRMPortal() {
                 <button
                   type="button"
                   onClick={() => setQuotePresentationMode('detailed')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${quotePresentationMode === 'detailed'
-                    ? 'bg-purple-600 text-white shadow-sm'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${quotePresentationMode === 'detailed'
+                    ? 'bg-[#A11212] text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                     }`}
                 >
@@ -3119,8 +3119,8 @@ export default function CRMPortal() {
                 <button
                   type="button"
                   onClick={() => setQuotePresentationMode('simple')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${quotePresentationMode === 'simple'
-                    ? 'bg-purple-600 text-white shadow-sm'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${quotePresentationMode === 'simple'
+                    ? 'bg-[#A11212] text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                     }`}
                 >
@@ -3133,7 +3133,7 @@ export default function CRMPortal() {
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-black uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5"
+                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-black uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <Printer size={15} /> Print / PDF
                 </button>
@@ -3142,7 +3142,7 @@ export default function CRMPortal() {
                   type="button"
                   onClick={() => handleSaveQuotationSubmit()}
                   disabled={isSubmittingQuotation}
-                  className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-black uppercase tracking-wider px-4 py-2 rounded-xl transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-md shadow-purple-600/30"
+                  className="bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider px-4 py-2 rounded-xl transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-md shadow-[#A11212]/30 cursor-pointer"
                 >
                   {isSubmittingQuotation ? (
                     <Loader2 size={15} className="animate-spin" />
@@ -3154,7 +3154,7 @@ export default function CRMPortal() {
 
                 <button
                   onClick={() => setShowQuotationModal(false)}
-                  className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors"
+                  className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
                 >
                   <X size={20} />
                 </button>
@@ -3169,7 +3169,7 @@ export default function CRMPortal() {
 
                 {/* 1. Recipient Selection */}
                 <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5">
                     <Users size={15} /> Select Recipient & Client Info
                   </h4>
 
@@ -3206,7 +3206,7 @@ export default function CRMPortal() {
                             }));
                           }
                         }}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
                       >
                         <option value="">-- Choose Client or Lead --</option>
                         <optgroup label="Leads Pipeline">
@@ -3229,7 +3229,7 @@ export default function CRMPortal() {
                         required
                         value={quoteForm.clientName}
                         onChange={e => setQuoteForm(p => ({ ...p, clientName: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
                       />
                     </div>
 
@@ -3238,7 +3238,7 @@ export default function CRMPortal() {
                       <select
                         value={quoteForm.clientType}
                         onChange={e => setQuoteForm(p => ({ ...p, clientType: e.target.value as any }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
                       >
                         <option value="B2B">B2B (Corporate)</option>
                         <option value="B2C">B2C (Individual)</option>
@@ -3251,7 +3251,7 @@ export default function CRMPortal() {
                         type="email"
                         value={quoteForm.email}
                         onChange={e => setQuoteForm(p => ({ ...p, email: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-red-500"
                       />
                     </div>
 
@@ -3261,7 +3261,7 @@ export default function CRMPortal() {
                         type="text"
                         value={quoteForm.phone}
                         onChange={e => setQuoteForm(p => ({ ...p, phone: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-red-500"
                       />
                     </div>
 
@@ -3271,7 +3271,7 @@ export default function CRMPortal() {
                         type="text"
                         value={quoteForm.preparedBy}
                         onChange={e => setQuoteForm(p => ({ ...p, preparedBy: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
                         placeholder="e.g. Maisarah Corporate Team"
                       />
                     </div>
@@ -3282,7 +3282,7 @@ export default function CRMPortal() {
                         type="text"
                         value={quoteForm.activity}
                         onChange={e => setQuoteForm(p => ({ ...p, activity: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
                         placeholder="e.g. Corporate Business Advisory"
                       />
                     </div>
@@ -3291,7 +3291,7 @@ export default function CRMPortal() {
 
                 {/* 2. Document Settings & Toggles */}
                 <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5">
                     <FileCheck size={15} /> Document Settings & Toggles
                   </h4>
 
@@ -3301,7 +3301,7 @@ export default function CRMPortal() {
                         type="checkbox"
                         checked={quoteShowQty}
                         onChange={e => setQuoteShowQty(e.target.checked)}
-                        className="accent-purple-500 rounded w-4 h-4"
+                        className="accent-[#A11212] rounded w-4 h-4"
                       />
                       <div>
                         <p className="font-bold text-slate-200">Show Quantity</p>
@@ -3314,7 +3314,7 @@ export default function CRMPortal() {
                         type="checkbox"
                         checked={quoteKycPhotoProof}
                         onChange={e => setQuoteKycPhotoProof(e.target.checked)}
-                        className="accent-purple-500 rounded w-4 h-4"
+                        className="accent-[#A11212] rounded w-4 h-4"
                       />
                       <div>
                         <p className="font-bold text-slate-200">KYC Photo Proof</p>
@@ -3327,7 +3327,7 @@ export default function CRMPortal() {
                 {/* 3. Service Fee Line Items */}
                 <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
                   <div className="flex justify-between items-center">
-                    <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5">
                       <DollarSign size={15} /> Service Fee Items
                     </h4>
                     <button
@@ -3338,7 +3338,7 @@ export default function CRMPortal() {
                           { id: `item_${Date.now()}`, description: 'Additional Consultancy Line Item', qty: 1, rate: 100 }
                         ]);
                       }}
-                      className="bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-lg flex items-center gap-1"
+                      className="bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer"
                     >
                       <Plus size={12} /> Add Line Item
                     </button>
@@ -3355,7 +3355,7 @@ export default function CRMPortal() {
                             setQuoteLineItems(prev => prev.map(i => i.id === item.id ? { ...i, description: val } : i));
                           }}
                           placeholder="Line item title..."
-                          className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-purple-500"
+                          className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-red-500"
                         />
 
                         {quoteShowQty && (
@@ -3380,7 +3380,7 @@ export default function CRMPortal() {
                               const val = parseFloat(e.target.value) || 0;
                               setQuoteLineItems(prev => prev.map(i => i.id === item.id ? { ...i, rate: val } : i));
                             }}
-                            className="w-24 bg-slate-950 border border-slate-700 text-purple-300 font-bold rounded-lg px-2 py-1.5 text-xs text-end outline-none focus:border-purple-500"
+                            className="w-24 bg-slate-950 border border-slate-700 text-red-300 font-bold rounded-lg px-2 py-1.5 text-xs text-end outline-none focus:border-red-500"
                           />
                           <span className="text-[10px] text-slate-400 font-bold">OMR</span>
                         </div>
@@ -3389,7 +3389,7 @@ export default function CRMPortal() {
                           <button
                             type="button"
                             onClick={() => setQuoteLineItems(prev => prev.filter(i => i.id !== item.id))}
-                            className="p-1 text-red-400 hover:text-red-300 hover:bg-slate-800 rounded-lg"
+                            className="p-1 text-red-400 hover:text-red-300 hover:bg-slate-800 rounded-lg cursor-pointer"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -3416,7 +3416,7 @@ export default function CRMPortal() {
                           type="checkbox"
                           checked={quoteForm.includeVat}
                           onChange={e => setQuoteForm(p => ({ ...p, includeVat: e.target.checked }))}
-                          className="rounded accent-purple-500 w-4 h-4"
+                          className="rounded accent-[#A11212] w-4 h-4"
                         />
                         <span>Add 5% Oman VAT</span>
                       </label>
@@ -3426,7 +3426,7 @@ export default function CRMPortal() {
 
                 {/* 4. Documents Required Checklist */}
                 <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5">
                     <FileText size={15} /> Documents Required Checklist
                   </h4>
 
@@ -3442,14 +3442,14 @@ export default function CRMPortal() {
                                 setQuoteDocsRequired(prev => prev.filter(d => d !== doc));
                               }
                             }}
-                            className="accent-purple-500 rounded"
+                            className="accent-[#A11212] rounded"
                           />
                           <span>{doc}</span>
                         </label>
                         <button
                           type="button"
                           onClick={() => setQuoteDocsRequired(prev => prev.filter(d => d !== doc))}
-                          className="text-slate-500 hover:text-red-400 p-1"
+                          className="text-slate-500 hover:text-red-400 p-1 cursor-pointer"
                         >
                           <X size={12} />
                         </button>
@@ -3463,7 +3463,7 @@ export default function CRMPortal() {
                       placeholder="Add custom required document..."
                       value={customDocInput}
                       onChange={e => setCustomDocInput(e.target.value)}
-                      className="flex-1 bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none"
+                      className="flex-1 bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:border-red-500"
                     />
                     <button
                       type="button"
@@ -3472,7 +3472,7 @@ export default function CRMPortal() {
                         setQuoteDocsRequired(prev => [...prev, customDocInput.trim().toUpperCase()]);
                         setCustomDocInput('');
                       }}
-                      className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-black uppercase px-3 py-1.5 rounded-xl"
+                      className="bg-[#A11212] hover:bg-red-700 text-white text-xs font-black uppercase px-3 py-1.5 rounded-xl cursor-pointer"
                     >
                       + Add
                     </button>
@@ -3481,7 +3481,7 @@ export default function CRMPortal() {
 
                 {/* 5. Processing Timeline Checklist */}
                 <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5">
                     <Clock size={15} /> Processing Timeline Checklist
                   </h4>
 
@@ -3496,11 +3496,11 @@ export default function CRMPortal() {
                               const checked = e.target.checked;
                               setQuoteTimelineSteps(prev => prev.map(t => t.id === ts.id ? { ...t, selected: checked } : t));
                             }}
-                            className="accent-purple-500 rounded"
+                            className="accent-[#A11212] rounded"
                           />
                           <span>{ts.step}</span>
                         </label>
-                        <span className="text-[10px] text-purple-400 font-bold bg-purple-950 px-2 py-0.5 rounded border border-purple-800">
+                        <span className="text-[10px] text-red-300 font-bold bg-red-950/60 px-2 py-0.5 rounded border border-red-800/60">
                           {ts.duration}
                         </span>
                       </div>
@@ -3513,7 +3513,7 @@ export default function CRMPortal() {
                       placeholder="Step Name..."
                       value={customTimelineStepName}
                       onChange={e => setCustomTimelineStepName(e.target.value)}
-                      className="col-span-2 bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none"
+                      className="col-span-2 bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:border-red-500"
                     />
                     <button
                       type="button"
@@ -3525,7 +3525,7 @@ export default function CRMPortal() {
                         ]);
                         setCustomTimelineStepName('');
                       }}
-                      className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-black uppercase px-2 py-1.5 rounded-xl"
+                      className="bg-[#A11212] hover:bg-red-700 text-white text-xs font-black uppercase px-3 py-1.5 rounded-xl cursor-pointer"
                     >
                       + Add
                     </button>
@@ -3534,7 +3534,7 @@ export default function CRMPortal() {
 
                 {/* 6. Payment Schedule Terms */}
                 <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5">
                     <ShieldCheck size={15} /> Payment Schedule Terms
                   </h4>
 
@@ -3566,7 +3566,7 @@ export default function CRMPortal() {
                           setQuotePaymentSchedule(p => ({ ...p, preset: 'custom' }));
                         }
                       }}
-                      className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-purple-500"
+                      className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
                     >
                       <option value="50_50">50% Advance / 50% Balance</option>
                       <option value="full_advance">100% Full Advance Payment</option>
@@ -3582,7 +3582,7 @@ export default function CRMPortal() {
                         type="text"
                         value={quotePaymentSchedule.advanceTerms}
                         onChange={e => setQuotePaymentSchedule(p => ({ ...p, preset: 'custom', advanceTerms: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:border-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:border-red-500"
                       />
                     </div>
                     <div>
@@ -3591,7 +3591,7 @@ export default function CRMPortal() {
                         type="text"
                         value={quotePaymentSchedule.balanceTerms}
                         onChange={e => setQuotePaymentSchedule(p => ({ ...p, preset: 'custom', balanceTerms: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:border-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:border-red-500"
                       />
                     </div>
                   </div>
