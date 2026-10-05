@@ -47,7 +47,11 @@ import {
   Filter,
   Bell,
   BriefcaseIcon,
-  Loader2
+  Loader2,
+  LayoutGrid,
+  List,
+  Mail,
+  Phone
 } from 'lucide-react';
 import { getDepartmentById, getAllDepartments } from '../../config/departments';
 import { getLocalRecruits } from '../../utils/recruitmentSync';
@@ -203,6 +207,7 @@ const DepartmentHeadWorkspace = () => {
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [teamViewMode, setTeamViewMode] = useState<'grid' | 'list'>('grid');
 
   // Task Edit Modal State
   const [editModalService, setEditModalService] = useState<ServiceDeliverable | null>(null);
@@ -1179,7 +1184,7 @@ const DepartmentHeadWorkspace = () => {
   const renderTeamView = () => {
     return (
       <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-6">
-        <div className="flex justify-between items-center border-b border-gray-50 pb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-50 pb-4">
           <div>
             <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
               <Users className="text-brand-dark" size={20} />
@@ -1189,9 +1194,42 @@ const DepartmentHeadWorkspace = () => {
               {isAr ? 'تحليل معدل توزيع المهام والإنتاجية لكل موظف بالقسم' : 'Real-time staff allocation, active deliverables, and capacity metrics'}
             </p>
           </div>
-          <span className="px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-100 text-xs font-black text-brand-dark uppercase tracking-wider">
-            {personnel.length} {isAr ? 'موظفين' : 'Staff Members'}
-          </span>
+
+          <div className="flex items-center gap-3">
+            {/* View Mode Switcher */}
+            <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200/60">
+              <button
+                type="button"
+                onClick={() => setTeamViewMode('grid')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  teamViewMode === 'grid'
+                    ? 'bg-white text-brand-dark shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+                title={isAr ? 'عرض شبكي' : 'Grid View'}
+              >
+                <LayoutGrid size={14} />
+                <span className="hidden sm:inline">{isAr ? 'شبكة' : 'Grid'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTeamViewMode('list')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  teamViewMode === 'list'
+                    ? 'bg-white text-brand-dark shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+                title={isAr ? 'عرض جدول / قائمة' : 'List View'}
+              >
+                <List size={14} />
+                <span className="hidden sm:inline">{isAr ? 'قائمة' : 'List'}</span>
+              </button>
+            </div>
+
+            <span className="px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-100 text-xs font-black text-brand-dark uppercase tracking-wider">
+              {personnel.length} {isAr ? 'موظفين' : 'Staff Members'}
+            </span>
+          </div>
         </div>
 
         {personnel.length === 0 ? (
@@ -1204,7 +1242,7 @@ const DepartmentHeadWorkspace = () => {
               {isAr ? 'يمكن للمدير التنفيذي تعيين موظفين لهذا القسم من خلال بوابة إدارة الموظفين.' : 'The Executive Manager can assign staff members to this department from the HR / Employee Management portal.'}
             </p>
           </div>
-        ) : (
+        ) : teamViewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {personnel.map(emp => {
               const isOverloaded = (emp.load || 50) > 80;
@@ -1263,6 +1301,123 @@ const DepartmentHeadWorkspace = () => {
                 </div>
               );
             })}
+          </div>
+        ) : (
+          /* List / Table View */
+          <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
+            <table className="w-full text-left text-xs text-gray-600" dir={isAr ? 'rtl' : 'ltr'}>
+              <thead className="bg-gray-50/80 text-[11px] font-black uppercase tracking-wider text-gray-500 border-b border-gray-100">
+                <tr>
+                  <th className="py-3.5 px-4">{isAr ? 'الموظف' : 'Staff Member'}</th>
+                  <th className="py-3.5 px-4">{isAr ? 'التواصل' : 'Contact'}</th>
+                  <th className="py-3.5 px-4">{isAr ? 'عبء العمل' : 'Capacity Load'}</th>
+                  <th className="py-3.5 px-3 text-center">{isAr ? 'المهام النشطة' : 'Active'}</th>
+                  <th className="py-3.5 px-3 text-center">{isAr ? 'المنجزة' : 'Done'}</th>
+                  <th className="py-3.5 px-3 text-center">{isAr ? 'المتأخرة' : 'Delayed'}</th>
+                  <th className="py-3.5 px-4 text-center">{isAr ? 'مؤشر الدقة' : 'Accuracy'}</th>
+                  <th className="py-3.5 px-4 text-end">{isAr ? 'إجراءات' : 'Action'}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 font-medium">
+                {personnel.map(emp => {
+                  const isOverloaded = (emp.load || 50) > 80;
+                  return (
+                    <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-brand-dark/10 text-brand-dark font-black flex items-center justify-center text-xs flex-shrink-0">
+                            {emp.full_name ? emp.full_name.charAt(0).toUpperCase() : '?'}
+                          </div>
+                          <div>
+                            <div className="font-black text-gray-900">{emp.full_name}</div>
+                            <div className="text-[10px] text-gray-400 font-bold capitalize">{emp.role}</div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <div className="space-y-0.5 text-[11px]">
+                          {emp.email && (
+                            <div className="flex items-center gap-1.5 text-gray-500">
+                              <Mail size={12} className="text-gray-400" />
+                              <span className="truncate max-w-[160px]">{emp.email}</span>
+                            </div>
+                          )}
+                          {emp.phone && (
+                            <div className="flex items-center gap-1.5 text-gray-400">
+                              <Phone size={12} className="text-gray-400" />
+                              <span>{emp.phone}</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4 min-w-[140px]">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10px] font-bold">
+                            <span className={`px-1.5 py-0.2 rounded text-[8px] font-black uppercase ${
+                              isOverloaded ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'
+                            }`}>
+                              {isOverloaded ? 'High Load' : 'Optimal'}
+                            </span>
+                            <span className={isOverloaded ? 'text-red-600 font-black' : 'text-gray-700 font-black'}>{emp.load}%</span>
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-1.5">
+                            <div
+                              className={`h-1.5 rounded-full ${isOverloaded ? 'bg-red-500' : 'bg-green-500'}`}
+                              style={{ width: `${emp.load}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center">
+                        <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-black text-xs">
+                          {emp.activeTasks || 0}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center">
+                        <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-lg bg-green-50 text-green-700 font-black text-xs">
+                          {emp.tasksCompleted || 0}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center">
+                        <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-lg font-black text-xs ${
+                          emp.delayed && emp.delayed > 0 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-400'
+                        }`}>
+                          {emp.delayed || 0}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="font-black text-gray-800 text-xs">
+                          {emp.accuracy || 98}%
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTaskEmployeeId(emp.id);
+                            window.location.hash = '#task-router';
+                            const el = document.getElementById('task-router-section');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-brand-dark/10 hover:bg-brand-dark text-brand-dark hover:text-white text-[11px] font-bold transition-all cursor-pointer"
+                          title={isAr ? 'إسناد مهمة' : 'Assign Task'}
+                        >
+                          <Plus size={13} />
+                          <span>{isAr ? 'إسناد' : 'Assign'}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
 
