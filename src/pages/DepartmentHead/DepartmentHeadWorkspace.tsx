@@ -54,7 +54,7 @@ import {
   Phone
 } from 'lucide-react';
 import { getDepartmentById, getAllDepartments } from '../../config/departments';
-import { getLocalRecruits } from '../../utils/recruitmentSync';
+import { getLocalRecruits, syncRecruitsFromSupabase } from '../../utils/recruitmentSync';
 import { addDSREntry, getDSREntries, saveDSREntries } from '../../utils/dsrSync';
 
 const isValidUUID = (val?: string | null): boolean => {
@@ -171,12 +171,13 @@ const DepartmentHeadWorkspace = () => {
     const fetchDeptContext = async () => {
       if (!user) return;
       try {
-        const [{ data: prof }, { data: emp }] = await Promise.all([
+        const [{ data: prof }, { data: emp }, { data: recruit }] = await Promise.all([
           supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
-          supabase.from('hr_employees').select('dept, department_id').eq('email', user.email).maybeSingle()
+          supabase.from('hr_employees').select('dept, department_id').eq('email', user.email).maybeSingle(),
+          supabase.from('hr_recruits').select('dept, department_id').eq('email', user.email).maybeSingle()
         ]);
 
-        const deptValue = prof?.department_id || prof?.department || emp?.dept || emp?.department_id || user.user_metadata?.department_id || (user.email?.includes('crm') ? 'client_success' : null);
+        const deptValue = prof?.department_id || prof?.department || emp?.dept || emp?.department_id || recruit?.dept || recruit?.department_id || user.user_metadata?.department_id || (user.email?.includes('crm') ? 'client_success' : null);
         if (deptValue) {
           let dept = deptValue.trim().toLowerCase();
           if (dept.includes('tax') || dept.includes('vat')) dept = 'tax_vat';
@@ -281,7 +282,8 @@ const DepartmentHeadWorkspace = () => {
         { data: pData, error: pErr },
         { data: hData, error: hErr },
         { data: cData, error: cErr },
-        { data: lData, error: lErr }
+        { data: lData, error: lErr },
+        dbRecruits
       ] = await Promise.all([
         supabase
           .from('services')
@@ -311,7 +313,8 @@ const DepartmentHeadWorkspace = () => {
         supabase.from('profiles').select('id, full_name, role, department_id, email, phone').order('full_name'),
         supabase.from('hr_employees').select('*'),
         supabase.from('clients').select('id, company_name, email, phone').order('company_name'),
-        supabase.from('hr_leave_requests').select('*').order('created_at', { ascending: false })
+        supabase.from('hr_leave_requests').select('*').order('created_at', { ascending: false }),
+        syncRecruitsFromSupabase()
       ]);
 
       if (sErr) console.error('HOD fetch services error:', sErr);
@@ -328,6 +331,8 @@ const DepartmentHeadWorkspace = () => {
         if (val.includes('advis') || val.includes('consult')) return 'business_advisory';
         if (val.includes('success') || val.includes('client') || val.includes('operat') || val.includes('crm') || val.includes('sales')) return 'client_success';
         if (val.includes('audit')) return 'audit';
+        if (val.includes('hr') || val.includes('admin') || val.includes('support')) return 'internal_support';
+        if (val.includes('manage') || val.includes('execut')) return 'management';
         return val;
       };
 
@@ -405,26 +410,27 @@ const DepartmentHeadWorkspace = () => {
         console.warn('Error merging placed employees in HOD:', e);
       }
 
-      // Merge offered / placed recruits from recruitment pipeline
+      // Merge offered / placed recruits from Supabase hr_recruits table
       try {
-        const recruits = getLocalRecruits();
+        const recruits = Array.isArray(dbRecruits) && dbRecruits.length > 0 ? dbRecruits : getLocalRecruits();
         recruits.forEach((r: any) => {
-          if (r.email && (r.stage === 'offered' || r.placement_status === 'placed' || r.placement_status === 'pending_placement' || r.dept)) {
-            const key = (r.email || r.id || '').toLowerCase();
+          if (r.email && (r.placement_status === 'placed' || r.stage === 'offered' || r.status === 'active' || r.dept)) {
+            const key = (r.email || r.id || '').toLowerCase().trim();
             const existing = combinedMap.get(key);
-            const dept = normalizeDept(r.dept);
+            const dept = normalizeDept(r.dept || r.department_id || r.department);
             if (existing) {
               combinedMap.set(key, {
                 ...existing,
-                full_name: existing.full_name || r.name,
+                full_name: existing.full_name || r.name || existing.full_name,
+                role: existing.role || r.role || 'Staff Member',
                 department_id: dept || existing.department_id,
                 phone: r.phone || existing.phone
               });
             } else {
               combinedMap.set(key, {
                 id: r.id || crypto.randomUUID(),
-                full_name: r.name || 'Staff Member',
-                role: r.role || 'employee',
+                full_name: r.name || r.full_name || 'Staff Member',
+                role: r.role || 'Staff Member',
                 department_id: dept,
                 email: r.email,
                 phone: r.phone
@@ -493,17 +499,23 @@ const DepartmentHeadWorkspace = () => {
   useEffect(() => {
     fetchDepartmentData();
 
+    const handleSyncEvent = () => fetchDepartmentData(true);
+    window.addEventListener('maisarah_recruits_updated', handleSyncEvent);
+
     // Live Supabase Realtime Subscription across tables
     const channel = supabase
       .channel(`hod-${currentDeptId}-live-sync`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => fetchDepartmentData(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchDepartmentData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_employees' }, () => fetchDepartmentData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_recruits' }, () => fetchDepartmentData(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchDepartmentData(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_leave_requests' }, () => fetchDepartmentData(true))
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener('maisarah_recruits_updated', handleSyncEvent);
     };
   }, [fetchDepartmentData, currentDeptId]);
 
