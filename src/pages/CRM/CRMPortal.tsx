@@ -226,22 +226,38 @@ export default function CRMPortal() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
-  const [reminders, setReminders] = useState<Reminder[]>(INITIAL_REMINDERS);
+  const [reminders, setReminders] = useState<Reminder[]>(() => {
+    try {
+      const saved = localStorage.getItem('maisarah_crm_reminders');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn('Could not read reminders from localStorage', e);
+    }
+    return INITIAL_REMINDERS;
+  });
   const [dbLoading, setDbLoading] = useState(true);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('maisarah_crm_reminders', JSON.stringify(reminders));
+    } catch (e) {
+      console.warn('Could not save reminders to localStorage', e);
+    }
+  }, [reminders]);
 
   // ── Map Supabase row → Lead interface ────────────────────────────────────
   const mapLead = (row: any): Lead => ({
     id: row.id,
-    name: row.name ?? '',
-    representativeName: row.representative_name ?? row.name ?? '',
+    name: row.contact_name ?? row.name ?? '',
+    representativeName: row.representative_name ?? row.contact_name ?? row.name ?? '',
     email: row.email ?? '',
     phone: row.phone ?? '',
     companyName: row.company_name ?? undefined,
     source: row.source ?? 'b2b',
     status: row.status ?? 'interested',
-    qualificationColor: (row.status === 'converted' || row.status === 'quoted') ? 'green' : (row.status === 'called' || row.status === 'whatsapp_connected') ? 'yellow' : 'red',
-    pipelineStep: row.pipeline_step ?? 'follow_up',
+    qualificationColor: (row.status === 'accepted' || row.status === 'converted' || row.status === 'quoted') ? 'green' : (row.status === 'contacted' || row.status === 'called' || row.status === 'whatsapp_connected') ? 'yellow' : 'red',
+    pipelineStep: row.pipeline_step ?? (row.status === 'new' ? 'connect' : row.status === 'contacted' ? 'follow_up' : row.status === 'quoted' ? 'update' : 'sort'),
     followUpDate: row.follow_up_date ?? undefined,
     notes: row.notes ?? '',
     created_at: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
@@ -253,13 +269,13 @@ export default function CRMPortal() {
   // ── Map Supabase row → Client interface ──────────────────────────────────
   const mapClient = (row: any): Client => ({
     id: row.id,
-    name: row.full_name ?? row.name ?? '',
+    name: row.contact_person ?? row.full_name ?? row.company_name ?? row.name ?? '',
     email: row.email ?? '',
     phone: row.phone ?? '',
     companyPhone: row.company_phone ?? undefined,
     type: row.client_type ?? row.type ?? 'B2B',
     companyName: row.company_name ?? undefined,
-    registrationNumber: row.registration_number ?? undefined,
+    registrationNumber: row.cr_number ?? row.registration_number ?? undefined,
     servicesPackage: row.services_package ?? [],
     overallManager: row.overall_manager ?? '',
     delegatedServices: row.delegated_services ?? {},
@@ -275,20 +291,20 @@ export default function CRMPortal() {
   // ── Map Supabase row → Quotation interface ───────────────────────────────
   const mapQuotation = (row: any): Quotation => ({
     id: row.id,
-    quoteNumber: row.quote_number ?? `QT-2026-${row.id.slice(0, 4)}`,
+    quoteNumber: row.quotation_number ?? row.quote_number ?? `QT-2026-${row.id.slice(0, 4)}`,
     leadId: row.lead_id ?? null,
-    clientName: row.client_name ?? '',
-    representativeName: row.representative_name ?? row.client_name ?? '',
+    clientName: row.client_name ?? row.title ?? '',
+    representativeName: row.representative_name ?? row.client_name ?? row.title ?? '',
     email: row.email ?? '',
     phone: row.phone ?? '',
     companyName: row.company_name ?? undefined,
     registrationNumber: row.registration_number ?? row.cr_number ?? undefined,
     type: row.client_type ?? 'B2B',
-    serviceType: Array.isArray(row.services) ? row.services.join(', ') : (row.service_type ?? 'Bookkeeping & Tax'),
+    serviceType: Array.isArray(row.services) ? row.services.join(', ') : (row.service_details ?? row.service_type ?? 'Bookkeeping & Tax'),
     servicesPackage: Array.isArray(row.services) ? row.services : ['Tax & VAT'],
     subtotal: row.subtotal ?? row.total_amount ?? 0,
     vatAmount: row.vat_amount ?? 0,
-    budget: row.total_amount ?? 0,
+    budget: row.total_amount ?? row.subtotal ?? 0,
     status: row.status ?? 'pending',
     created_at: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
   });
@@ -299,13 +315,25 @@ export default function CRMPortal() {
   const fetchAll = useCallback(async () => {
     setDbLoading(true);
     try {
-      const [leadsRes, clientsRes, quotesRes, profilesRes] = await Promise.all([
+      const [crmLeadsRes, leadsRes, clientsRes, quotesRes, profilesRes] = await Promise.all([
+        supabase.from('crm_leads').select('*').order('created_at', { ascending: false }),
         supabase.from('leads').select('*').order('created_at', { ascending: false }),
         supabase.from('clients').select('*').order('created_at', { ascending: false }),
         supabase.from('quotations').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('id, full_name, email, role'),
       ]);
-      if (leadsRes.data) setLeads(leadsRes.data.map(mapLead));
+
+      const allLeadsMap = new Map<string, Lead>();
+      if (crmLeadsRes.data) {
+        crmLeadsRes.data.forEach(r => allLeadsMap.set(r.id, mapLead(r)));
+      }
+      if (leadsRes.data) {
+        leadsRes.data.forEach(r => {
+          if (!allLeadsMap.has(r.id)) allLeadsMap.set(r.id, mapLead(r));
+        });
+      }
+      setLeads(Array.from(allLeadsMap.values()));
+
       if (clientsRes.data) setClients(clientsRes.data.map(mapClient));
       if (quotesRes.data) setQuotations(quotesRes.data.map(mapQuotation));
       if (profilesRes.data && profilesRes.data.length > 0) {
@@ -326,9 +354,10 @@ export default function CRMPortal() {
   useEffect(() => {
     fetchAll();
 
-    // Real-time subscriptions
+    // Real-time subscriptions across all relevant tables
     const ch = supabase
       .channel('crm_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_leads' }, () => fetchAll())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchAll())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchAll())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => fetchAll())
@@ -625,19 +654,32 @@ export default function CRMPortal() {
     setIsSubmittingQuickLead(true);
     try {
       const newLead = {
-        name: quickLeadForm.name,
+        contact_name: quickLeadForm.name,
         company_name: quickLeadForm.companyName || null,
         phone: quickLeadForm.phone,
         email: quickLeadForm.email || `${quickLeadForm.name.toLowerCase().replace(/\s+/g, '.')}@client.om`,
         source: quickLeadForm.source,
-        status: quickLeadForm.status,
-        pipeline_step: 'follow_up',
+        interested_service: 'Tax & VAT Advisory',
+        status: quickLeadForm.status === 'hot' || quickLeadForm.status === 'warm' ? 'contacted' : 'new',
+        priority: 'medium',
         notes: quickLeadForm.notes,
-        activity_history: [`${new Date().toISOString().slice(0, 10)} - Lead captured via Quick Add Lead`],
       };
 
-      const { error } = await supabase.from('leads').insert([newLead]);
-      if (error) throw error;
+      const { error: crmErr } = await supabase.from('crm_leads').insert([newLead]);
+      if (crmErr) {
+        // Fallback to leads table
+        await supabase.from('leads').insert([{
+          name: quickLeadForm.name,
+          company_name: quickLeadForm.companyName || null,
+          phone: quickLeadForm.phone,
+          email: quickLeadForm.email || `${quickLeadForm.name.toLowerCase().replace(/\s+/g, '.')}@client.om`,
+          source: quickLeadForm.source,
+          status: quickLeadForm.status,
+          pipeline_step: 'follow_up',
+          notes: quickLeadForm.notes,
+          activity_history: [`${new Date().toISOString().slice(0, 10)} - Lead captured via Quick Add Lead`],
+        }]);
+      }
 
       setShowQuickAddLeadModal(false);
       setQuickLeadForm({ name: '', companyName: '', phone: '', email: '', source: 'b2b', status: 'interested', notes: '' });
@@ -671,13 +713,17 @@ export default function CRMPortal() {
       const logEntry = `${today} ${timeStr} [${logForm.type.toUpperCase()}]: ${logForm.notes}`;
       const updatedHistory = [...(selectedLeadForLog.activityHistory || []), logEntry];
 
-      const { error } = await supabase.from('leads').update({
-        status: logForm.status,
-        follow_up_date: logForm.followUpDate,
-        activity_history: updatedHistory,
-      }).eq('id', selectedLeadForLog.id);
-
-      if (error) throw error;
+      await Promise.allSettled([
+        supabase.from('crm_leads').update({
+          status: logForm.status === 'hot' || logForm.status === 'warm' ? 'contacted' : logForm.status,
+          notes: logForm.notes ? `${selectedLeadForLog.notes || ''}\n${logEntry}` : selectedLeadForLog.notes,
+        }).eq('id', selectedLeadForLog.id),
+        supabase.from('leads').update({
+          status: logForm.status,
+          follow_up_date: logForm.followUpDate,
+          activity_history: updatedHistory,
+        }).eq('id', selectedLeadForLog.id)
+      ]);
 
       alert(isAr ? 'تم تسجيل التفاعل وتحديث حالة العميل المحتمل بنجاح!' : 'Interaction logged & lead status updated successfully!');
       setIsLogModalOpen(false);
@@ -767,12 +813,15 @@ export default function CRMPortal() {
       const vatAmt = quoteForm.includeVat ? +(baseAmt * 0.05).toFixed(3) : 0;
       const totalAmt = +(baseAmt + vatAmt).toFixed(3);
       const serviceNamesList = quoteLineItems.map(i => i.description);
+      const serviceDetailsStr = serviceNamesList.join(', ');
 
       if (editingQuoteId) {
         const { error } = await supabase.from('quotations').update({
           client_name: quoteForm.clientName || 'Valued Client',
+          title: quoteForm.clientName || 'Proposal',
           client_type: quoteForm.clientType,
           services: serviceNamesList.length > 0 ? serviceNamesList : quoteForm.services,
+          service_details: serviceDetailsStr,
           subtotal: baseAmt,
           vat_amount: vatAmt,
           total_amount: totalAmt,
@@ -786,10 +835,13 @@ export default function CRMPortal() {
 
         const { error } = await supabase.from('quotations').insert([{
           quote_number: quoteNum,
+          quotation_number: quoteNum,
           lead_id: quoteForm.leadId || null,
           client_name: quoteForm.clientName || 'Valued Client',
+          title: quoteForm.clientName ? `Proposal for ${quoteForm.clientName}` : 'Service Proposal',
           client_type: quoteForm.clientType,
           services: serviceNamesList.length > 0 ? serviceNamesList : quoteForm.services,
+          service_details: serviceDetailsStr,
           subtotal: baseAmt,
           vat_amount: vatAmt,
           total_amount: totalAmt,
@@ -800,14 +852,20 @@ export default function CRMPortal() {
         if (error) throw error;
 
         if (quoteForm.leadId) {
-          await supabase.from('leads').update({
-            status: 'quoted',
-            pipeline_step: 'update',
-            activity_history: [
-              ...(leads.find(l => l.id === quoteForm.leadId)?.activityHistory || []),
-              `${new Date().toISOString().split('T')[0]} - Quotation #${quoteNum} generated for OMR ${totalAmt}.`,
-            ],
-          }).eq('id', quoteForm.leadId);
+          await Promise.allSettled([
+            supabase.from('crm_leads').update({
+              status: 'quoted',
+              estimated_value: totalAmt,
+            }).eq('id', quoteForm.leadId),
+            supabase.from('leads').update({
+              status: 'quoted',
+              pipeline_step: 'update',
+              activity_history: [
+                ...(leads.find(l => l.id === quoteForm.leadId)?.activityHistory || []),
+                `${new Date().toISOString().split('T')[0]} - Quotation #${quoteNum} generated for OMR ${totalAmt}.`,
+              ],
+            }).eq('id', quoteForm.leadId)
+          ]);
         }
 
         alert(isAr ? `تم إنشاء عرض السعر برقم ${quoteNum} بنجاح!` : `Quotation #${quoteNum} created successfully!`);
@@ -828,19 +886,22 @@ export default function CRMPortal() {
       await supabase.from('quotations').update({ status: 'approved' }).eq('id', quotation.id);
 
       if (quotation.leadId) {
-        await supabase.from('leads').update({ status: 'converted', pipeline_step: 'sort' }).eq('id', quotation.leadId);
+        await Promise.allSettled([
+          supabase.from('crm_leads').update({ status: 'accepted', converted_at: new Date().toISOString() }).eq('id', quotation.leadId),
+          supabase.from('leads').update({ status: 'converted', pipeline_step: 'sort' }).eq('id', quotation.leadId)
+        ]);
       }
 
       const { data: newClient, error: clientErr } = await supabase.from('clients').insert([{
         company_name: quotation.companyName || quotation.clientName,
+        contact_person: quotation.representativeName || quotation.clientName,
         email: quotation.email || 'client@maisarah.om',
         phone: quotation.phone || '+968 9000 0000',
         monthly_billing: quotation.budget,
         source: quotation.type === 'B2B' ? 'b2b' : 'direct',
-        lead_id: quotation.leadId || null,
       }]).select().maybeSingle();
 
-      if (clientErr) throw clientErr;
+      if (clientErr) console.warn('Client insert notice:', clientErr.message);
 
       const serviceName = quotation.serviceType || 'Bookkeeping & Tax';
       await supabase.from('client_jobs').insert([{

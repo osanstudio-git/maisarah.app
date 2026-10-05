@@ -206,7 +206,7 @@ const OperationsCenter = () => {
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const menuWidth = 208;
       const menuHeight = 145;
-      
+
       const spaceBelow = window.innerHeight - rect.bottom;
       const top = spaceBelow < menuHeight ? rect.top - menuHeight + 2 : rect.bottom + 4;
       const left = isAr ? Math.max(12, rect.left) : Math.min(window.innerWidth - menuWidth - 12, rect.right - menuWidth);
@@ -232,7 +232,7 @@ const OperationsCenter = () => {
     const due = new Date(dueDate);
     const diffTime = due.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays < 0) return { text: `${Math.abs(diffDays)}d Overdue`, color: 'text-white', bg: 'bg-red-500' };
     if (diffDays === 0) return { text: 'Due Today', color: 'text-white', bg: 'bg-orange-500' };
     if (diffDays <= 3) return { text: `${diffDays}d Left`, color: 'text-orange-700', bg: 'bg-orange-100' };
@@ -243,7 +243,7 @@ const OperationsCenter = () => {
   const handleReassignSubmit = async (serviceId: string, newEmployeeId: string) => {
     setIsSubmitting(true);
     const assignedEmp = employees.find(e => e.id === newEmployeeId);
-    
+
     // Optimistic Update
     setServices(prev => prev.map(s => s.id === serviceId ? {
       ...s,
@@ -322,7 +322,7 @@ const OperationsCenter = () => {
   // ── Delete Service ─────────────────────────────────────────────────────────
   const handleDeleteService = async (serviceId: string) => {
     if (!window.confirm(isAr ? 'هل أنت متأكد من حذف هذه العملية؟' : 'Are you sure you want to delete this operation?')) return;
-    
+
     setServices(prev => prev.filter(s => s.id !== serviceId));
     setActiveMenuId(null);
     setMenuPos(null);
@@ -434,7 +434,7 @@ const OperationsCenter = () => {
 
       {/* ── Section 2: Global Pipeline Operations (Full Width) ───────────── */}
       <div className="space-y-4">
-        
+
         {/* Filters Bar */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-[220px]">
@@ -608,13 +608,12 @@ const OperationsCenter = () => {
 
                         {/* 8. Actions Menu Button */}
                         <td className="px-6 py-4 text-end">
-                          <button 
+                          <button
                             onClick={(e) => handleOpenMenu(e, svc.id)}
-                            className={`p-2 rounded-xl transition-all cursor-pointer ${
-                              isSelected 
-                                ? 'bg-brand-dark text-white shadow-sm' 
-                                : 'text-gray-400 hover:text-brand-dark hover:bg-gray-100'
-                            }`}
+                            className={`p-2 rounded-xl transition-all cursor-pointer ${isSelected
+                              ? 'bg-brand-dark text-white shadow-sm'
+                              : 'text-gray-400 hover:text-brand-dark hover:bg-gray-100'
+                              }`}
                             title={isAr ? 'إجراءات' : 'Actions'}
                           >
                             <MoreVertical size={16} />
@@ -709,11 +708,11 @@ const OperationsCenter = () => {
             <div className="flex justify-between items-center mb-5 pb-3 border-b border-gray-100">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 <Zap className="text-brand-dark" size={20} />
-                {editingService 
-                  ? (isAr ? 'تعديل العملية' : 'Edit Operation') 
+                {editingService
+                  ? (isAr ? 'تعديل العملية' : 'Edit Operation')
                   : (isAr ? 'إضافة عملية تسليم جديدة' : 'New Deliverable Operation')}
               </h3>
-              <button 
+              <button
                 onClick={() => setShowCreateModal(false)}
                 className="p-1 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
               >
@@ -864,8 +863,8 @@ const OperationsCenter = () => {
                 <UserCheck size={18} className="text-brand-dark" />
                 {isAr ? 'إعادة تعيين المسؤول' : 'Reassign Assignee'}
               </h3>
-              <button 
-                onClick={() => setReassignService(null)} 
+              <button
+                onClick={() => setReassignService(null)}
                 className="p-1 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
               >
                 <X size={18} />

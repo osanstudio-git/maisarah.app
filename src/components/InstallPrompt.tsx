@@ -5,7 +5,7 @@ import { X, Download } from 'lucide-react';
 export const InstallPrompt = () => {
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
-  
+
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showPrompt, setShowPrompt] = useState(false);
 
@@ -15,7 +15,7 @@ export const InstallPrompt = () => {
       e.preventDefault();
       // Stash the event so it can be triggered later.
       setDeferredPrompt(e);
-      
+
       // Check if already installed
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
       if (!isStandalone) {
@@ -52,7 +52,7 @@ export const InstallPrompt = () => {
 
   return (
     <div className={`fixed bottom-6 ${isAr ? 'left-6' : 'right-6'} z-[100] animate-in slide-in-from-bottom-5 duration-300 max-w-md w-[calc(100%-2rem)] sm:w-auto`}>
-      <div 
+      <div
         className="bg-white rounded-2xl py-2.5 px-3.5 shadow-[0_12px_35px_rgba(0,0,0,0.12)] border border-gray-100 flex items-center gap-3 text-start"
         dir={isAr ? 'rtl' : 'ltr'}
         lang={isAr ? 'ar' : 'en'}
@@ -82,7 +82,7 @@ export const InstallPrompt = () => {
         </button>
 
         {/* Close Button */}
-        <button 
+        <button
           onClick={() => setShowPrompt(false)}
           className="p-1 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer rounded-lg hover:bg-gray-100 flex-shrink-0"
           title={isAr ? 'إغلاق' : 'Close'}
