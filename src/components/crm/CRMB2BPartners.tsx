@@ -25,7 +25,9 @@ import {
   X,
   Plus,
   LayoutGrid,
-  List
+  List,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -119,6 +121,8 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
   const [showAddPartnerModal, setShowAddPartnerModal] = useState(false);
   const [copiedPartnerId, setCopiedPartnerId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isSaving, setIsSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Form State for Add/Edit B2B Partner
   const [partnerForm, setPartnerForm] = useState({
@@ -141,7 +145,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
     }
   }, [partners]);
 
-  // Sync B2B partners with Supabase if table exists
+  // Sync B2B partners with Supabase and subscribe to Realtime changes
   useEffect(() => {
     const fetchSupabasePartners = async () => {
       try {
@@ -150,10 +154,33 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
           setPartners(data);
         }
       } catch (e) {
-        // Fallback to local storage gracefully
+        console.warn('Notice fetching B2B partners from Supabase:', e);
       }
     };
+
     fetchSupabasePartners();
+
+    // Setup Supabase Realtime Listener for instant multi-user synchronization
+    const channel = supabase
+      .channel('b2b_partners_realtime_stream')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'b2b_partners' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' && payload.new) {
+            setPartners(prev => [payload.new as B2BPartner, ...prev.filter(p => p.id !== payload.new.id)]);
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            setPartners(prev => prev.map(p => p.id === payload.new.id ? (payload.new as B2BPartner) : p));
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setPartners(prev => prev.filter(p => p.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Map clients to their respective B2B Partner
@@ -219,30 +246,40 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
     });
   }, [partners, searchQuery, selectedType]);
 
-  // Handle Save New B2B Partner
+  // Handle Save New B2B Partner in Real Time with CR formatting & Success Notification
   const handleSavePartner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!partnerForm.name || !partnerForm.contact_person) return;
 
+    setIsSaving(true);
+
+    const cleanCR = partnerForm.cr_number ? partnerForm.cr_number.replace(/\D/g, '').slice(0, 9) : undefined;
+
     const newPartner: B2BPartner = {
       id: `b2b-${crypto.randomUUID().slice(0, 8)}`,
-      name: partnerForm.name,
+      name: partnerForm.name.trim(),
       partner_type: partnerForm.partner_type,
-      contact_person: partnerForm.contact_person,
-      phone: partnerForm.phone,
-      email: partnerForm.email,
-      location: partnerForm.location,
-      cr_number: partnerForm.cr_number || undefined,
-      notes: partnerForm.notes || undefined,
+      contact_person: partnerForm.contact_person.trim(),
+      phone: partnerForm.phone.trim(),
+      email: partnerForm.email.trim(),
+      location: partnerForm.location.trim() || 'Muscat',
+      cr_number: cleanCR || undefined,
+      notes: partnerForm.notes?.trim() || undefined,
       created_at: new Date().toISOString().slice(0, 10)
     };
 
-    setPartners(prev => [newPartner, ...prev]);
+    // Optimistically update local state immediately
+    setPartners(prev => [newPartner, ...prev.filter(p => p.id !== newPartner.id)]);
 
     try {
-      await supabase.from('b2b_partners').insert([newPartner]);
+      const { error } = await supabase.from('b2b_partners').insert([newPartner]);
+      if (error) {
+        console.warn('Supabase b2b_partners insert error notice:', error.message);
+      }
     } catch (err) {
       console.warn('Notice saving B2B partner to Supabase:', err);
+    } finally {
+      setIsSaving(false);
     }
 
     setShowAddPartnerModal(false);
@@ -256,6 +293,17 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
       cr_number: '',
       notes: ''
     });
+
+    // Display Real-time Success Notification Toast
+    setSuccessMessage(
+      isAr
+        ? `✅ تم تسجيل وحفظ الشريك "${newPartner.name}" بنجاح في النظام!`
+        : `✅ B2B Partner "${newPartner.name}" saved & registered in real-time!`
+    );
+
+    setTimeout(() => {
+      setSuccessMessage(null);
+    }, 4500);
   };
 
   // Copy shareable link for client self-onboarding under this partner
@@ -268,6 +316,22 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300" dir={isAr ? 'rtl' : 'ltr'}>
+      {/* Real-time Success Toast Notification */}
+      {successMessage && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl flex items-center justify-between gap-3 shadow-md animate-in slide-in-from-top duration-300">
+          <div className="flex items-center gap-2.5 text-xs font-black">
+            <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+          <button
+            onClick={() => setSuccessMessage(null)}
+            className="p-1 hover:bg-emerald-100 rounded-lg text-emerald-600 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* 1. Header & KPI Metrics Strip */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-xs">
         <div>
@@ -979,14 +1043,30 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'رقم السجل التجاري (CR)' : 'Commercial Registration (CR) Optional'}
-                  </label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                      {isAr ? 'رقم السجل التجاري (9 أرقام)' : 'Commercial Registration (CR) - 9 Digits'}
+                    </label>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md transition-colors ${
+                      partnerForm.cr_number.length === 9
+                        ? 'text-green-700 bg-green-50 border border-green-200'
+                        : partnerForm.cr_number.length > 0
+                        ? 'text-amber-700 bg-amber-50 border border-amber-200'
+                        : 'text-gray-400'
+                    }`}>
+                      {partnerForm.cr_number.length}/9 {partnerForm.cr_number.length === 9 ? '✓' : ''}
+                    </span>
+                  </div>
                   <input
                     type="text"
-                    placeholder="CR-1234567"
+                    inputMode="numeric"
+                    maxLength={9}
+                    placeholder="e.g. 104928192 (9 Digits)"
                     value={partnerForm.cr_number}
-                    onChange={(e) => setPartnerForm({ ...partnerForm, cr_number: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 9);
+                      setPartnerForm({ ...partnerForm, cr_number: val });
+                    }}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   />
                 </div>
@@ -1016,9 +1096,11 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors"
+                disabled={isSaving}
+                className="flex-1 bg-[#A11212] disabled:opacity-60 text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors flex items-center justify-center gap-2"
               >
-                {isAr ? 'حفظ وتسجيل الشريك' : 'Save Partner Channel'}
+                {isSaving && <Loader2 size={16} className="animate-spin" />}
+                <span>{isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving Partner...') : (isAr ? 'حفظ وتسجيل الشريك' : 'Save Partner Channel')}</span>
               </button>
             </div>
           </form>
