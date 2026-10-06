@@ -435,7 +435,8 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
             return (
               <div
                 key={partner.id}
-                className="bg-white rounded-3xl border border-gray-100 p-6 shadow-xs hover:shadow-md hover:border-red-900/20 transition-all space-y-4 flex flex-col justify-between"
+                onClick={() => setSelectedPartnerForDrawer(partner)}
+                className="bg-white rounded-3xl border border-gray-100 p-6 shadow-xs hover:shadow-md hover:border-[#A11212]/30 cursor-pointer transition-all space-y-4 flex flex-col justify-between group"
               >
                 <div>
                   {/* Card Header: Type Badge */}
@@ -447,7 +448,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                     </div>
 
                     <button
-                      onClick={() => copyShareableLink(partner)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyShareableLink(partner);
+                      }}
                       title="Copy direct client intake link for this partner"
                       className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-[10px] font-bold"
                     >
@@ -467,7 +471,12 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
 
                   {/* Partner Name & Location */}
                   <div className="mt-3">
-                    <h3 className="text-sm font-black text-gray-900">{partner.name}</h3>
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-black text-gray-900 group-hover:text-[#A11212] transition-colors">{partner.name}</h3>
+                      <span className="text-[10px] text-gray-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                        {isAr ? 'عرض العملاء' : 'View clients'} <ChevronRight size={12} className={isAr ? 'rotate-180' : ''} />
+                      </span>
+                    </div>
                     <div className="flex items-center gap-3 text-[11px] text-gray-500 font-bold mt-1">
                       <span className="flex items-center gap-1"><MapPin size={12} className="text-[#A11212]" /> {partner.location}</span>
                       {partner.cr_number && <span className="text-gray-400">CR: {partner.cr_number}</span>}
@@ -484,6 +493,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                       <div className="flex items-center gap-2">
                         <a
                           href={`tel:${partner.phone}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="text-gray-600 hover:text-[#A11212] flex items-center gap-1 text-[11px] font-bold"
                         >
                           <Phone size={12} /> {partner.phone}
@@ -493,6 +503,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                         href={`https://wa.me/${partner.phone.replace(/[^0-9]/g, '')}`}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
                         className="text-green-700 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 transition-colors"
                       >
                         <MessageCircle size={11} /> WhatsApp
@@ -520,7 +531,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
 
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setSelectedPartnerForDrawer(partner)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedPartnerForDrawer(partner);
+                      }}
                       className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-800 text-xs font-black uppercase tracking-wider py-2.5 rounded-xl border border-gray-200 flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Users size={13} />
@@ -528,7 +542,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                     </button>
 
                     <button
-                      onClick={() => onOpenOnboardModal(partner.id, partner.name)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenOnboardModal(partner.id, partner.name);
+                      }}
                       className="flex-1 bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
                     >
                       <PlusCircle size={13} />
@@ -580,14 +597,23 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                     const badge = getPartnerBadge();
 
                     return (
-                      <tr key={partner.id} className="hover:bg-gray-50/70 transition-colors group">
+                      <tr
+                        key={partner.id}
+                        onClick={() => setSelectedPartnerForDrawer(partner)}
+                        className="hover:bg-red-50/40 cursor-pointer transition-colors group"
+                      >
                         <td className="py-4 px-6">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-xl bg-red-50 text-[#A11212] flex items-center justify-center font-black shrink-0">
                               <Building2 size={16} />
                             </div>
                             <div>
-                              <h4 className="font-black text-gray-900 text-xs group-hover:text-[#A11212] transition-colors">{partner.name}</h4>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-black text-gray-900 text-xs group-hover:text-[#A11212] transition-colors">{partner.name}</h4>
+                                <span className="text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <ChevronRight size={12} className={isAr ? 'rotate-180' : ''} />
+                                </span>
+                              </div>
                               {partner.cr_number && (
                                 <span className="text-[10px] text-gray-400 font-bold block mt-0.5">CR: {partner.cr_number}</span>
                               )}
@@ -610,13 +636,18 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                           <div className="space-y-1">
                             <p className="font-bold text-gray-900">{partner.contact_person}</p>
                             <div className="flex items-center gap-2">
-                              <a href={`tel:${partner.phone}`} className="text-[11px] text-gray-500 hover:text-[#A11212] font-semibold flex items-center gap-1">
+                              <a
+                                href={`tel:${partner.phone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[11px] text-gray-500 hover:text-[#A11212] font-semibold flex items-center gap-1"
+                              >
                                 <Phone size={10} /> {partner.phone}
                               </a>
                               <a
                                 href={`https://wa.me/${partner.phone.replace(/[^0-9]/g, '')}`}
                                 target="_blank"
                                 rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
                                 className="text-green-700 bg-green-50 hover:bg-green-100 px-1.5 py-0.5 rounded text-[9px] font-black flex items-center gap-0.5"
                               >
                                 <MessageCircle size={10} /> WA
@@ -645,7 +676,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                         <td className="py-4 px-6 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
-                              onClick={() => copyShareableLink(partner)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyShareableLink(partner);
+                              }}
                               title="Copy direct client intake link"
                               className="p-2 hover:bg-gray-100 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
                             >
@@ -653,7 +687,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                             </button>
 
                             <button
-                              onClick={() => setSelectedPartnerForDrawer(partner)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedPartnerForDrawer(partner);
+                              }}
                               title="View affiliated clients"
                               className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-[11px] font-black uppercase flex items-center gap-1 transition-colors"
                             >
@@ -662,7 +699,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                             </button>
 
                             <button
-                              onClick={() => onOpenOnboardModal(partner.id, partner.name)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenOnboardModal(partner.id, partner.name);
+                              }}
                               title="Add client under this partner"
                               className="px-2.5 py-1.5 bg-[#A11212] hover:bg-[#800e0e] text-white rounded-xl text-[11px] font-black uppercase flex items-center gap-1 shadow-xs transition-colors"
                             >
@@ -706,25 +746,32 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
               </button>
             </div>
 
-            {/* Partner Details & Notes */}
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-2">
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <p className="text-[10px] text-gray-400 font-black uppercase">Location</p>
-                  <p className="font-black text-gray-800">{selectedPartnerForDrawer.location}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-gray-400 font-black uppercase">CR Number</p>
-                  <p className="font-black text-gray-800">{selectedPartnerForDrawer.cr_number || 'N/A'}</p>
-                </div>
+            {/* Partner Details & Metrics Strip */}
+            <div className="grid grid-cols-3 gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100 text-xs">
+              <div>
+                <p className="text-[10px] text-gray-400 font-black uppercase">{isAr ? 'العملاء المسجلين' : 'Total Clients'}</p>
+                <p className="text-base font-black text-gray-900 mt-0.5">
+                  {(partnerClientsMap.get(selectedPartnerForDrawer.id) || []).length} {isAr ? 'عميل' : 'Clients'}
+                </p>
               </div>
-              {selectedPartnerForDrawer.notes && (
-                <div className="pt-2 border-t border-gray-200">
-                  <p className="text-[10px] text-gray-400 font-black uppercase">Partner Channel Notes</p>
-                  <p className="text-xs text-gray-600 font-medium mt-0.5">{selectedPartnerForDrawer.notes}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-[10px] text-gray-400 font-black uppercase">{isAr ? 'الدخل الشهري' : 'Monthly Retainer'}</p>
+                <p className="text-base font-black text-[#A11212] mt-0.5">
+                  {(partnerClientsMap.get(selectedPartnerForDrawer.id) || []).reduce((sum, c) => sum + (c.monthlyBilling || 350), 0).toLocaleString()} <span className="text-[10px] font-bold text-gray-400">OMR</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-400 font-black uppercase">{isAr ? 'الموقع والسجل' : 'Location & CR'}</p>
+                <p className="font-bold text-gray-800 truncate mt-0.5">{selectedPartnerForDrawer.location}</p>
+              </div>
             </div>
+
+            {selectedPartnerForDrawer.notes && (
+              <div className="p-3 bg-amber-50/60 border border-amber-100 rounded-xl text-xs text-amber-900">
+                <span className="font-bold">{isAr ? 'ملاحظات التنسيق:' : 'Partner Notes:'} </span>
+                {selectedPartnerForDrawer.notes}
+              </div>
+            )}
 
             {/* Affiliated Clients Table */}
             <div className="space-y-3">
@@ -744,9 +791,9 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                 </button>
               </div>
 
-              {partnerClientsMap.get(selectedPartnerForDrawer.id)?.length === 0 ? (
-                <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
-                  <Users size={28} className="text-gray-300 mx-auto" />
+              {(!partnerClientsMap.get(selectedPartnerForDrawer.id) || partnerClientsMap.get(selectedPartnerForDrawer.id)!.length === 0) ? (
+                <div className="p-8 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200 space-y-3">
+                  <Users size={32} className="text-gray-300 mx-auto" />
                   <p className="text-xs font-bold text-gray-500">
                     {isAr ? 'لم يتم تسجيل عملاء تحت هذه الجهة حتى الآن' : 'No clients attached to this B2B partner yet.'}
                   </p>
@@ -756,29 +803,32 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                       setSelectedPartnerForDrawer(null);
                       onOpenOnboardModal(p.id, p.name);
                     }}
-                    className="mt-2 bg-[#A11212] text-white text-xs font-black px-4 py-2 rounded-xl"
+                    className="bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-xs"
                   >
-                    {isAr ? 'إضافة أول عميل الآن' : 'Add First Client'}
+                    {isAr ? '+ إضافة أول عميل الآن' : '+ Add First Client Now'}
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                <div className="divide-y divide-gray-100 border border-gray-100 rounded-2xl overflow-hidden bg-white">
                   {partnerClientsMap.get(selectedPartnerForDrawer.id)!.map((client: any) => (
                     <div
                       key={client.id}
-                      className="p-4 bg-white rounded-2xl border border-gray-150 hover:border-red-900/30 shadow-xs flex justify-between items-center transition-all"
+                      className="p-4 hover:bg-gray-50/80 flex justify-between items-center transition-all"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-green-500"></span>
                           <h5 className="text-xs font-black text-gray-900">{client.companyName || client.name}</h5>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-green-50 text-green-700 rounded">
+                            {client.status || 'Active'}
+                          </span>
                         </div>
-                        <p className="text-[10px] text-gray-400 font-bold">
-                          {client.email || 'No email'} · {client.phone || 'No phone'}
+                        <p className="text-[10px] text-gray-500 font-semibold">
+                          {client.contactPerson || client.email || 'Representative'} · {client.phone || 'No phone'}
                         </p>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {Array.isArray(client.servicesPackage) && client.servicesPackage.map((s: string) => (
-                            <span key={s} className="bg-gray-100 text-gray-700 text-[9px] px-2 py-0.5 rounded font-bold">
+                          {(Array.isArray(client.servicesPackage) ? client.servicesPackage : client.services || ['Bookkeeping', 'VAT']).slice(0, 3).map((s: string, idx: number) => (
+                            <span key={idx} className="bg-gray-100 text-gray-700 text-[9px] px-2 py-0.5 rounded font-bold">
                               {s}
                             </span>
                           ))}
@@ -789,7 +839,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                         <p className="text-xs font-black text-[#A11212]">
                           {(client.monthlyBilling || 350).toLocaleString()} OMR/mo
                         </p>
-                        <span className="text-[9px] font-bold text-gray-400">
+                        <span className="text-[9px] font-bold text-gray-400 block mt-0.5">
                           Manager: {client.overallManager || 'Shafnas'}
                         </span>
                       </div>
