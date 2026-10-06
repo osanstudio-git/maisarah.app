@@ -23,14 +23,16 @@ import {
   Copy,
   Check,
   X,
-  Plus
+  Plus,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 export interface B2BPartner {
   id: string;
   name: string;
-  partner_type: 'sanad' | 'law_firm' | 'holding' | 'corporate_agent' | 'incubator' | 'other';
+  partner_type: 'sanad' | 'company' | 'agent' | string;
   contact_person: string;
   phone: string;
   email: string;
@@ -62,7 +64,7 @@ const INITIAL_B2B_PARTNERS: B2BPartner[] = [
   {
     id: 'b2b-02',
     name: 'Oman Legal & Corporate Advisory Chambers',
-    partner_type: 'law_firm',
+    partner_type: 'company',
     contact_person: 'Adv. Maryam Al-Lawati',
     phone: '+968 9456 7890',
     email: 'maryam@omanlegal.om',
@@ -73,8 +75,8 @@ const INITIAL_B2B_PARTNERS: B2BPartner[] = [
   },
   {
     id: 'b2b-03',
-    name: 'Sohar Industrial Holding B2B Cluster',
-    partner_type: 'holding',
+    name: 'Sohar Industrial Holding Cluster',
+    partner_type: 'company',
     contact_person: 'Tariq Al-Fazari',
     phone: '+968 9789 0123',
     email: 'tariq@soharholding.om',
@@ -86,13 +88,13 @@ const INITIAL_B2B_PARTNERS: B2BPartner[] = [
   {
     id: 'b2b-04',
     name: 'Duqm Business & Startup Incubator',
-    partner_type: 'incubator',
+    partner_type: 'agent',
     contact_person: 'Eng. Khalid Al-Habsi',
     phone: '+968 9234 5678',
     email: 'khalid@duqmincubator.om',
     location: 'Duqm Special Economic Zone',
     cr_number: 'CR-4091823',
-    notes: 'Government-supported hub channeling newly formed SME startups.',
+    notes: 'Channeling newly formed SME startups.',
     created_at: '2026-04-18'
   }
 ];
@@ -116,6 +118,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
   const [selectedPartnerForDrawer, setSelectedPartnerForDrawer] = useState<B2BPartner | null>(null);
   const [showAddPartnerModal, setShowAddPartnerModal] = useState(false);
   const [copiedPartnerId, setCopiedPartnerId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Form State for Add/Edit B2B Partner
   const [partnerForm, setPartnerForm] = useState({
@@ -370,132 +373,313 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
               onChange={(e) => setSelectedType(e.target.value)}
               className="bg-transparent text-xs font-bold text-gray-700 outline-none cursor-pointer"
             >
-              <option value="all">{isAr ? 'جميع فئات الشركاء' : 'All Partner Types'}</option>
-              <option value="sanad">{isAr ? 'مكاتب سند' : 'Sanad Offices'}</option>
-              <option value="law_firm">{isAr ? 'مكاتب المحاماة' : 'Law Firms'}</option>
-              <option value="holding">{isAr ? 'المجموعات القابضة' : 'Holding Groups'}</option>
-              <option value="incubator">{isAr ? 'حاضنات الأعمال' : 'Incubators'}</option>
-              <option value="corporate_agent">{isAr ? 'وكلاء شركات' : 'Corporate Agents'}</option>
+              <option value="all">{isAr ? 'جميع الشركاء' : 'All Partner Types'}</option>
+              <option value="sanad">{isAr ? 'مكتب سند' : 'Sanad Offices'}</option>
+              <option value="company">{isAr ? 'شركات وجهات' : 'Companies & Firms'}</option>
+              <option value="agent">{isAr ? 'وسطاء ووكلاء' : 'Individual Agents'}</option>
             </select>
+          </div>
+
+          {/* Grid / List View Toggle Switcher */}
+          <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200/80 shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'grid'
+                  ? 'bg-white text-gray-900 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              title={isAr ? 'عرض شبكي' : 'Grid View'}
+            >
+              <LayoutGrid size={14} />
+              <span className="hidden sm:inline">{isAr ? 'شبكة' : 'Grid'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'list'
+                  ? 'bg-white text-gray-900 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              title={isAr ? 'عرض جدول / قائمة' : 'List View'}
+            >
+              <List size={14} />
+              <span className="hidden sm:inline">{isAr ? 'قائمة' : 'List'}</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* 3. B2B Partners Directory Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-        {filteredPartners.map(partner => {
-          const affiliatedClients = partnerClientsMap.get(partner.id) || [];
-          const clientCount = affiliatedClients.length;
-          const totalBilling = affiliatedClients.reduce((sum, c) => sum + (c.monthlyBilling || 350), 0);
+      {/* 3. B2B Partners Directory (Grid View or List View) */}
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+          {filteredPartners.map(partner => {
+            const affiliatedClients = partnerClientsMap.get(partner.id) || [];
+            const clientCount = affiliatedClients.length;
+            const totalBilling = affiliatedClients.reduce((sum, c) => sum + (c.monthlyBilling || 350), 0);
 
-          return (
-            <div
-              key={partner.id}
-              className="bg-white rounded-3xl border border-gray-100 p-6 shadow-xs hover:shadow-md hover:border-red-900/20 transition-all space-y-4 flex flex-col justify-between"
-            >
-              <div>
-                {/* Card Header: Type Badge */}
-                <div className="flex justify-between items-start gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-lg bg-red-50 text-[#A11212] border border-red-100">
-                      {partner.partner_type.replace('_', ' ')}
-                    </span>
-                  </div>
+            const getPartnerBadge = () => {
+              if (partner.partner_type === 'sanad') {
+                return { label: isAr ? 'مكتب سند' : 'Sanad Office', color: 'bg-red-50 text-[#A11212] border-red-100' };
+              }
+              if (partner.partner_type === 'agent' || partner.partner_type === 'corporate_agent') {
+                return { label: isAr ? 'وسيط / وكيل' : 'Individual Agent', color: 'bg-amber-50 text-amber-800 border-amber-200' };
+              }
+              return { label: isAr ? 'شركة / جهة' : 'Company / Firm', color: 'bg-blue-50 text-blue-700 border-blue-100' };
+            };
 
-                  <button
-                    onClick={() => copyShareableLink(partner)}
-                    title="Copy direct client intake link for this partner"
-                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-[10px] font-bold"
-                  >
-                    {copiedPartnerId === partner.id ? (
-                      <>
-                        <Check size={14} className="text-green-600" />
-                        <span className="text-green-600 text-[10px]">Copied Link</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={14} />
-                        <span className="text-gray-400 text-[10px]">Share Link</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+            const badge = getPartnerBadge();
 
-                {/* Partner Name & Location */}
-                <div className="mt-3">
-                  <h3 className="text-sm font-black text-gray-900">{partner.name}</h3>
-                  <div className="flex items-center gap-3 text-[11px] text-gray-500 font-bold mt-1">
-                    <span className="flex items-center gap-1"><MapPin size={12} className="text-[#A11212]" /> {partner.location}</span>
-                    {partner.cr_number && <span className="text-gray-400">CR: {partner.cr_number}</span>}
-                  </div>
-                </div>
-
-                {/* Contact Person Details */}
-                <div className="mt-4 bg-gray-50/70 p-3.5 rounded-2xl border border-gray-100 space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-400 text-[10px] font-black uppercase">{isAr ? 'المسؤول' : 'Representative'}:</span>
-                    <span className="font-black text-gray-800">{partner.contact_person}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-150">
+            return (
+              <div
+                key={partner.id}
+                className="bg-white rounded-3xl border border-gray-100 p-6 shadow-xs hover:shadow-md hover:border-red-900/20 transition-all space-y-4 flex flex-col justify-between"
+              >
+                <div>
+                  {/* Card Header: Type Badge */}
+                  <div className="flex justify-between items-start gap-2">
                     <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-lg border ${badge.color}`}>
+                        {badge.label}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => copyShareableLink(partner)}
+                      title="Copy direct client intake link for this partner"
+                      className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-[10px] font-bold"
+                    >
+                      {copiedPartnerId === partner.id ? (
+                        <>
+                          <Check size={14} className="text-green-600" />
+                          <span className="text-green-600 text-[10px]">Copied Link</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={14} />
+                          <span className="text-gray-400 text-[10px]">Share Link</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Partner Name & Location */}
+                  <div className="mt-3">
+                    <h3 className="text-sm font-black text-gray-900">{partner.name}</h3>
+                    <div className="flex items-center gap-3 text-[11px] text-gray-500 font-bold mt-1">
+                      <span className="flex items-center gap-1"><MapPin size={12} className="text-[#A11212]" /> {partner.location}</span>
+                      {partner.cr_number && <span className="text-gray-400">CR: {partner.cr_number}</span>}
+                    </div>
+                  </div>
+
+                  {/* Contact Person Details */}
+                  <div className="mt-4 bg-gray-50/70 p-3.5 rounded-2xl border border-gray-100 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400 text-[10px] font-black uppercase">{isAr ? 'المسؤول' : 'Representative'}:</span>
+                      <span className="font-black text-gray-800">{partner.contact_person}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-150">
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`tel:${partner.phone}`}
+                          className="text-gray-600 hover:text-[#A11212] flex items-center gap-1 text-[11px] font-bold"
+                        >
+                          <Phone size={12} /> {partner.phone}
+                        </a>
+                      </div>
                       <a
-                        href={`tel:${partner.phone}`}
-                        className="text-gray-600 hover:text-[#A11212] flex items-center gap-1 text-[11px] font-bold"
+                        href={`https://wa.me/${partner.phone.replace(/[^0-9]/g, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-green-700 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 transition-colors"
                       >
-                        <Phone size={12} /> {partner.phone}
+                        <MessageCircle size={11} /> WhatsApp
                       </a>
                     </div>
-                    <a
-                      href={`https://wa.me/${partner.phone.replace(/[^0-9]/g, '')}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-green-700 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 transition-colors"
+                  </div>
+                </div>
+
+                {/* Stats & Actions Footer */}
+                <div className="pt-3 border-t border-gray-100 space-y-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <div>
+                      <p className="text-[10px] text-gray-400 font-black uppercase">{isAr ? 'العملاء التابعين' : 'Clients Under Team'}</p>
+                      <p className="text-sm font-black text-gray-900 mt-0.5">
+                        {clientCount > 0 ? `${clientCount} ${isAr ? 'عميل نشط' : 'Clients'}` : `${isAr ? 'لا يوجد عملاء حالياً' : '0 Clients'}`}
+                      </p>
+                    </div>
+                    <div className="text-end">
+                      <p className="text-[10px] text-gray-400 font-black uppercase">{isAr ? 'قيمة العقود الشهرية' : 'Monthly Retainer'}</p>
+                      <p className="text-sm font-black text-[#A11212] mt-0.5">
+                        {totalBilling > 0 ? `${totalBilling.toLocaleString()} OMR` : '0 OMR'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSelectedPartnerForDrawer(partner)}
+                      className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-800 text-xs font-black uppercase tracking-wider py-2.5 rounded-xl border border-gray-200 flex items-center justify-center gap-1.5 transition-colors"
                     >
-                      <MessageCircle size={11} /> WhatsApp
-                    </a>
+                      <Users size={13} />
+                      <span>{isAr ? 'عرض عملاء الشريك' : 'View Clients'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => onOpenOnboardModal(partner.id, partner.name)}
+                      className="flex-1 bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                    >
+                      <PlusCircle size={13} />
+                      <span>{isAr ? '+ عميل تحت هذا الشريك' : '+ Add Client'}</span>
+                    </button>
                   </div>
                 </div>
               </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-start border-collapse">
+              <thead>
+                <tr className="bg-gray-50/75 border-b border-gray-100 text-[10px] font-black uppercase tracking-wider text-gray-400">
+                  <th className="py-4 px-6 text-start">{isAr ? 'الشريك / الجهة' : 'Partner / Entity'}</th>
+                  <th className="py-4 px-6 text-start">{isAr ? 'النوع والموقع' : 'Category & City'}</th>
+                  <th className="py-4 px-6 text-start">{isAr ? 'الشخص المسؤول' : 'Representative'}</th>
+                  <th className="py-4 px-6 text-center">{isAr ? 'العملاء المسجلين' : 'Affiliated Clients'}</th>
+                  <th className="py-4 px-6 text-end">{isAr ? 'العوائد الشهرية' : 'Monthly Retainer'}</th>
+                  <th className="py-4 px-6 text-center">{isAr ? 'إجراءات' : 'Actions'}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-xs">
+                {filteredPartners.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-gray-400 font-bold">
+                      {isAr ? 'لا يوجد شركاء مطابقين للبحث' : 'No matching B2B partners found'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredPartners.map(partner => {
+                    const affiliatedClients = partnerClientsMap.get(partner.id) || [];
+                    const clientCount = affiliatedClients.length;
+                    const totalBilling = affiliatedClients.reduce((sum, c) => sum + (c.monthlyBilling || 350), 0);
 
-              {/* Stats & Actions Footer */}
-              <div className="pt-3 border-t border-gray-100 space-y-3">
-                <div className="flex justify-between items-center text-xs">
-                  <div>
-                    <p className="text-[10px] text-gray-400 font-black uppercase">{isAr ? 'العملاء التابعين' : 'Clients Under Team'}</p>
-                    <p className="text-sm font-black text-gray-900 mt-0.5">
-                      {clientCount > 0 ? `${clientCount} ${isAr ? 'عميل نشط' : 'Clients'}` : `${isAr ? 'لا يوجد عملاء حالياً' : '0 Clients'}`}
-                    </p>
-                  </div>
-                  <div className="text-end">
-                    <p className="text-[10px] text-gray-400 font-black uppercase">{isAr ? 'قيمة العقود الشهرية' : 'Monthly Retainer'}</p>
-                    <p className="text-sm font-black text-[#A11212] mt-0.5">
-                      {totalBilling > 0 ? `${totalBilling.toLocaleString()} OMR` : '0 OMR'}
-                    </p>
-                  </div>
-                </div>
+                    const getPartnerBadge = () => {
+                      if (partner.partner_type === 'sanad') {
+                        return { label: isAr ? 'مكتب سند' : 'Sanad Office', color: 'bg-red-50 text-[#A11212] border-red-100' };
+                      }
+                      if (partner.partner_type === 'agent' || partner.partner_type === 'corporate_agent') {
+                        return { label: isAr ? 'وسيط / وكيل' : 'Individual Agent', color: 'bg-amber-50 text-amber-800 border-amber-200' };
+                      }
+                      return { label: isAr ? 'شركة / جهة' : 'Company / Firm', color: 'bg-blue-50 text-blue-700 border-blue-100' };
+                    };
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedPartnerForDrawer(partner)}
-                    className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-800 text-xs font-black uppercase tracking-wider py-2.5 rounded-xl border border-gray-200 flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <Users size={13} />
-                    <span>{isAr ? 'عرض عملاء الشريك' : 'View Clients'}</span>
-                  </button>
+                    const badge = getPartnerBadge();
 
-                  <button
-                    onClick={() => onOpenOnboardModal(partner.id, partner.name)}
-                    className="flex-1 bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
-                  >
-                    <PlusCircle size={13} />
-                    <span>{isAr ? '+ عميل تحت هذا الشريك' : '+ Add Client'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                    return (
+                      <tr key={partner.id} className="hover:bg-gray-50/70 transition-colors group">
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-red-50 text-[#A11212] flex items-center justify-center font-black shrink-0">
+                              <Building2 size={16} />
+                            </div>
+                            <div>
+                              <h4 className="font-black text-gray-900 text-xs group-hover:text-[#A11212] transition-colors">{partner.name}</h4>
+                              {partner.cr_number && (
+                                <span className="text-[10px] text-gray-400 font-bold block mt-0.5">CR: {partner.cr_number}</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-4 px-6">
+                          <div className="space-y-1">
+                            <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${badge.color}`}>
+                              {badge.label}
+                            </span>
+                            <p className="text-[11px] text-gray-500 font-bold flex items-center gap-1">
+                              <MapPin size={11} className="text-[#A11212]" /> {partner.location}
+                            </p>
+                          </div>
+                        </td>
+
+                        <td className="py-4 px-6">
+                          <div className="space-y-1">
+                            <p className="font-bold text-gray-900">{partner.contact_person}</p>
+                            <div className="flex items-center gap-2">
+                              <a href={`tel:${partner.phone}`} className="text-[11px] text-gray-500 hover:text-[#A11212] font-semibold flex items-center gap-1">
+                                <Phone size={10} /> {partner.phone}
+                              </a>
+                              <a
+                                href={`https://wa.me/${partner.phone.replace(/[^0-9]/g, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-green-700 bg-green-50 hover:bg-green-100 px-1.5 py-0.5 rounded text-[9px] font-black flex items-center gap-0.5"
+                              >
+                                <MessageCircle size={10} /> WA
+                              </a>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-4 px-6 text-center">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-black ${
+                            clientCount > 0 ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-400'
+                          }`}>
+                            {clientCount} {isAr ? 'عميل' : 'Clients'}
+                          </span>
+                        </td>
+
+                        <td className="py-4 px-6 text-end">
+                          <p className="font-black text-xs text-[#A11212]">
+                            {totalBilling > 0 ? `${totalBilling.toLocaleString()} OMR` : '0 OMR'}
+                          </p>
+                          <span className="text-[9px] text-gray-400 font-bold block">
+                            {isAr ? 'شهرياً' : 'per month'}
+                          </span>
+                        </td>
+
+                        <td className="py-4 px-6 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => copyShareableLink(partner)}
+                              title="Copy direct client intake link"
+                              className="p-2 hover:bg-gray-100 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
+                            >
+                              {copiedPartnerId === partner.id ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                            </button>
+
+                            <button
+                              onClick={() => setSelectedPartnerForDrawer(partner)}
+                              title="View affiliated clients"
+                              className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-[11px] font-black uppercase flex items-center gap-1 transition-colors"
+                            >
+                              <Users size={12} />
+                              <span className="hidden sm:inline">{isAr ? 'العملاء' : 'Clients'}</span>
+                            </button>
+
+                            <button
+                              onClick={() => onOpenOnboardModal(partner.id, partner.name)}
+                              title="Add client under this partner"
+                              className="px-2.5 py-1.5 bg-[#A11212] hover:bg-[#800e0e] text-white rounded-xl text-[11px] font-black uppercase flex items-center gap-1 shadow-xs transition-colors"
+                            >
+                              <PlusCircle size={12} />
+                              <span className="hidden sm:inline">{isAr ? '+ عميل' : '+ Client'}</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* 4. Partner Intelligence & Affiliated Clients Drawer */}
       {selectedPartnerForDrawer && (
@@ -506,7 +690,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
               <div>
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase bg-red-50 text-[#A11212] border border-red-100">
-                    {selectedPartnerForDrawer.partner_type.replace('_', ' ')}
+                    {selectedPartnerForDrawer.partner_type === 'sanad' ? (isAr ? 'مكتب سند' : 'Sanad Office') : selectedPartnerForDrawer.partner_type === 'agent' ? (isAr ? 'وسيط / وكيل' : 'Individual Agent') : (isAr ? 'شركة / جهة' : 'Company / Firm')}
                   </span>
                   <h3 className="text-base font-black text-gray-900">{selectedPartnerForDrawer.name}</h3>
                 </div>
@@ -658,12 +842,12 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
               <div>
                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                  {isAr ? 'اسم الشريك / الجهة التجارية *' : 'Partner / Corporate Entity Name *'}
+                  {isAr ? 'اسم الشريك / الجهة التجارية *' : 'Partner / Company Name *'}
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Al-Wafa Sanad Services / Oman Legal Chambers"
+                  placeholder={isAr ? 'مثال: مكتب الوفاء لخدمات سند / مكتب المحاماة' : 'e.g. Al-Tasheel Sanad Services / Oman Legal Firm'}
                   value={partnerForm.name}
                   onChange={(e) => setPartnerForm({ ...partnerForm, name: e.target.value })}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
@@ -673,19 +857,16 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'نوع القناة' : 'Partner Category'}
+                    {isAr ? 'نوع الشريك' : 'Partner Type'}
                   </label>
                   <select
                     value={partnerForm.partner_type}
                     onChange={(e) => setPartnerForm({ ...partnerForm, partner_type: e.target.value as any })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   >
-                    <option value="sanad">Sanad Services Office</option>
-                    <option value="law_firm">Law Firm / Legal Advisory</option>
-                    <option value="holding">Holding Group / Conglomerate</option>
-                    <option value="incubator">Business Incubator / Hub</option>
-                    <option value="corporate_agent">Corporate Agent / Broker</option>
-                    <option value="other">Other Channel</option>
+                    <option value="sanad">{isAr ? 'مكتب سند' : 'Sanad Office'}</option>
+                    <option value="company">{isAr ? 'شركة / جهة تجارية' : 'Company / Firm'}</option>
+                    <option value="agent">{isAr ? 'وسيط / وكيل' : 'Individual Agent'}</option>
                   </select>
                 </div>
 
@@ -706,7 +887,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'الشخص المسؤول *' : 'Contact Person / Representative *'}
+                    {isAr ? 'الشخص المسؤول *' : 'Contact Person *'}
                   </label>
                   <input
                     type="text"
@@ -736,7 +917,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'البريد الإلكتروني' : 'Email Address'}
+                    {isAr ? 'البريد الإلكتروني' : 'Email Address (Optional)'}
                   </label>
                   <input
                     type="email"
@@ -749,13 +930,13 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
 
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'المحافظة / المدينة' : 'Location / City'}
+                    {isAr ? 'رقم السجل التجاري (CR)' : 'Commercial Registration (CR) Optional'}
                   </label>
                   <input
                     type="text"
-                    placeholder="Muscat, Sohar, Salalah..."
-                    value={partnerForm.location}
-                    onChange={(e) => setPartnerForm({ ...partnerForm, location: e.target.value })}
+                    placeholder="CR-1234567"
+                    value={partnerForm.cr_number}
+                    onChange={(e) => setPartnerForm({ ...partnerForm, cr_number: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   />
                 </div>
@@ -763,24 +944,11 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
 
               <div>
                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                  {isAr ? 'رقم السجل التجاري (CR)' : 'Commercial Registration (CR) Optional'}
-                </label>
-                <input
-                  type="text"
-                  placeholder="CR-1234567"
-                  value={partnerForm.cr_number}
-                  onChange={(e) => setPartnerForm({ ...partnerForm, cr_number: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                  {isAr ? 'ملاحظات وتفاصيل التنسيق' : 'Coordination Notes'}
+                  {isAr ? 'ملاحظات وتفاصيل التنسيق' : 'Coordination Notes (Optional)'}
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. Terms of cooperation, special requirements..."
+                  placeholder="e.g. Special arrangements or referral terms..."
                   value={partnerForm.notes}
                   onChange={(e) => setPartnerForm({ ...partnerForm, notes: e.target.value })}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] resize-none"
