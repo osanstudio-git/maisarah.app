@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import type { MonthlyPerformanceReportData } from '../../types/monthlyPerformanceReport';
 import { generateDefaultMonthlyReport } from '../../utils/monthlyReportAggregator';
+import { supabase } from '../../lib/supabaseClient';
 import ExecutiveA4ReportPrintView from './ExecutiveA4ReportPrintView';
 
 interface MonthlyPerformanceReportModalProps {
@@ -53,6 +54,7 @@ export default function MonthlyPerformanceReportModal({
   const [isAr, setIsAr] = useState<boolean>(i18n.language === 'ar');
   const [viewMode, setViewMode] = useState<'editor' | 'preview'>('preview');
   const [activeTab, setActiveTab] = useState<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6'>('p1');
+  const [isSavingCloud, setIsSavingCloud] = useState<boolean>(false);
 
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth());
@@ -86,27 +88,91 @@ export default function MonthlyPerformanceReportModal({
   };
 
   useEffect(() => {
-    if (isOpen) {
-      // Check if we have saved draft in localStorage for this month/year
+    if (!isOpen) return;
+
+    let isMounted = true;
+
+    async function loadReportFromCloudOrLocal() {
       const storageKey = `maisarah_report_draft_${selectedYear}_${selectedMonth}`;
+      
+      try {
+        // Try fetching from Supabase first
+        const { data: cloudRow, error } = await supabase
+          .from('monthly_performance_reports')
+          .select('report_data')
+          .eq('month', selectedMonth)
+          .eq('year', selectedYear)
+          .maybeSingle();
+
+        if (!error && cloudRow?.report_data && isMounted) {
+          setReportData(cloudRow.report_data);
+          return;
+        }
+      } catch (err) {
+        console.warn('Supabase fetch notice (table may not exist yet or offline):', err);
+      }
+
+      // Local storage fallback
       const savedDraft = localStorage.getItem(storageKey);
-      if (savedDraft) {
+      if (savedDraft && isMounted) {
         try {
           setReportData(JSON.parse(savedDraft));
+          return;
         } catch (e) {
-          handleRecalculate();
+          // parse error fallback
         }
-      } else {
+      }
+
+      if (isMounted) {
         handleRecalculate();
       }
     }
+
+    loadReportFromCloudOrLocal();
+
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen, selectedMonth, selectedYear]);
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
+    setIsSavingCloud(true);
     const storageKey = `maisarah_report_draft_${selectedYear}_${selectedMonth}`;
     localStorage.setItem(storageKey, JSON.stringify(reportData));
-    setSavedNotification(isAr ? 'تم حفظ التقرير كمسودة محلية!' : 'Report draft saved locally!');
-    setTimeout(() => setSavedNotification(null), 3000);
+
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id || null;
+
+      const { error } = await supabase.from('monthly_performance_reports').upsert(
+        {
+          id: reportData.id || `report-${selectedYear}-${selectedMonth + 1}`,
+          month: selectedMonth,
+          year: selectedYear,
+          reference_number: reportData.referenceNumber,
+          report_date: reportData.reportDate || new Date().toISOString().slice(0, 10),
+          manager_name: reportData.managerName || 'Operations Manager',
+          department_scope: reportData.departmentScope || 'Consolidated Office Performance',
+          status: 'draft',
+          report_data: reportData,
+          created_by: userId,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'month,year' }
+      );
+
+      if (error) {
+        console.warn('Could not save to Supabase cloud table:', error.message);
+        setSavedNotification(isAr ? 'تم الحفظ محلياً في المتصفح!' : 'Saved locally in browser!');
+      } else {
+        setSavedNotification(isAr ? 'تم الحفظ والمزامنة السحابية بنجاح!' : 'Saved & synced to Supabase Cloud!');
+      }
+    } catch (err) {
+      setSavedNotification(isAr ? 'تم الحفظ محلياً في المتصفح!' : 'Saved locally in browser!');
+    } finally {
+      setIsSavingCloud(false);
+      setTimeout(() => setSavedNotification(null), 3000);
+    }
   };
 
   const handlePrint = () => {
