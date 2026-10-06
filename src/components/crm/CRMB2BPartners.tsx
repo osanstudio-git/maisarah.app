@@ -246,12 +246,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
     });
   }, [partners, searchQuery, selectedType]);
 
-  // Handle Save New B2B Partner in Real Time with CR formatting & Success Notification
+  // Handle Save New B2B Partner in Real Time with CR formatting & Instant Success Notification
   const handleSavePartner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!partnerForm.name || !partnerForm.contact_person) return;
-
-    setIsSaving(true);
 
     const cleanCR = partnerForm.cr_number ? partnerForm.cr_number.replace(/\D/g, '').slice(0, 9) : undefined;
 
@@ -268,21 +266,12 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
       created_at: new Date().toISOString().slice(0, 10)
     };
 
-    // Optimistically update local state immediately
+    // 1. Optimistically update local state & localStorage immediately
     setPartners(prev => [newPartner, ...prev.filter(p => p.id !== newPartner.id)]);
 
-    try {
-      const { error } = await supabase.from('b2b_partners').insert([newPartner]);
-      if (error) {
-        console.warn('Supabase b2b_partners insert error notice:', error.message);
-      }
-    } catch (err) {
-      console.warn('Notice saving B2B partner to Supabase:', err);
-    } finally {
-      setIsSaving(false);
-    }
-
+    // 2. Immediately close modal and reset form so UI never hangs
     setShowAddPartnerModal(false);
+    setIsSaving(false);
     setPartnerForm({
       name: '',
       partner_type: 'sanad',
@@ -294,7 +283,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
       notes: ''
     });
 
-    // Display Real-time Success Notification Toast
+    // 3. Display Real-time Success Notification Toast immediately
     setSuccessMessage(
       isAr
         ? `✅ تم تسجيل وحفظ الشريك "${newPartner.name}" بنجاح في النظام!`
@@ -304,6 +293,19 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
     setTimeout(() => {
       setSuccessMessage(null);
     }, 4500);
+
+    // 4. Save to Supabase in background with timeout protection
+    try {
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Supabase network timeout')), 3000)
+      );
+      await Promise.race([
+        supabase.from('b2b_partners').insert([newPartner]),
+        timeoutPromise
+      ]);
+    } catch (err) {
+      console.warn('Background notice saving B2B partner to Supabase:', err);
+    }
   };
 
   // Copy shareable link for client self-onboarding under this partner

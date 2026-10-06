@@ -13,10 +13,12 @@ import {
   AlertTriangle,
   FileText,
   PieChart,
-  RefreshCw
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { getAllDepartments } from '../../config/departments';
+import MonthlyPerformanceReportModal from '../../components/reports/MonthlyPerformanceReportModal';
 
 type ReportType = 'financial' | 'operations' | 'compliance' | 'clients';
 type DateRange = 'month' | 'quarter' | 'year';
@@ -29,6 +31,7 @@ const ExecutiveReports = () => {
   const [dateRange, setDateRange] = useState<DateRange>('month');
   const [isGenerating, setIsGenerating] = useState(false);
   const [reportGenerated, setReportGenerated] = useState(false);
+  const [isMonthlyReportModalOpen, setIsMonthlyReportModalOpen] = useState(false);
 
   // Live DB State
   const [dbInvoices, setDbInvoices] = useState<any[]>([]);
@@ -165,6 +168,37 @@ const ExecutiveReports = () => {
             </button>
           </div>
         )}
+      </div>
+
+      {/* ── Featured: Monthly Office Performance Report (6-Page Executive Suite) ───────────────────────────── */}
+      <div className="print:hidden bg-gradient-to-r from-slate-900 via-zinc-900 to-[#4a0808] rounded-[2rem] p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-red-900/30">
+        <div className="absolute -top-24 -end-24 w-72 h-72 bg-red-600/20 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          <div className="space-y-3 max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-black tracking-wider uppercase">
+              <Sparkles size={14} className="animate-pulse" />
+              {isAr ? 'التقرير الإداري الرسمي المعتمد' : 'Executive A4 Suite · Exact 6-Page Design'}
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              {isAr ? 'تقرير أداء المكتب الشهري الداخلي' : 'Monthly Office Performance Report'}
+            </h2>
+            <p className="text-slate-300 text-xs sm:text-sm font-medium leading-relaxed">
+              {isAr
+                ? 'إصدار التقرير التنفيذي الشامل المكوّن من 6 صفحات A4 متطابقة: الملخص التنفيذي، الأداء المالي والخدمات، الموارد البشرية والعمليات، خدمة العملاء والتسويق، الهوية المؤسسية، وخطة عمل الشهر القادم مع قرارات الرئيس التنفيذي.'
+                : 'Generate the complete 6-page A4 executive office performance report with full live aggregation: Executive Summary, Financial Performance & Services, HR & Operations, Client Satisfaction & Sales, Brand Identity, and Next Month Action Plan with CEO Sign-off.'}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            <button
+              onClick={() => setIsMonthlyReportModalOpen(true)}
+              className="w-full sm:w-auto bg-gradient-to-r from-[#A11212] to-red-700 hover:from-red-700 hover:to-[#A11212] text-white px-6 py-3.5 rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-red-950/50 hover:scale-[1.02] active:scale-95"
+            >
+              <FileText size={18} />
+              <span>{isAr ? 'فتح استوديو التقرير والطباعة A4' : 'Open Report Studio & Print A4'}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ── Configuration Engine (Hidden on Print) ───────────────────── */}
@@ -424,6 +458,16 @@ const ExecutiveReports = () => {
           <p className="font-bold">{isAr ? 'حدد الإعدادات واضغط على توليد لإنشاء التقرير المباشر' : 'Configure settings and hit Generate to build the live report'}</p>
         </div>
       )}
+
+      {/* Monthly Performance Report Modal */}
+      <MonthlyPerformanceReportModal
+        isOpen={isMonthlyReportModalOpen}
+        onClose={() => setIsMonthlyReportModalOpen(false)}
+        invoices={dbInvoices}
+        services={dbServices}
+        clients={dbClients}
+        staff={dbProfiles}
+      />
     </div>
   );
 };
