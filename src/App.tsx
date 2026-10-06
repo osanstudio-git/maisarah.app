@@ -164,6 +164,7 @@ function App() {
             <Route element={<ProtectedRoute allowedRoles={['crm', 'manager']} />}>
               <Route path="/crm" element={<CRMPortal />} />
               <Route path="/crm/dashboard" element={<CRMPortal />} />
+              <Route path="/crm/b2b" element={<CRMPortal />} />
               <Route path="/crm/leads" element={<CRMPortal />} />
               <Route path="/crm/clients" element={<CRMPortal />} />
               <Route path="/crm/quotations" element={<CRMPortal />} />

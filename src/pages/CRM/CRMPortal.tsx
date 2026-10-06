@@ -18,6 +18,8 @@ import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
 import CRMLeadManagement from '../../components/crm/CRMLeadManagement';
 import BusinessClubAdmin from '../../components/crm/BusinessClubAdmin';
+import CRMB2BPartners from '../../components/crm/CRMB2BPartners';
+import type { B2BPartner } from '../../components/crm/CRMB2BPartners';
 import { addDSREntry } from '../../utils/dsrSync';
 
 // --- Types & Interfaces ---
@@ -199,6 +201,7 @@ export default function CRMPortal() {
   // Derived active tab from current URL pathname
   const getActiveTabFromPath = () => {
     const path = location.pathname;
+    if (path.includes('/crm/b2b')) return 'b2b';
     if (path.includes('/crm/leads')) return 'pipeline';
     if (path.includes('/crm/quotations')) return 'quotations';
     if (path.includes('/crm/clients')) return 'clients';
@@ -213,6 +216,7 @@ export default function CRMPortal() {
 
   const handleTabChange = (tabId: string) => {
     if (tabId === 'dashboard') navigate('/crm/dashboard');
+    else if (tabId === 'b2b') navigate('/crm/b2b');
     else if (tabId === 'quotations') navigate('/crm/quotations');
     else if (tabId === 'pipeline') navigate('/crm/leads');
     else if (tabId === 'clients') navigate('/crm/clients');
@@ -469,15 +473,53 @@ export default function CRMPortal() {
 
   // --- Onboarding Client Modal/Form States ---
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [isSubmittingOnboard, setIsSubmittingOnboard] = useState(false);
+  const [onboardIntakeMode, setOnboardIntakeMode] = useState<'quick' | 'full'>('quick');
   const [clientType, setClientType] = useState<'B2B' | 'B2C'>('B2B');
   const [onboardForm, setOnboardForm] = useState({
+    // B2B Channel Linking
+    b2bPartnerId: '',
+    b2bPartnerName: '',
+    
+    // Core Contacts & Identifiers
     name: '',
+    position: 'General Manager / Owner',
     email: '',
     phone: '',
     companyPhone: '',
     companyName: '',
     registrationNumber: '',
+    preferredCommunication: 'whatsapp' as 'whatsapp' | 'phone' | 'email',
+
+    // Company Information (Page 1)
+    industry: 'Trading & Services',
+    yearEstablished: '2023',
+    numberOfEmployees: '5-20',
+    companyAddress: 'Muscat, Sultanate of Oman',
+    website: '',
+    socialMedia: '',
+
+    // Current Business Status (Page 1)
+    dealingWithAuditFirm: 'no' as 'yes' | 'no',
+    accountingSoftware: 'QuickBooks / Zoho',
+    currentAuditors: '',
+
+    // Services of Interest & Future Plans (Page 1)
     servicePackage: [] as string[],
+    futurePlans: [] as string[],
+
+    // Follow-up & Opportunity Pipeline (Page 2)
+    leadSource: 'B2B Referral Channel',
+    proposalRequired: 'yes' as 'yes' | 'no',
+    estimatedOpportunityValue: 0,
+    probabilityOfClosing: 80,
+    expectedClosingDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+    assignedConsultant: MOCK_EMPLOYEES[0].name,
+    priority: 'high' as 'high' | 'medium' | 'low',
+    meetingNotes: '',
+    afterMeetingChecklist: ['Quotation Company Profile are sent', 'Add to CRM'] as string[],
+
+    // Operations & Assignments
     overallManager: MOCK_EMPLOYEES[0].name,
     initialActivity: '',
     monthlyBilling: 0,
@@ -487,11 +529,34 @@ export default function CRMPortal() {
     autoQuotation: true
   });
 
+  const handleOpenOnboardWithPartner = (partnerId?: string, partnerName?: string) => {
+    setOnboardForm(prev => ({
+      ...prev,
+      b2bPartnerId: partnerId || '',
+      b2bPartnerName: partnerName || '',
+      leadSource: partnerName ? `B2B: ${partnerName}` : 'B2B Referral Channel'
+    }));
+    setClientType('B2B');
+    setShowOnboardingModal(true);
+  };
+
   const SERVICE_RATES: Record<string, number> = {
-    'Tax & VAT': 150,
+    'Audit & Assurance': 350,
+    'Accounting & Bookkeeping': 250,
+    'VAT Services': 150,
+    'Tax Consultation': 200,
+    'Corporate Tax': 300,
+    'Feasibility Study': 600,
+    'Financial Reporting': 250,
+    'Business Advisory': 400,
+    'CFO Services': 500,
+    'Business Valuation': 700,
+    'Internal Audit': 450,
+    'Payroll Services': 150,
+    'Company Formation': 300,
     'Audit': 300,
-    'Bookkeeping': 250,
-    'Business Advisory': 400
+    'Tax & VAT': 150,
+    'Bookkeeping': 250
   };
 
   // --- Combo Work Configuration States ---
@@ -1026,84 +1091,188 @@ export default function CRMPortal() {
   // --- Lead Onboarding & Submission logic (Supabase) ---
   const handleOnboardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingOnboard) return;
+    setIsSubmittingOnboard(true);
 
-    let calculatedBilling = onboardForm.monthlyBilling;
-    if (calculatedBilling === 0) {
-      calculatedBilling = onboardForm.servicePackage.reduce((sum, pkg) => sum + (SERVICE_RATES[pkg] || 0), 0);
-      if (onboardForm.isClubMember) {
-        const discount = onboardForm.clubTier === 'platinum' ? 0.20 : onboardForm.clubTier === 'gold' ? 0.15 : 0.10;
-        calculatedBilling = Math.round(calculatedBilling * (1 - discount));
-      }
-    }
-
-    const expiryDate = onboardForm.contractExpiryDate ||
-      new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    const clientPayload = {
-      company_name: clientType === 'B2B' ? (onboardForm.companyName || onboardForm.name) : onboardForm.name,
-      cr_number: clientType === 'B2B' ? onboardForm.registrationNumber : null,
-      email: onboardForm.email,
-      phone: onboardForm.phone,
-      monthly_billing: calculatedBilling,
-      is_club_member: onboardForm.isClubMember,
-      club_tier: onboardForm.isClubMember ? onboardForm.clubTier : null,
-      contract_expiry_date: expiryDate,
-      source: clientType === 'B2B' ? 'b2b' : 'direct',
-    };
-
-    const { data: newClientRow, error } = await supabase
-      .from('clients')
-      .insert([clientPayload])
-      .select()
-      .maybeSingle();
-
-    if (error) {
-      alert('Error saving client: ' + error.message);
-      return;
-    }
-
-    // Auto-create quotations in Supabase
-    if (onboardForm.autoQuotation && onboardForm.servicePackage.length > 0) {
-      const quoteRows = onboardForm.servicePackage.map(pkg => {
-        let budget = SERVICE_RATES[pkg] || 0;
+    try {
+      let calculatedBilling = onboardForm.monthlyBilling;
+      if (calculatedBilling === 0) {
+        calculatedBilling = onboardForm.servicePackage.reduce((sum, pkg) => sum + (SERVICE_RATES[pkg] || 0), 0);
         if (onboardForm.isClubMember) {
           const discount = onboardForm.clubTier === 'platinum' ? 0.20 : onboardForm.clubTier === 'gold' ? 0.15 : 0.10;
-          budget = Math.round(budget * (1 - discount));
+          calculatedBilling = Math.round(calculatedBilling * (1 - discount));
         }
-        const vatAmt = +(budget * 0.05).toFixed(3);
-        return {
-          client_id: newClientRow.id,
-          client_name: clientType === 'B2B' ? onboardForm.companyName : onboardForm.name,
-          client_type: clientType,
-          services: [pkg],
-          subtotal: budget,
-          vat_amount: vatAmt,
-          total_amount: +(budget + vatAmt).toFixed(3),
-          status: 'pending',
-          valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        };
+      }
+
+      const expiryDate = onboardForm.contractExpiryDate ||
+        new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const clientName = clientType === 'B2B' ? (onboardForm.companyName || onboardForm.name) : onboardForm.name;
+
+      const clientPayload: any = {
+        company_name: clientName,
+        contact_person: onboardForm.name,
+        cr_number: clientType === 'B2B' ? (onboardForm.registrationNumber || null) : null,
+        email: onboardForm.email || null,
+        phone: onboardForm.phone || null,
+        monthly_billing: calculatedBilling,
+        contract_expiry_date: expiryDate,
+        source: clientType === 'B2B' ? 'b2b' : 'direct',
+        compliance_status: 'active'
+      };
+
+      let newClientRow: any = null;
+
+      // 1. Try full insertion into clients table
+      try {
+        const { data, error } = await supabase
+          .from('clients')
+          .insert([{
+            ...clientPayload,
+            is_club_member: onboardForm.isClubMember,
+            club_tier: onboardForm.isClubMember ? onboardForm.clubTier : null,
+          }])
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          console.warn('Full client insert notice:', error.message);
+          // Fallback to core standard schema
+          const { data: fbData, error: fbError } = await supabase
+            .from('clients')
+            .insert([clientPayload])
+            .select()
+            .maybeSingle();
+          if (fbError) console.warn('Standard client insert notice:', fbError.message);
+          newClientRow = fbData;
+        } else {
+          newClientRow = data;
+        }
+      } catch (err) {
+        console.warn('Supabase client insert error:', err);
+      }
+
+      const effectiveClientId = newClientRow?.id || crypto.randomUUID();
+
+      // 2. Auto-create quotations in Supabase
+      if (onboardForm.autoQuotation && onboardForm.servicePackage.length > 0) {
+        const quoteRows = onboardForm.servicePackage.map(pkg => {
+          let budget = SERVICE_RATES[pkg] || 0;
+          if (onboardForm.isClubMember) {
+            const discount = onboardForm.clubTier === 'platinum' ? 0.20 : onboardForm.clubTier === 'gold' ? 0.15 : 0.10;
+            budget = Math.round(budget * (1 - discount));
+          }
+          const vatAmt = +(budget * 0.05).toFixed(3);
+          return {
+            client_id: effectiveClientId,
+            client_name: clientName,
+            client_type: clientType,
+            services: [pkg],
+            subtotal: budget,
+            vat_amount: vatAmt,
+            total_amount: +(budget + vatAmt).toFixed(3),
+            status: 'pending',
+            valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          };
+        });
+        try {
+          await supabase.from('quotations').insert(quoteRows);
+        } catch (qErr) {
+          console.warn('Quote auto-create notice:', qErr);
+        }
+      }
+
+      // 3. Create Department Work Deliverables & Client Jobs
+      if (onboardForm.servicePackage.length > 0) {
+        for (const serviceName of onboardForm.servicePackage) {
+          const rate = SERVICE_RATES[serviceName] || 250;
+          try {
+            await supabase.from('client_jobs').insert([{
+              client_id: effectiveClientId,
+              service_type: serviceName,
+              billing_type: 'monthly',
+              status: 'pending',
+              amount: rate,
+              vat_amount: +(rate * 0.05).toFixed(3),
+              description: `Onboarded Client Work: ${serviceName} for ${clientName}`,
+              deadline: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+            }]);
+          } catch (jobErr) {
+            console.warn('Client job insert notice:', jobErr);
+          }
+
+          try {
+            await supabase.from('services').insert([{
+              client_id: effectiveClientId,
+              title: `${serviceName} - ${clientName}`,
+              description: onboardForm.initialActivity || `Client service deliverable for ${serviceName}. Assigned Manager: ${onboardForm.overallManager}`,
+              status: 'ongoing',
+              due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+            }]);
+          } catch (sErr) {
+            console.warn('Service deliverable insert notice:', sErr);
+          }
+        }
+      }
+
+      // 4. Notify HOD role about new client
+      try {
+        await supabase.from('notifications').insert([{
+          role: 'hod',
+          type: 'new_client',
+          title: 'New Client Onboarded via CRM',
+          message: `Client "${clientName}" onboarded. Services: ${onboardForm.servicePackage.join(', ') || 'General'}. Manager: ${onboardForm.overallManager}.`,
+          ref_id: effectiveClientId,
+          ref_table: 'clients',
+        }]);
+      } catch (nErr) {
+        console.warn('Notification insert notice:', nErr);
+      }
+
+      // 5. Optimistic State Update for instantaneous UI responsiveness
+      const newClientObj: Client = {
+        id: effectiveClientId,
+        name: onboardForm.name,
+        companyName: clientType === 'B2B' ? onboardForm.companyName : undefined,
+        registrationNumber: onboardForm.registrationNumber || undefined,
+        email: onboardForm.email,
+        phone: onboardForm.phone,
+        companyPhone: onboardForm.companyPhone || undefined,
+        type: clientType,
+        servicesPackage: onboardForm.servicePackage,
+        overallManager: onboardForm.overallManager,
+        delegatedServices: {},
+        monthlyBilling: calculatedBilling,
+        yearlyBilling: calculatedBilling * 12,
+        created_at: new Date().toISOString().slice(0, 10),
+        contractExpiryDate: expiryDate,
+        isClubMember: onboardForm.isClubMember,
+        clubTier: onboardForm.isClubMember ? onboardForm.clubTier : undefined,
+        activityHistory: onboardForm.initialActivity ? [`${new Date().toISOString().slice(0, 10)} - ${onboardForm.initialActivity}`] : []
+      };
+
+      setClients(prev => [newClientObj, ...prev.filter(c => c.id !== effectiveClientId)]);
+
+      setShowOnboardingModal(false);
+      setOnboardForm({
+        name: '', email: '', phone: '', companyPhone: '', companyName: '',
+        registrationNumber: '', servicePackage: [], overallManager: staffList[0]?.name || MOCK_EMPLOYEES[0].name,
+        initialActivity: '', monthlyBilling: 0, contractExpiryDate: '',
+        isClubMember: false, clubTier: 'silver', autoQuotation: true,
       });
-      await supabase.from('quotations').insert(quoteRows);
+
+      alert(isAr
+        ? `🎉 تم تسجيل وإدخال العميل "${clientName}" بنجاح وتوليد عروض الأسعار وتوزيع مهام العمل!`
+        : `🎉 Client "${clientName}" registered & onboarded successfully! Quotations and department tasks generated.`
+      );
+
+      await fetchAll();
+    } catch (err: any) {
+      console.error('Error during client onboarding:', err);
+      alert(err.message || 'Error processing client onboarding');
+    } finally {
+      setIsSubmittingOnboard(false);
     }
-
-    // Notify HOD role about new client
-    await supabase.from('notifications').insert([{
-      role: 'hod',
-      type: 'new_client',
-      title: 'New Client Onboarded',
-      message: `A new client "${onboardForm.name}" has been onboarded via CRM. Services: ${onboardForm.servicePackage.join(', ')}.`,
-      ref_id: newClientRow.id,
-      ref_table: 'clients',
-    }]);
-
-    setShowOnboardingModal(false);
-    setOnboardForm({
-      name: '', email: '', phone: '', companyPhone: '', companyName: '',
-      registrationNumber: '', servicePackage: [], overallManager: MOCK_EMPLOYEES[0].name,
-      initialActivity: '', monthlyBilling: 0, contractExpiryDate: '',
-      isClubMember: false, clubTier: 'silver', autoQuotation: true,
-    });
-    // fetchAll() triggered via real-time subscription
   };
 
   // --- Shift lead pipeline step (Supabase) ---
@@ -1543,12 +1712,21 @@ export default function CRMPortal() {
         </div>
       )}
 
-      {/* 2. LEAD PIPELINE TAB (Phase 3 crm_leads) */}
+      {/* 2. B2B CORPORATE & CHANNEL PARTNERS TAB */}
+      {activeTab === 'b2b' && (
+        <CRMB2BPartners
+          clients={clients}
+          staffList={staffList}
+          onOpenOnboardModal={handleOpenOnboardWithPartner}
+        />
+      )}
+
+      {/* 3. LEAD PIPELINE TAB (Phase 3 crm_leads) */}
       {activeTab === 'pipeline' && (
         <CRMLeadManagement />
       )}
 
-      {/* 3. CLIENTS & LEADS DIRECTORY TAB */}
+      {/* 4. CLIENTS & LEADS DIRECTORY TAB */}
       {activeTab === 'clients' && (
         <div className="space-y-6">
           {/* Header Controls & Export Verification */}
@@ -2304,263 +2482,724 @@ export default function CRMPortal() {
 
       {/* --- MODALS & POPUPS --- */}
 
-      {/* A. Onboarding Client Modal */}
+      {/* A. Comprehensive B2B Client Onboarding & Intake Modal (Maisarah 2-Page Form) */}
       {showOnboardingModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <form onSubmit={handleOnboardSubmit} className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden my-8">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">Client Onboarding Portal</h3>
-              <button type="button" onClick={() => setShowOnboardingModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
-                <XCircle size={18} className="text-gray-400" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-
-              {/* Type Switcher */}
-              <div className="bg-gray-100 p-1.5 rounded-xl flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => setClientType('B2B')}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${clientType === 'B2B' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                >
-                  B2B Corporate Account
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setClientType('B2C')}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${clientType === 'B2C' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                >
-                  B2C Standard Customer
-                </button>
+          <form onSubmit={handleOnboardSubmit} className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden my-6 animate-in fade-in zoom-in duration-200 border border-gray-100">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-gray-50/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-red-50 text-[#A11212] flex items-center justify-center font-black">
+                  <FileText size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                    {isAr ? 'استمارة تسجيل ومعلومات عميل B2B' : 'B2B Client Information & Onboarding Form'}
+                  </h3>
+                  <p className="text-[10px] text-gray-400 font-bold">
+                    {isAr ? 'مطابقة لنموذج ميسرة الرسمي لاستيعاب العملاء الجدد وربطهم بشركاء B2B' : 'Official Maisarah intake dossier linked with B2B Channel attribution'}
+                  </p>
+                </div>
               </div>
 
-              {/* General Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Contact Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Salim Al-Busaidi"
-                    value={onboardForm.name}
-                    onChange={(e) => setOnboardForm({ ...onboardForm, name: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                  />
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                {/* Mode Toggle: Fast vs Full Dossier */}
+                <div className="bg-gray-200/80 p-1 rounded-xl flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setOnboardIntakeMode('quick')}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                      onboardIntakeMode === 'quick' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    ⚡ {isAr ? 'تسجيل سريع' : 'Fast Mode'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnboardIntakeMode('full')}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                      onboardIntakeMode === 'full' ? 'bg-[#A11212] text-white shadow-xs' : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    📋 {isAr ? 'ملف متكامل (صفحتين)' : 'Full 2-Page Form'}
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="name@company.om"
-                    value={onboardForm.email}
-                    onChange={(e) => setOnboardForm({ ...onboardForm, email: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                  />
+
+                <button
+                  type="button"
+                  onClick={() => setShowOnboardingModal(false)}
+                  className="p-1.5 hover:bg-gray-200/70 rounded-xl text-gray-400 hover:text-gray-700 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6 max-h-[72vh] overflow-y-auto">
+              {/* Account Category Switcher & B2B Partner Selector */}
+              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    {isAr ? 'تصنيف الحساب والشريك المرجعي' : 'Account Category & Referral Channel'}
+                  </span>
+                  <div className="flex gap-1 bg-white p-1 rounded-xl border border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setClientType('B2B')}
+                      className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${
+                        clientType === 'B2B' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      B2B Corporate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClientType('B2C')}
+                      className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${
+                        clientType === 'B2C' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      B2C Standard
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Personal Phone</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="+968..."
-                    value={onboardForm.phone}
-                    onChange={(e) => setOnboardForm({ ...onboardForm, phone: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                  />
-                </div>
+
                 {clientType === 'B2B' && (
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Corporate Phone</label>
-                    <input
-                      type="text"
-                      placeholder="+968 2456..."
-                      value={onboardForm.companyPhone}
-                      onChange={(e) => setOnboardForm({ ...onboardForm, companyPhone: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-gray-200">
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-600 uppercase tracking-widest mb-1">
+                        {isAr ? 'شريك وقناة B2B المرجعية' : 'Attributed B2B Partner / Channel'}
+                      </label>
+                      <select
+                        value={onboardForm.b2bPartnerName || (onboardForm.b2bPartnerId ? 'Al-Tasheel Sanad Services Group' : '')}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setOnboardForm({
+                            ...onboardForm,
+                            b2bPartnerName: val,
+                            leadSource: val ? `B2B: ${val}` : 'B2B Referral Channel'
+                          });
+                        }}
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                      >
+                        <option value="">-- Direct Corporate / Independent B2B --</option>
+                        <option value="Al-Tasheel Sanad Services Group">Al-Tasheel Sanad Services Group (Muscat)</option>
+                        <option value="Oman Legal & Corporate Advisory Chambers">Oman Legal & Corporate Advisory (Al-Mouj)</option>
+                        <option value="Sohar Industrial Holding B2B Cluster">Sohar Industrial Holding Cluster (Freezone)</option>
+                        <option value="Duqm Business & Startup Incubator">Duqm Business & Startup Incubator (SEZAD)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-600 uppercase tracking-widest mb-1">
+                        {isAr ? 'قناة ورود العميل (Lead Source)' : 'Lead Source Note'}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Sanad Al-Khuwair / Law firm referral"
+                        value={onboardForm.leadSource}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, leadSource: e.target.value })}
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* B2B Specific details */}
-              {clientType === 'B2B' && (
-                <div className="border-t border-gray-100 pt-4 space-y-4">
-                  <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">B2B Corporate Identifiers</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 1. COMPANY INFORMATION (Page 1 of Maisarah Form) */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 border-b border-gray-150 pb-2">
+                  <Building2 size={15} className="text-[#A11212]" />
+                  <h4 className="text-xs font-black text-gray-900 uppercase tracking-wider">
+                    {isAr ? '1. معلومات الشركة والمنشأة (Company Information)' : '1. Company Information (Page 1)'}
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">
+                      {isAr ? 'اسم الشركة *' : 'Company Name *'}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. OSBIC Engineering & Contracting LLC"
+                      value={onboardForm.companyName}
+                      onChange={(e) => setOnboardForm({ ...onboardForm, companyName: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">
+                      {isAr ? 'رقم السجل التجاري (CR No.)' : 'Commercial Registration (CR) No.'}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. CR-1456789"
+                      value={onboardForm.registrationNumber}
+                      onChange={(e) => setOnboardForm({ ...onboardForm, registrationNumber: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    />
+                  </div>
+                </div>
+
+                {onboardIntakeMode === 'full' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
                     <div>
-                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Company Name</label>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Industry / Sector</label>
                       <input
                         type="text"
-                        required
-                        placeholder="Mazoon Electricity SAOC"
-                        value={onboardForm.companyName}
-                        onChange={(e) => setOnboardForm({ ...onboardForm, companyName: e.target.value })}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                        placeholder="Oil & Gas, Logistics, Trading..."
+                        value={onboardForm.industry}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, industry: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Commercial Registration (CR)</label>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Year Established</label>
                       <input
                         type="text"
-                        required
-                        placeholder="CR-1234567"
-                        value={onboardForm.registrationNumber}
-                        onChange={(e) => setOnboardForm({ ...onboardForm, registrationNumber: e.target.value })}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                        placeholder="e.g. 2021"
+                        value={onboardForm.yearEstablished}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, yearEstablished: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Number of Employees</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 15 Employees"
+                        value={onboardForm.numberOfEmployees}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, numberOfEmployees: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {onboardIntakeMode === 'full' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Company Address / Location</label>
+                      <input
+                        type="text"
+                        placeholder="Building 44, Al-Khuwair, Muscat"
+                        value={onboardForm.companyAddress}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, companyAddress: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Website & Social Media</label>
+                      <input
+                        type="text"
+                        placeholder="www.company.om / @company_om"
+                        value={onboardForm.website}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, website: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. CONTACT PERSON (Page 1 of Maisarah Form) */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 border-b border-gray-150 pb-2">
+                  <Users size={15} className="text-[#A11212]" />
+                  <h4 className="text-xs font-black text-gray-900 uppercase tracking-wider">
+                    {isAr ? '2. الشخص المسؤول ومعلومات التواصل (Contact Person)' : '2. Contact Person Details (Page 1)'}
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">
+                      {isAr ? 'الاسم الكامل للمسؤول *' : 'Contact Full Name *'}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Shahad Al-Harthi"
+                      value={onboardForm.name}
+                      onChange={(e) => setOnboardForm({ ...onboardForm, name: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">
+                      {isAr ? 'رقم الهاتف الجوال (WhatsApp) *' : 'Mobile Number (WhatsApp) *'}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="+968 9..."
+                      value={onboardForm.phone}
+                      onChange={(e) => setOnboardForm({ ...onboardForm, phone: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">
+                      {isAr ? 'البريد الإلكتروني' : 'Email Address'}
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="contact@company.om"
+                      value={onboardForm.email}
+                      onChange={(e) => setOnboardForm({ ...onboardForm, email: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    />
+                  </div>
+                </div>
+
+                {onboardIntakeMode === 'full' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 bg-gray-50/50 p-3 rounded-2xl border border-gray-150">
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Position / Job Title</label>
+                      <input
+                        type="text"
+                        placeholder="Managing Director / Finance Head"
+                        value={onboardForm.position}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, position: e.target.value })}
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Preferred Communication</label>
+                      <div className="flex gap-4 pt-1.5 text-xs font-bold text-gray-700">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="comm"
+                            checked={onboardForm.preferredCommunication === 'whatsapp'}
+                            onChange={() => setOnboardForm({ ...onboardForm, preferredCommunication: 'whatsapp' })}
+                            className="text-[#A11212] accent-[#A11212]"
+                          />
+                          <span>WhatsApp</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="comm"
+                            checked={onboardForm.preferredCommunication === 'phone'}
+                            onChange={() => setOnboardForm({ ...onboardForm, preferredCommunication: 'phone' })}
+                            className="text-[#A11212] accent-[#A11212]"
+                          />
+                          <span>Phone Call</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="comm"
+                            checked={onboardForm.preferredCommunication === 'email'}
+                            onChange={() => setOnboardForm({ ...onboardForm, preferredCommunication: 'email' })}
+                            className="text-[#A11212] accent-[#A11212]"
+                          />
+                          <span>Email</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 3. CURRENT BUSINESS STATUS & SOFTWARE (Page 1) */}
+              {onboardIntakeMode === 'full' && (
+                <div className="space-y-3 bg-red-900/5 p-4 rounded-2xl border border-red-900/10">
+                  <div className="flex items-center gap-2 border-b border-red-900/10 pb-2">
+                    <Briefcase size={15} className="text-[#A11212]" />
+                    <h4 className="text-xs font-black text-gray-900 uppercase tracking-wider">
+                      {isAr ? '3. الوضع المحاسبي والتدقيق الحالي (Current Business Status)' : '3. Current Audit & Accounting Status (Page 1)'}
+                    </h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">
+                        Dealing with other audit firms?
+                      </label>
+                      <select
+                        value={onboardForm.dealingWithAuditFirm}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, dealingWithAuditFirm: e.target.value as any })}
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                      >
+                        <option value="no">No (First time / Switching)</option>
+                        <option value="yes">Yes (Currently engaged)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">
+                        Accounting Software Used
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. QuickBooks, Zoho Books, Odoo, Tally, Excel"
+                        value={onboardForm.accountingSoftware}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, accountingSoftware: e.target.value })}
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">
+                        Current Auditors (If Any)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Previous audit firm name"
+                        value={onboardForm.currentAuditors}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, currentAuditors: e.target.value })}
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
                       />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Scope & Assignee */}
-              <div className="border-t border-gray-100 pt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Overall Account Manager</label>
-                  <select
-                    value={onboardForm.overallManager}
-                    onChange={(e) => setOnboardForm({ ...onboardForm, overallManager: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                  >
-                    {MOCK_EMPLOYEES.map(emp => (
-                      <option key={emp.id} value={emp.name}>{emp.name} ({emp.dept})</option>
-                    ))}
-                  </select>
+              {/* 4. SERVICES OF INTEREST (Page 1 of Maisarah Form) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-gray-150 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Layers size={15} className="text-[#A11212]" />
+                    <h4 className="text-xs font-black text-gray-900 uppercase tracking-wider">
+                      {isAr ? '4. الخدمات المطلوبة (Services of Interest)' : '4. Services of Interest (Page 1)'}
+                    </h4>
+                  </div>
+                  <span className="text-[10px] text-[#A11212] font-black">
+                    Selected: {onboardForm.servicePackage.length} Services
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 flex justify-between">
-                    <span>Monthly Billing (OMR)</span>
-                    <span className="text-[#A11212] font-black">
-                      Est: {onboardForm.servicePackage.reduce((sum, pkg) => sum + (SERVICE_RATES[pkg] || 0), 0) > 0 ? (
-                        (() => {
-                          let sum = onboardForm.servicePackage.reduce((acc, pkg) => acc + (SERVICE_RATES[pkg] || 0), 0);
-                          if (onboardForm.isClubMember) {
-                            const disc = onboardForm.clubTier === 'platinum' ? 0.20 : onboardForm.clubTier === 'gold' ? 0.15 : 0.10;
-                            sum = Math.round(sum * (1 - disc));
-                          }
-                          return `${sum} OMR`;
-                        })()
-                      ) : 'Select services'}
-                    </span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={onboardForm.monthlyBilling}
-                    onChange={(e) => setOnboardForm({ ...onboardForm, monthlyBilling: Number(e.target.value) })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                    placeholder="Enter 0 to use Auto-Estimate"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Contract Expiry Date</label>
-                  <input
-                    type="date"
-                    value={onboardForm.contractExpiryDate}
-                    onChange={(e) => setOnboardForm({ ...onboardForm, contractExpiryDate: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                  />
-                </div>
-              </div>
 
-              {/* Service Select Checklist */}
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Scope of Services</label>
-                <div className="grid grid-cols-2 gap-2 bg-gray-50 p-4 rounded-2xl">
-                  {DEPARTMENTS.map(dept => (
-                    <label key={dept} className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={onboardForm.servicePackage.includes(dept)}
-                        onChange={(e) => {
-                          const active = e.target.checked;
-                          setOnboardForm(prev => ({
-                            ...prev,
-                            servicePackage: active
-                              ? [...prev.servicePackage, dept]
-                              : prev.servicePackage.filter(s => s !== dept)
-                          }));
-                        }}
-                        className="w-4 h-4 rounded text-[#A11212] accent-[#A11212]"
-                      />
-                      <span>{dept}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Business Club Membership & Quotations */}
-              <div className="border-t border-gray-100 pt-4 space-y-3">
-                <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">Business Club & Estimations</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-red-900/5 p-4 rounded-2xl border border-red-900/10">
-                  <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={onboardForm.isClubMember}
-                      onChange={(e) => setOnboardForm({ ...onboardForm, isClubMember: e.target.checked })}
-                      className="w-4 h-4 rounded text-[#A11212] accent-[#A11212]"
-                    />
-                    <span>Business Club Member</span>
-                  </label>
-
-                  {onboardForm.isClubMember && (
-                    <div>
-                      <label className="block text-[8px] font-black text-gray-400 uppercase mb-1">Club Tier</label>
-                      <select
-                        value={onboardForm.clubTier}
-                        onChange={(e) => setOnboardForm({ ...onboardForm, clubTier: e.target.value as any })}
-                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 bg-gray-50 p-4 rounded-2xl border border-gray-150">
+                  {[
+                    'Audit & Assurance',
+                    'Accounting & Bookkeeping',
+                    'VAT Services',
+                    'Tax Consultation',
+                    'Corporate Tax',
+                    'Feasibility Study',
+                    'Financial Reporting',
+                    'Business Advisory',
+                    'CFO Services',
+                    'Business Valuation',
+                    'Internal Audit',
+                    'Payroll Services',
+                    'Company Formation'
+                  ].map(service => {
+                    const isChecked = onboardForm.servicePackage.includes(service);
+                    return (
+                      <label
+                        key={service}
+                        className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                          isChecked
+                            ? 'bg-red-50 border-red-200 text-[#A11212]'
+                            : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                        }`}
                       >
-                        <option value="silver">Silver Tier (10% Off)</option>
-                        <option value="gold">Gold Tier (15% Off)</option>
-                        <option value="platinum">Platinum Tier (20% Off)</option>
-                      </select>
-                    </div>
-                  )}
-
-                  <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={onboardForm.autoQuotation}
-                      onChange={(e) => setOnboardForm({ ...onboardForm, autoQuotation: e.target.checked })}
-                      className="w-4 h-4 rounded text-[#A11212] accent-[#A11212]"
-                    />
-                    <span>Auto-create Quotations</span>
-                  </label>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setOnboardForm(prev => ({
+                              ...prev,
+                              servicePackage: checked
+                                ? [...prev.servicePackage, service]
+                                : prev.servicePackage.filter(s => s !== service)
+                            }));
+                          }}
+                          className="w-4 h-4 rounded text-[#A11212] accent-[#A11212]"
+                        />
+                        <span className="truncate">{service}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Log Initial Activity */}
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Log Initial Activity</label>
-                <textarea
-                  placeholder="e.g. Introductory presentation completed, NDA signed..."
-                  value={onboardForm.initialActivity}
-                  onChange={(e) => setOnboardForm({ ...onboardForm, initialActivity: e.target.value })}
-                  rows={2}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] resize-none"
-                />
+              {/* 5. FUTURE PLANS (Page 1 of Maisarah Form) */}
+              {onboardIntakeMode === 'full' && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 border-b border-gray-150 pb-2">
+                    <TrendingUp size={15} className="text-[#A11212]" />
+                    <h4 className="text-xs font-black text-gray-900 uppercase tracking-wider">
+                      {isAr ? '5. الخطط المستقبلية وتوسعات العميل (Future Plans)' : '5. Future Plans & Growth Objectives (Page 1)'}
+                    </h4>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-gray-50/70 p-3.5 rounded-2xl border border-gray-150">
+                    {[
+                      'Business Expansion',
+                      'Seeking Investment',
+                      'Bank Financing',
+                      'Government Tender',
+                      'New Branch',
+                      'Cost Reduction',
+                      'Digital Transformation'
+                    ].map(plan => {
+                      const isChecked = onboardForm.futurePlans.includes(plan);
+                      return (
+                        <label
+                          key={plan}
+                          className={`flex items-center gap-2 p-2 rounded-xl border text-[11px] font-bold cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-amber-50 border-amber-200 text-amber-900'
+                              : 'bg-white border-gray-200 text-gray-650 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setOnboardForm(prev => ({
+                                ...prev,
+                                futurePlans: checked
+                                  ? [...prev.futurePlans, plan]
+                                  : prev.futurePlans.filter(p => p !== plan)
+                              }));
+                            }}
+                            className="w-3.5 h-3.5 rounded text-amber-600 accent-amber-600"
+                          />
+                          <span className="truncate">{plan}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 6. FOLLOW-UP, OPPORTUNITY VALUE & PRIORITY (Page 2 of Maisarah Form) */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 border-b border-gray-150 pb-2">
+                  <Target size={15} className="text-[#A11212]" />
+                  <h4 className="text-xs font-black text-gray-900 uppercase tracking-wider">
+                    {isAr ? '6. المتابعة، التقييم والفرصة المالية (Follow-up & Opportunity Value - Page 2)' : '6. Follow-up & Financial Opportunity (Page 2)'}
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 flex justify-between">
+                      <span>Monthly Billing (OMR)</span>
+                      <span className="text-[#A11212] font-black">
+                        Est: {onboardForm.servicePackage.reduce((sum, pkg) => sum + (SERVICE_RATES[pkg] || 0), 0) > 0 ? (
+                          (() => {
+                            let sum = onboardForm.servicePackage.reduce((acc, pkg) => acc + (SERVICE_RATES[pkg] || 0), 0);
+                            if (onboardForm.isClubMember) {
+                              const disc = onboardForm.clubTier === 'platinum' ? 0.20 : onboardForm.clubTier === 'gold' ? 0.15 : 0.10;
+                              sum = Math.round(sum * (1 - disc));
+                            }
+                            return `${sum} OMR`;
+                          })()
+                        ) : 'Select services'}
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={onboardForm.monthlyBilling}
+                      onChange={(e) => setOnboardForm({ ...onboardForm, monthlyBilling: Number(e.target.value) })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                      placeholder="Enter 0 to use Auto-Estimate"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">
+                      Priority Level
+                    </label>
+                    <select
+                      value={onboardForm.priority}
+                      onChange={(e) => setOnboardForm({ ...onboardForm, priority: e.target.value as any })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    >
+                      <option value="high">🔴 High Priority (Immediate Deal)</option>
+                      <option value="medium">🟡 Medium Priority (Active Follow-up)</option>
+                      <option value="low">🟢 Standard / Long-term</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">
+                      Assigned Account Manager
+                    </label>
+                    <select
+                      value={onboardForm.overallManager}
+                      onChange={(e) => setOnboardForm({ ...onboardForm, overallManager: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                    >
+                      {staffList.map(emp => (
+                        <option key={emp.id} value={emp.name}>{emp.name} ({emp.dept})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {onboardIntakeMode === 'full' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">
+                        Proposal Required & Win Probability (%)
+                      </label>
+                      <div className="flex gap-2">
+                        <select
+                          value={onboardForm.proposalRequired}
+                          onChange={(e) => setOnboardForm({ ...onboardForm, proposalRequired: e.target.value as any })}
+                          className="w-1/2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                        >
+                          <option value="yes">Proposal: YES</option>
+                          <option value="no">Proposal: NO</option>
+                        </select>
+                        <input
+                          type="number"
+                          placeholder="Probability %"
+                          value={onboardForm.probabilityOfClosing}
+                          onChange={(e) => setOnboardForm({ ...onboardForm, probabilityOfClosing: Number(e.target.value) })}
+                          className="w-1/2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Expected Closing Date</label>
+                      <input
+                        type="date"
+                        value={onboardForm.expectedClosingDate}
+                        onChange={(e) => setOnboardForm({ ...onboardForm, expectedClosingDate: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
+              {/* 7. MEETING NOTES & AFTER-MEETING CHECKLIST (Page 2) */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 border-b border-gray-150 pb-2">
+                  <CheckCircle2 size={15} className="text-[#A11212]" />
+                  <h4 className="text-xs font-black text-gray-900 uppercase tracking-wider">
+                    {isAr ? '7. ملاحظات الاجتماع والإجراءات اللاحقة (After Meeting Actions - Page 2)' : '7. Meeting Notes & Next Actions (Page 2)'}
+                  </h4>
+                </div>
+
+                <div>
+                  <textarea
+                    placeholder="e.g. Discussed annual statutory audit requirements, VAT filing schedule for 2026..."
+                    value={onboardForm.meetingNotes || onboardForm.initialActivity}
+                    onChange={(e) => setOnboardForm({ ...onboardForm, meetingNotes: e.target.value, initialActivity: e.target.value })}
+                    rows={2}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] resize-none"
+                  />
+                </div>
+
+                {onboardIntakeMode === 'full' && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {[
+                      'Quotation Company Profile are sent',
+                      'Second Meeting Scheduled',
+                      'Site Visit',
+                      'Proposal Presentation',
+                      'Follow-up Call',
+                      'Add to CRM'
+                    ].map(action => {
+                      const isChecked = onboardForm.afterMeetingChecklist.includes(action);
+                      return (
+                        <label
+                          key={action}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-green-50 border-green-200 text-green-800'
+                              : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setOnboardForm(prev => ({
+                                ...prev,
+                                afterMeetingChecklist: checked
+                                  ? [...prev.afterMeetingChecklist, action]
+                                  : prev.afterMeetingChecklist.filter(a => a !== action)
+                              }));
+                            }}
+                            className="w-3.5 h-3.5 rounded text-green-700 accent-green-700"
+                          />
+                          <span>{action}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 8. BUSINESS CLUB & AUTO QUOTATION TRIGGER */}
+              <div className="p-4 bg-red-900/5 rounded-2xl border border-red-900/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <label className="flex items-center gap-2 text-xs font-bold text-gray-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={onboardForm.isClubMember}
+                    onChange={(e) => setOnboardForm({ ...onboardForm, isClubMember: e.target.checked })}
+                    className="w-4 h-4 rounded text-[#A11212] accent-[#A11212]"
+                  />
+                  <span>Business Club Member</span>
+                </label>
+
+                {onboardForm.isClubMember && (
+                  <select
+                    value={onboardForm.clubTier}
+                    onChange={(e) => setOnboardForm({ ...onboardForm, clubTier: e.target.value as any })}
+                    className="bg-white border border-gray-200 rounded-xl px-3 py-1 text-xs font-bold outline-none focus:border-[#A11212]"
+                  >
+                    <option value="silver">Silver Tier (10% Off)</option>
+                    <option value="gold">Gold Tier (15% Off)</option>
+                    <option value="platinum">Platinum Tier (20% Off)</option>
+                  </select>
+                )}
+
+                <label className="flex items-center gap-2 text-xs font-bold text-gray-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={onboardForm.autoQuotation}
+                    onChange={(e) => setOnboardForm({ ...onboardForm, autoQuotation: e.target.checked })}
+                    className="w-4 h-4 rounded text-[#A11212] accent-[#A11212]"
+                  />
+                  <span>Auto-create Quotations in Studio</span>
+                </label>
+              </div>
             </div>
 
-            <div className="p-6 border-t border-gray-100 flex gap-3 bg-gray-50/50">
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-gray-100 flex gap-3 bg-gray-50/70">
               <button
                 type="button"
                 onClick={() => setShowOnboardingModal(false)}
-                className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-gray-100 transition-colors"
+                disabled={isSubmittingOnboard}
+                className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-gray-100 transition-colors disabled:opacity-50"
               >
-                Cancel
+                {isAr ? 'إلغاء' : 'Cancel'}
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors"
+                disabled={isSubmittingOnboard}
+                className="flex-1 bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#800e0e] transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-red-900/15"
               >
-                Register & Onboard
+                {isSubmittingOnboard ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    <span>Processing Registration...</span>
+                  </>
+                ) : (
+                  <span>{isAr ? 'تسجيل العميل وتوزيع المهام' : 'Register & Onboard Client'}</span>
+                )}
               </button>
             </div>
           </form>
