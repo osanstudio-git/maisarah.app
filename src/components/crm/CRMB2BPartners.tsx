@@ -36,7 +36,6 @@ export interface B2BPartner {
   email: string;
   location: string;
   cr_number?: string;
-  agreement_tier: 'standard' | 'silver' | 'gold' | 'platinum';
   notes?: string;
   created_at: string;
 }
@@ -57,8 +56,7 @@ const INITIAL_B2B_PARTNERS: B2BPartner[] = [
     email: 'salim@tasheel-oman.om',
     location: 'Muscat (Al-Khuwair)',
     cr_number: 'CR-1049281',
-    agreement_tier: 'platinum',
-    notes: 'Premier Sanad channel bringing 15+ corporate and SME registrations quarterly.',
+    notes: 'Premier Sanad channel bringing corporate and SME registrations.',
     created_at: '2026-01-10'
   },
   {
@@ -70,7 +68,6 @@ const INITIAL_B2B_PARTNERS: B2BPartner[] = [
     email: 'maryam@omanlegal.om',
     location: 'Muscat (Al-Mouj)',
     cr_number: 'CR-2039482',
-    agreement_tier: 'gold',
     notes: 'Legal partners referring international FDI companies for statutory audit and corporate tax.',
     created_at: '2026-02-14'
   },
@@ -83,7 +80,6 @@ const INITIAL_B2B_PARTNERS: B2BPartner[] = [
     email: 'tariq@soharholding.om',
     location: 'Sohar Freezone',
     cr_number: 'CR-3048192',
-    agreement_tier: 'gold',
     notes: 'Holding group coordinating subsidiaries bookkeeping & VAT filings.',
     created_at: '2026-03-01'
   },
@@ -96,7 +92,6 @@ const INITIAL_B2B_PARTNERS: B2BPartner[] = [
     email: 'khalid@duqmincubator.om',
     location: 'Duqm Special Economic Zone',
     cr_number: 'CR-4091823',
-    agreement_tier: 'silver',
     notes: 'Government-supported hub channeling newly formed SME startups.',
     created_at: '2026-04-18'
   }
@@ -118,7 +113,6 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
-  const [selectedTier, setSelectedTier] = useState<string>('all');
   const [selectedPartnerForDrawer, setSelectedPartnerForDrawer] = useState<B2BPartner | null>(null);
   const [showAddPartnerModal, setShowAddPartnerModal] = useState(false);
   const [copiedPartnerId, setCopiedPartnerId] = useState<string | null>(null);
@@ -132,7 +126,6 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
     email: '',
     location: 'Muscat',
     cr_number: '',
-    agreement_tier: 'silver' as B2BPartner['agreement_tier'],
     notes: ''
   });
 
@@ -218,11 +211,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
         (p.cr_number && p.cr_number.toLowerCase().includes(searchQuery.toLowerCase()));
 
       const matchesType = selectedType === 'all' || p.partner_type === selectedType;
-      const matchesTier = selectedTier === 'all' || p.agreement_tier === selectedTier;
 
-      return matchesSearch && matchesType && matchesTier;
+      return matchesSearch && matchesType;
     });
-  }, [partners, searchQuery, selectedType, selectedTier]);
+  }, [partners, searchQuery, selectedType]);
 
   // Handle Save New B2B Partner
   const handleSavePartner = async (e: React.FormEvent) => {
@@ -238,7 +230,6 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
       email: partnerForm.email,
       location: partnerForm.location,
       cr_number: partnerForm.cr_number || undefined,
-      agreement_tier: partnerForm.agreement_tier,
       notes: partnerForm.notes || undefined,
       created_at: new Date().toISOString().slice(0, 10)
     };
@@ -260,7 +251,6 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
       email: '',
       location: 'Muscat',
       cr_number: '',
-      agreement_tier: 'silver',
       notes: ''
     });
   };
@@ -373,34 +363,19 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-          <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5">
+          <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2">
             <Filter size={14} className="text-gray-400" />
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
               className="bg-transparent text-xs font-bold text-gray-700 outline-none cursor-pointer"
             >
-              <option value="all">{isAr ? 'جميع الفئات' : 'All Types'}</option>
+              <option value="all">{isAr ? 'جميع فئات الشركاء' : 'All Partner Types'}</option>
               <option value="sanad">{isAr ? 'مكاتب سند' : 'Sanad Offices'}</option>
               <option value="law_firm">{isAr ? 'مكاتب المحاماة' : 'Law Firms'}</option>
               <option value="holding">{isAr ? 'المجموعات القابضة' : 'Holding Groups'}</option>
               <option value="incubator">{isAr ? 'حاضنات الأعمال' : 'Incubators'}</option>
               <option value="corporate_agent">{isAr ? 'وكلاء شركات' : 'Corporate Agents'}</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5">
-            <Award size={14} className="text-gray-400" />
-            <select
-              value={selectedTier}
-              onChange={(e) => setSelectedTier(e.target.value)}
-              className="bg-transparent text-xs font-bold text-gray-700 outline-none cursor-pointer"
-            >
-              <option value="all">{isAr ? 'جميع المستويات' : 'All Tiers'}</option>
-              <option value="platinum">Platinum Tier</option>
-              <option value="gold">Gold Tier</option>
-              <option value="silver">Silver Tier</option>
-              <option value="standard">Standard</option>
             </select>
           </div>
         </div>
@@ -419,19 +394,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
               className="bg-white rounded-3xl border border-gray-100 p-6 shadow-xs hover:shadow-md hover:border-red-900/20 transition-all space-y-4 flex flex-col justify-between"
             >
               <div>
-                {/* Card Header: Type Badge & Tier */}
+                {/* Card Header: Type Badge */}
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex items-center gap-2">
-                    <span className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${
-                      partner.agreement_tier === 'platinum'
-                        ? 'bg-purple-50 text-purple-700 border-purple-200'
-                        : partner.agreement_tier === 'gold'
-                        ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : 'bg-gray-100 text-gray-700 border-gray-200'
-                    }`}>
-                      {partner.agreement_tier.toUpperCase()} PARTNER
-                    </span>
-                    <span className="text-[9px] font-black uppercase text-gray-500 bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-200">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-lg bg-red-50 text-[#A11212] border border-red-100">
                       {partner.partner_type.replace('_', ' ')}
                     </span>
                   </div>
@@ -558,14 +524,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
 
             {/* Partner Details & Notes */}
             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-2">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <p className="text-[10px] text-gray-400 font-black uppercase">Location</p>
                   <p className="font-black text-gray-800">{selectedPartnerForDrawer.location}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-gray-400 font-black uppercase">Agreement Tier</p>
-                  <p className="font-black text-amber-600 uppercase">{selectedPartnerForDrawer.agreement_tier}</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-400 font-black uppercase">CR Number</p>
@@ -729,18 +691,15 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
 
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'مستوى الشراكة' : 'Partnership Tier'}
+                    {isAr ? 'المحافظة / المدينة' : 'Location / City'}
                   </label>
-                  <select
-                    value={partnerForm.agreement_tier}
-                    onChange={(e) => setPartnerForm({ ...partnerForm, agreement_tier: e.target.value as any })}
+                  <input
+                    type="text"
+                    placeholder="Muscat, Sohar, Salalah..."
+                    value={partnerForm.location}
+                    onChange={(e) => setPartnerForm({ ...partnerForm, location: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
-                  >
-                    <option value="standard">Standard Partner</option>
-                    <option value="silver">Silver Tier (10% Referral benefit)</option>
-                    <option value="gold">Gold Tier (15% Referral benefit)</option>
-                    <option value="platinum">Platinum Strategic (20% Referral benefit)</option>
-                  </select>
+                  />
                 </div>
               </div>
 
