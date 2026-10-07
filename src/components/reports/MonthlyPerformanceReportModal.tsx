@@ -1918,12 +1918,17 @@ export default function MonthlyPerformanceReportModal({
               {/* TAB 6: NEXT MONTH PLAN & CEO DECISIONS */}
               {activeTab === 'p6' && (
                 <div className="space-y-6">
-                  {/* Action items table */}
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
-                        {isAr ? 'خطة عمل وأولويات الشهر القادم' : 'Next Month Priority Action Items'}
-                      </h4>
+                  {/* 1. Action items matrix */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <div className="flex justify-between items-center mb-3">
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          {isAr ? '1. خطة عمل وأولويات الشهر القادم (الصفحة 6)' : '1. Next Month Priority Action Items Matrix (Page 6)'}
+                        </h4>
+                        <p className="text-[10px] text-slate-400">
+                          {isAr ? 'الأولويات والنتائج المستهدفة والمسؤولين والمواعيد النهائية والدعم المطلوب' : 'Priorities, target outcomes, owners, deadlines, and executive support required'}
+                        </p>
+                      </div>
                       <button
                         onClick={() =>
                           setReportData({
@@ -1937,8 +1942,8 @@ export default function MonthlyPerformanceReportModal({
                                   priorityAction: '',
                                   targetOutcome: '',
                                   responsible: 'Operations Manager',
-                                  deadline: 'Day 15',
-                                  supportRequired: 'CEO'
+                                  deadline: 'Week 2',
+                                  supportRequired: 'Department Support'
                                 }
                               ]
                             }
@@ -1950,76 +1955,17 @@ export default function MonthlyPerformanceReportModal({
                         {isAr ? 'إضافة إجراء' : 'Add Action Item'}
                       </button>
                     </div>
+
                     <div className="space-y-3">
                       {reportData.nextMonthPlan.actionItems.map((act, idx) => (
                         <div
                           key={act.id || idx}
-                          className="grid grid-cols-1 sm:grid-cols-5 gap-2 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-200 dark:border-slate-700 items-center"
+                          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3"
                         >
-                          <div className="sm:col-span-2">
-                            <span className="text-[10px] text-slate-400 block mb-0.5">
-                              {isAr ? 'الإجراء ذو الأولوية' : 'Priority Action'}
+                          <div className="flex justify-between items-center">
+                            <span className="w-6 h-6 rounded-lg bg-[#A11212]/10 text-[#A11212] flex items-center justify-center font-black text-xs">
+                              {idx + 1}
                             </span>
-                            <input
-                              type="text"
-                              value={act.priorityAction}
-                              onChange={(e) => {
-                                const newP = [...reportData.nextMonthPlan.actionItems];
-                                newP[idx].priorityAction = e.target.value;
-                                setReportData({
-                                  ...reportData,
-                                  nextMonthPlan: {
-                                    ...reportData.nextMonthPlan,
-                                    actionItems: newP
-                                  }
-                                });
-                              }}
-                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs font-bold"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-slate-400 block mb-0.5">
-                              {isAr ? 'النتيجة المستهدفة' : 'Target Outcome'}
-                            </span>
-                            <input
-                              type="text"
-                              value={act.targetOutcome}
-                              onChange={(e) => {
-                                const newP = [...reportData.nextMonthPlan.actionItems];
-                                newP[idx].targetOutcome = e.target.value;
-                                setReportData({
-                                  ...reportData,
-                                  nextMonthPlan: {
-                                    ...reportData.nextMonthPlan,
-                                    actionItems: newP
-                                  }
-                                });
-                              }}
-                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-slate-400 block mb-0.5">
-                              {isAr ? 'المسؤول والموعد' : 'Responsible & Deadline'}
-                            </span>
-                            <input
-                              type="text"
-                              value={`${act.responsible} (${act.deadline})`}
-                              onChange={(e) => {
-                                const newP = [...reportData.nextMonthPlan.actionItems];
-                                newP[idx].responsible = e.target.value;
-                                setReportData({
-                                  ...reportData,
-                                  nextMonthPlan: {
-                                    ...reportData.nextMonthPlan,
-                                    actionItems: newP
-                                  }
-                                });
-                              }}
-                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs"
-                            />
-                          </div>
-                          <div className="text-end">
                             <button
                               onClick={() => {
                                 const newP = reportData.nextMonthPlan.actionItems.filter((_, i) => i !== idx);
@@ -2031,22 +1977,141 @@ export default function MonthlyPerformanceReportModal({
                                   }
                                 });
                               }}
-                              className="p-2 text-slate-400 hover:text-red-500 rounded-lg"
+                              className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg"
+                              title="Delete action item"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-0.5 font-bold">
+                                {isAr ? 'الأولوية والإجراء' : 'Priority and Action'}
+                              </span>
+                              <input
+                                type="text"
+                                value={act.priorityAction}
+                                placeholder={isAr ? 'مثال: استكمال بيانات ملفات التدقيق والضرائب' : 'e.g. Complete pending data for Audit and Tax files'}
+                                onChange={(e) => {
+                                  const newP = [...reportData.nextMonthPlan.actionItems];
+                                  newP[idx].priorityAction = e.target.value;
+                                  setReportData({
+                                    ...reportData,
+                                    nextMonthPlan: {
+                                      ...reportData.nextMonthPlan,
+                                      actionItems: newP
+                                    }
+                                  });
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-bold text-slate-900 dark:text-white"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-0.5 font-bold">
+                                {isAr ? 'النتيجة المستهدفة' : 'Target Outcome'}
+                              </span>
+                              <input
+                                type="text"
+                                value={act.targetOutcome}
+                                placeholder={isAr ? 'مثال: معالجة المستندات الناقصة لـ 13 ملف تدقيق' : 'e.g. Resolve missing client documentation across 13 audit files'}
+                                onChange={(e) => {
+                                  const newP = [...reportData.nextMonthPlan.actionItems];
+                                  newP[idx].targetOutcome = e.target.value;
+                                  setReportData({
+                                    ...reportData,
+                                    nextMonthPlan: {
+                                      ...reportData.nextMonthPlan,
+                                      actionItems: newP
+                                    }
+                                  });
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-800 dark:text-slate-200"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-0.5 font-bold">
+                                {isAr ? 'المسؤول' : 'Responsible'}
+                              </span>
+                              <input
+                                type="text"
+                                value={act.responsible}
+                                onChange={(e) => {
+                                  const newP = [...reportData.nextMonthPlan.actionItems];
+                                  newP[idx].responsible = e.target.value;
+                                  setReportData({
+                                    ...reportData,
+                                    nextMonthPlan: {
+                                      ...reportData.nextMonthPlan,
+                                      actionItems: newP
+                                    }
+                                  });
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-semibold"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-0.5 font-bold">
+                                {isAr ? 'الموعد النهائي' : 'Deadline'}
+                              </span>
+                              <input
+                                type="text"
+                                value={act.deadline}
+                                onChange={(e) => {
+                                  const newP = [...reportData.nextMonthPlan.actionItems];
+                                  newP[idx].deadline = e.target.value;
+                                  setReportData({
+                                    ...reportData,
+                                    nextMonthPlan: {
+                                      ...reportData.nextMonthPlan,
+                                      actionItems: newP
+                                    }
+                                  });
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-red-300 dark:border-red-900/50 rounded-lg p-2 text-xs font-black text-[#A11212]"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-0.5 font-bold">
+                                {isAr ? 'الدعم أو القرار المطلوب' : 'Support / Decision Required'}
+                              </span>
+                              <input
+                                type="text"
+                                value={act.supportRequired}
+                                onChange={(e) => {
+                                  const newP = [...reportData.nextMonthPlan.actionItems];
+                                  newP[idx].supportRequired = e.target.value;
+                                  setReportData({
+                                    ...reportData,
+                                    nextMonthPlan: {
+                                      ...reportData.nextMonthPlan,
+                                      actionItems: newP
+                                    }
+                                  });
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-700 dark:text-slate-300"
+                              />
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* CEO Decisions Required */}
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
-                        {isAr ? 'قرارات مطلوبة من الرئيس التنفيذي (CEO)' : 'Decisions Required from CEO'}
-                      </h4>
+                  {/* 2. Decisions Required from CEO & Directives */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <div className="flex justify-between items-center mb-3">
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          {isAr ? '2. قرارات وتوجيهات مطلوبة من الرئيس التنفيذي (CEO)' : '2. Decisions Required from CEO & Executive Directives'}
+                        </h4>
+                        <p className="text-[10px] text-slate-400">
+                          {isAr ? 'القرارات الاستراتيجية والتوجيهات التنفيذية التي تظهر في الصندوق المخصص بالصفحة 6' : 'Strategic decisions and CEO comments displayed on Page 6'}
+                        </p>
+                      </div>
                       <button
                         onClick={() =>
                           setReportData({
@@ -2063,41 +2128,119 @@ export default function MonthlyPerformanceReportModal({
                         {isAr ? 'إضافة قرار مطلوب' : 'Add Decision Request'}
                       </button>
                     </div>
-                    {reportData.nextMonthPlan.ceoComments.map((dec, idx) => (
-                      <div key={idx} className="flex gap-2 mb-2">
+
+                    <div className="space-y-2.5">
+                      {reportData.nextMonthPlan.ceoComments.map((dec, idx) => (
+                        <div key={idx} className="flex items-center gap-2.5 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+                          <span className="w-7 h-7 rounded-lg bg-[#A11212]/10 text-[#A11212] flex items-center justify-center font-black text-xs shrink-0">
+                            {idx + 1}
+                          </span>
+                          <input
+                            type="text"
+                            value={dec}
+                            placeholder={isAr ? `توجيه / قرار رقم ${idx + 1}...` : `Decision / directive #${idx + 1}...`}
+                            onChange={(e) => {
+                              const newD = [...reportData.nextMonthPlan.ceoComments];
+                              newD[idx] = e.target.value;
+                              setReportData({
+                                ...reportData,
+                                nextMonthPlan: {
+                                  ...reportData.nextMonthPlan,
+                                  ceoComments: newD
+                                }
+                              });
+                            }}
+                            className="flex-1 bg-transparent border-0 p-1 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-0"
+                          />
+                          <button
+                            onClick={() => {
+                              const newD = reportData.nextMonthPlan.ceoComments.filter((_, i) => i !== idx);
+                              setReportData({
+                                ...reportData,
+                                nextMonthPlan: {
+                                  ...reportData.nextMonthPlan,
+                                  ceoComments: newD
+                                }
+                              });
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg shrink-0"
+                            title="Delete Decision"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 3. Formal Approvals & Signatures Block */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider mb-1">
+                      {isAr ? '3. الاعتمادات والتوقيعات الرسمية (أسفل الصفحة 6)' : '3. Formal Approvals & Executive Sign-off (Page 6 Footer)'}
+                    </h4>
+                    <p className="text-[10px] text-slate-400 mb-4">
+                      {isAr ? 'تخصيص بيانات اعتماد مدير العمليات وموافقة مكتب الرئيس التنفيذي وتاريخ الرفع' : 'Customize manager submission identity, report date, and executive sign-off text'}
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          {isAr ? 'اعتماد مدير العمليات / معد التقرير' : "Manager's Approval Signature / Name"}
+                        </label>
                         <input
                           type="text"
-                          value={dec}
-                          onChange={(e) => {
-                            const newD = [...reportData.nextMonthPlan.ceoComments];
-                            newD[idx] = e.target.value;
+                          value={reportData.nextMonthPlan.managerApprovalSignature || ''}
+                          onChange={(e) =>
                             setReportData({
                               ...reportData,
                               nextMonthPlan: {
                                 ...reportData.nextMonthPlan,
-                                ceoComments: newD
+                                managerApprovalSignature: e.target.value
                               }
-                            });
-                          }}
-                          className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-900 dark:text-white"
                         />
-                        <button
-                          onClick={() => {
-                            const newD = reportData.nextMonthPlan.ceoComments.filter((_, i) => i !== idx);
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          {isAr ? 'تاريخ الاعتماد والرفع' : 'Submission / Approval Date'}
+                        </label>
+                        <input
+                          type="text"
+                          value={reportData.nextMonthPlan.managerApprovalDate || ''}
+                          onChange={(e) =>
                             setReportData({
                               ...reportData,
                               nextMonthPlan: {
                                 ...reportData.nextMonthPlan,
-                                ceoComments: newD
+                                managerApprovalDate: e.target.value
                               }
-                            });
-                          }}
-                          className="p-2 text-slate-400 hover:text-red-500 rounded-lg"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-900 dark:text-white"
+                        />
                       </div>
-                    ))}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          {isAr ? 'اعتماد وموافقة الرئيس التنفيذي' : 'CEO Sign-off Status'}
+                        </label>
+                        <input
+                          type="text"
+                          value={reportData.nextMonthPlan.ceoApprovalSignature || ''}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              nextMonthPlan: {
+                                ...reportData.nextMonthPlan,
+                                ceoApprovalSignature: e.target.value
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-emerald-600"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
