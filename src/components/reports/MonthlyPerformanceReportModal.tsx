@@ -1722,111 +1722,196 @@ export default function MonthlyPerformanceReportModal({
 
               {/* TAB 5: BRAND & IDENTITY */}
               {activeTab === 'p5' && (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
-                      {isAr ? 'بنود الهوية المؤسسية والظهور الإعلامي' : 'Brand Identity & Corporate Presence Items'}
-                    </h4>
-                    <button
-                      onClick={() =>
-                        setReportData({
-                          ...reportData,
-                          brandIdentity: {
-                            ...reportData.brandIdentity,
-                            achievements: [
-                              ...reportData.brandIdentity.achievements,
-                              { id: `b-${Date.now()}`, item: 'New Channel', achieved: 'Active', notes: '' }
-                            ]
-                          }
-                        })
-                      }
-                      className="text-xs text-[#A11212] font-bold flex items-center gap-1 hover:underline"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      {isAr ? 'إضافة بند' : 'Add Brand Item'}
-                    </button>
+                <div className="space-y-6">
+                  {/* 1. Brand Achievements Table */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <div className="flex justify-between items-center mb-3">
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          {isAr ? '1. بنود الهوية المؤسسية والظهور الإعلامي (الصفحة 5)' : '1. Brand Identity & Corporate Presence Items (Page 5)'}
+                        </h4>
+                        <p className="text-[10px] text-slate-400">
+                          {isAr ? 'الأنشطة المنجزة في النشر الرقمي، الامتثال للهوية، وتحديث الكتالوجات والمؤتمرات' : 'Achievements in digital publishing, brand compliance, catalog updates, and conferences'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() =>
+                          setReportData({
+                            ...reportData,
+                            brandIdentity: {
+                              ...reportData.brandIdentity,
+                              achievements: [
+                                ...reportData.brandIdentity.achievements,
+                                { id: `b-${Date.now()}`, item: 'New Channel / Initiative', achieved: 'Completed', notes: '' }
+                              ]
+                            }
+                          })
+                        }
+                        className="text-xs text-[#A11212] font-bold flex items-center gap-1 hover:underline"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {isAr ? 'إضافة بند' : 'Add Brand Item'}
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {reportData.brandIdentity.achievements.map((item, idx) => (
+                        <div
+                          key={item.id || idx}
+                          className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 items-center shadow-xs"
+                        >
+                          <div>
+                            <span className="text-[10px] text-slate-400 block mb-0.5">{isAr ? 'البند / المبادرة' : 'Item / Initiative'}</span>
+                            <input
+                              type="text"
+                              value={item.item}
+                              onChange={(e) => {
+                                const newB = [...reportData.brandIdentity.achievements];
+                                newB[idx].item = e.target.value;
+                                setReportData({
+                                  ...reportData,
+                                  brandIdentity: {
+                                    ...reportData.brandIdentity,
+                                    achievements: newB
+                                  }
+                                });
+                              }}
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-bold text-slate-900 dark:text-white"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 block mb-0.5">{isAr ? 'ما تم إنجازه' : 'What Was Achieved'}</span>
+                            <input
+                              type="text"
+                              value={item.achieved}
+                              onChange={(e) => {
+                                const newB = [...reportData.brandIdentity.achievements];
+                                newB[idx].achieved = e.target.value;
+                                setReportData({
+                                  ...reportData,
+                                  brandIdentity: {
+                                    ...reportData.brandIdentity,
+                                    achievements: newB
+                                  }
+                                });
+                              }}
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-red-300 dark:border-red-900/50 rounded-lg p-2 text-xs font-black text-[#A11212]"
+                            />
+                          </div>
+                          <div className="sm:col-span-2 flex gap-2 items-center">
+                            <div className="flex-1">
+                              <span className="text-[10px] text-slate-400 block mb-0.5">{isAr ? 'الملاحظات' : 'Notes'}</span>
+                              <input
+                                type="text"
+                                value={item.notes}
+                                onChange={(e) => {
+                                  const newB = [...reportData.brandIdentity.achievements];
+                                  newB[idx].notes = e.target.value;
+                                  setReportData({
+                                    ...reportData,
+                                    brandIdentity: {
+                                      ...reportData.brandIdentity,
+                                      achievements: newB
+                                    }
+                                  });
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-800 dark:text-slate-200"
+                              />
+                            </div>
+                            <button
+                              onClick={() => {
+                                const newB = reportData.brandIdentity.achievements.filter((_, i) => i !== idx);
+                                setReportData({
+                                  ...reportData,
+                                  brandIdentity: {
+                                    ...reportData.brandIdentity,
+                                    achievements: newB
+                                  }
+                                });
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-500 rounded-lg mt-3.5"
+                              title="Delete Item"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  {reportData.brandIdentity.achievements.map((item, idx) => (
-                    <div
-                      key={item.id || idx}
-                      className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-200 dark:border-slate-700"
-                    >
+
+                  {/* 2. Key Improvements Required in Brand Identity and Corporate Presence (Sentence List) */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <div className="flex justify-between items-center mb-3">
                       <div>
-                        <span className="text-[10px] text-slate-400 block mb-0.5">{isAr ? 'البند' : 'Item'}</span>
-                        <input
-                          type="text"
-                          value={item.item}
-                          onChange={(e) => {
-                            const newB = [...reportData.brandIdentity.achievements];
-                            newB[idx].item = e.target.value;
-                            setReportData({
-                              ...reportData,
-                              brandIdentity: {
-                                ...reportData.brandIdentity,
-                                achievements: newB
-                              }
-                            });
-                          }}
-                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs font-bold"
-                        />
+                        <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          {isAr ? '2. أهم التحسينات المطلوبة في الهوية والتواجد المؤسسي (جمل وفقرات)' : '2. Key Improvements Required in Brand Identity and Corporate Presence'}
+                        </h4>
+                        <p className="text-[10px] text-slate-400">
+                          {isAr ? 'النقاط والجمل التنفيذية للارتقاء بالهوية البصرية والظهور المؤسسي في الصفحة 5' : 'Key actionable statements for brand standardization and presence on Page 5'}
+                        </p>
                       </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block mb-0.5">{isAr ? 'المتحقق' : 'Achieved Status'}</span>
-                        <input
-                          type="text"
-                          value={item.achieved}
-                          onChange={(e) => {
-                            const newB = [...reportData.brandIdentity.achievements];
-                            newB[idx].achieved = e.target.value;
-                            setReportData({
-                              ...reportData,
-                              brandIdentity: {
-                                ...reportData.brandIdentity,
-                                achievements: newB
-                              }
-                            });
-                          }}
-                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs font-bold text-[#A11212]"
-                        />
-                      </div>
-                      <div className="sm:col-span-2 flex gap-2 items-center">
-                        <div className="flex-1">
-                          <span className="text-[10px] text-slate-400 block mb-0.5">{isAr ? 'ملاحظات' : 'Notes'}</span>
+                      <button
+                        onClick={() => {
+                          const currentImps = reportData.brandIdentity.keyImprovements || [];
+                          setReportData({
+                            ...reportData,
+                            brandIdentity: {
+                              ...reportData.brandIdentity,
+                              keyImprovements: [...currentImps, '']
+                            }
+                          });
+                        }}
+                        className="text-xs text-[#A11212] font-bold flex items-center gap-1 hover:underline"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {isAr ? 'إضافة جملة تحسين' : 'Add Improvement Sentence'}
+                      </button>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {(reportData.brandIdentity.keyImprovements || []).map((sentence, sIdx) => (
+                        <div key={sIdx} className="flex items-center gap-2.5 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+                          <span className="w-7 h-7 rounded-lg bg-[#A11212]/10 text-[#A11212] flex items-center justify-center font-black text-xs shrink-0">
+                            {sIdx + 1}
+                          </span>
                           <input
                             type="text"
-                            value={item.notes}
+                            value={sentence}
+                            placeholder={isAr ? `مثال: جملة التحسين رقم ${sIdx + 1}...` : `e.g. Actionable improvement sentence #${sIdx + 1}...`}
                             onChange={(e) => {
-                              const newB = [...reportData.brandIdentity.achievements];
-                              newB[idx].notes = e.target.value;
+                              const newImps = [...(reportData.brandIdentity.keyImprovements || [])];
+                              newImps[sIdx] = e.target.value;
                               setReportData({
                                 ...reportData,
                                 brandIdentity: {
                                   ...reportData.brandIdentity,
-                                  achievements: newB
+                                  keyImprovements: newImps
                                 }
                               });
                             }}
-                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs"
+                            className="flex-1 bg-transparent border-0 p-1 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-0"
                           />
+                          <button
+                            onClick={() => {
+                              const newImps = (reportData.brandIdentity.keyImprovements || []).filter((_, i) => i !== sIdx);
+                              setReportData({
+                                ...reportData,
+                                brandIdentity: {
+                                  ...reportData.brandIdentity,
+                                  keyImprovements: newImps
+                                }
+                              });
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg shrink-0"
+                            title="Delete sentence"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                        <button
-                          onClick={() => {
-                            const newB = reportData.brandIdentity.achievements.filter((_, i) => i !== idx);
-                            setReportData({
-                              ...reportData,
-                              brandIdentity: {
-                                ...reportData.brandIdentity,
-                                achievements: newB
-                              }
-                            });
-                          }}
-                          className="p-2 text-slate-400 hover:text-red-500 rounded-lg mt-3"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
               )}
 
