@@ -841,6 +841,469 @@ export default function MonthlyPerformanceReportModal({
                 </div>
               )}
 
+              {/* TAB 3: HR & OPERATIONS */}
+              {activeTab === 'p3' && (
+                <div className="space-y-6">
+                  {/* 1. Core HR Numbers */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white mb-3">
+                      {isAr ? '1. مؤشرات الموارد البشرية والكوادر (الصفحة 3)' : '1. Human Resources Core Indicators (Page 3)'}
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">
+                          {isAr ? 'عدد الموظفين نهاية الشهر' : 'Total Staff at Month-End'}
+                        </label>
+                        <input
+                          type="number"
+                          value={reportData.humanResources.totalStaffMonthEnd}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              humanResources: {
+                                ...reportData.humanResources,
+                                totalStaffMonthEnd: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-900 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-emerald-600 mb-1">
+                          {isAr ? 'التعيينات الجديدة (+)' : 'New Hires (+)'}
+                        </label>
+                        <input
+                          type="number"
+                          value={reportData.humanResources.hiresCount}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              humanResources: {
+                                ...reportData.humanResources,
+                                hiresCount: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700/60 rounded-xl p-2.5 text-xs font-bold text-emerald-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-rose-600 mb-1">
+                          {isAr ? 'المغادرون والاستقالات (-)' : 'Departures (-)'}
+                        </label>
+                        <input
+                          type="number"
+                          value={reportData.humanResources.departuresCount}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              humanResources: {
+                                ...reportData.humanResources,
+                                departuresCount: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-700/60 rounded-xl p-2.5 text-xs font-bold text-rose-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">
+                          {isAr ? 'تأثير الإجازات' : 'Leave Impact Count'}
+                        </label>
+                        <input
+                          type="number"
+                          value={reportData.humanResources.leaveImpactCount}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              humanResources: {
+                                ...reportData.humanResources,
+                                leaveImpactCount: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold text-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Detailed Notes for Indicators */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1">
+                          {isAr ? 'ملاحظات وإجراءات التعيين الجديد' : 'New Hires & Onboarding Status Notes'}
+                        </label>
+                        <input
+                          type="text"
+                          value={reportData.humanResources.hiresNotes || ''}
+                          placeholder={isAr ? 'مثال: تم تعيين موظف جديد وبدء برنامج التأهيل' : 'e.g. 1 new hire onboarded; training in progress'}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              humanResources: {
+                                ...reportData.humanResources,
+                                hiresNotes: e.target.value
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-rose-700 dark:text-rose-400 mb-1">
+                          {isAr ? 'ملاحظات وإجراءات الاستقالات والتسليم' : 'Departures & Handover Status Notes'}
+                        </label>
+                        <input
+                          type="text"
+                          value={reportData.humanResources.departuresNotes || ''}
+                          placeholder={isAr ? 'مثال: تم تسليم المهام بنجاح وسد الفجوة التشغيلية' : 'e.g. Handover completed smoothly'}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              humanResources: {
+                                ...reportData.humanResources,
+                                departuresNotes: e.target.value
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          {isAr ? 'ملاحظات الإجازات وتوزيع المهام' : 'Leave Impact & Task Reallocation Notes'}
+                        </label>
+                        <input
+                          type="text"
+                          value={reportData.humanResources.leaveImpactNotes || ''}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              humanResources: {
+                                ...reportData.humanResources,
+                                leaveImpactNotes: e.target.value
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          {isAr ? 'ملاحظات التدريب وتطوير المهارات' : 'Training & Skills Development Notes'}
+                        </label>
+                        <input
+                          type="text"
+                          value={reportData.humanResources.trainingNotes || ''}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              humanResources: {
+                                ...reportData.humanResources,
+                                trainingNotes: e.target.value
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-medium"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. Staffing Needs & Shortages */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <div className="flex justify-between items-center mb-3">
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          {isAr ? '2. احتياجات التوظيف وسد النقص' : '2. Staffing Needs & Coverage of Shortages'}
+                        </h4>
+                        <p className="text-[10px] text-slate-400">
+                          {isAr ? 'الوظائف الشاغرة المطلوب استقطابها لسد العجز التشغيلي' : 'Open positions required to support firm workload'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const currentNeeds = reportData.humanResources.staffingNeeds || [];
+                          setReportData({
+                            ...reportData,
+                            humanResources: {
+                              ...reportData.humanResources,
+                              staffingNeeds: [...currentNeeds, { role: 'Audit Assistant', count: 1 }]
+                            }
+                          });
+                        }}
+                        className="text-xs text-[#A11212] font-bold flex items-center gap-1 hover:underline"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {isAr ? 'إضافة احتياج وظيفي' : 'Add Shortage Role'}
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {(reportData.humanResources.staffingNeeds || []).map((need, reqIdx) => (
+                        <div key={reqIdx} className="grid grid-cols-1 sm:grid-cols-4 gap-2 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 items-center">
+                          <div className="sm:col-span-2">
+                            <span className="text-[10px] text-slate-400 block mb-0.5">{isAr ? 'المسمى الوظيفي المطلوب' : 'Role Required'}</span>
+                            <input
+                              type="text"
+                              value={need.role}
+                              onChange={(e) => {
+                                const newNeeds = [...(reportData.humanResources.staffingNeeds || [])];
+                                newNeeds[reqIdx].role = e.target.value;
+                                setReportData({
+                                  ...reportData,
+                                  humanResources: {
+                                    ...reportData.humanResources,
+                                    staffingNeeds: newNeeds
+                                  }
+                                });
+                              }}
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-bold"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 block mb-0.5">{isAr ? 'العدد' : 'Count'}</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={need.count}
+                              onChange={(e) => {
+                                const newNeeds = [...(reportData.humanResources.staffingNeeds || [])];
+                                newNeeds[reqIdx].count = Number(e.target.value) || 1;
+                                setReportData({
+                                  ...reportData,
+                                  humanResources: {
+                                    ...reportData.humanResources,
+                                    staffingNeeds: newNeeds
+                                  }
+                                });
+                              }}
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-bold"
+                            />
+                          </div>
+                          <div className="text-end">
+                            <button
+                              onClick={() => {
+                                const newNeeds = (reportData.humanResources.staffingNeeds || []).filter((_, i) => i !== reqIdx);
+                                setReportData({
+                                  ...reportData,
+                                  humanResources: {
+                                    ...reportData.humanResources,
+                                    staffingNeeds: newNeeds
+                                  }
+                                });
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-500 rounded-lg"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 3. Department Deliverables Table */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <div className="flex justify-between items-center mb-3">
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          {isAr ? '3. أداء الخدمات وإنجاز ملفات الأقسام' : '3. Department Deliverables & Service File Tracking'}
+                        </h4>
+                        <p className="text-[10px] text-slate-400">
+                          {isAr ? 'متابعة الملفات النشطة والمنجزة والمتأخرة وأسباب التأخير لكل قسم' : 'Active, completed, delayed files and action plans per department'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const newDep = [
+                            ...reportData.servicePerformance.departments,
+                            {
+                              department: 'New Advisory Department',
+                              departmentAr: 'قسم استشاري جديد',
+                              activeFiles: 5,
+                              completedFiles: 5,
+                              delayedFiles: 0,
+                              completionRate: 100,
+                              reasonAndAction: 'All deliverables completed on schedule.'
+                            }
+                          ];
+                          setReportData({
+                            ...reportData,
+                            servicePerformance: { ...reportData.servicePerformance, departments: newDep }
+                          });
+                        }}
+                        className="text-xs text-[#A11212] font-bold flex items-center gap-1 hover:underline"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {isAr ? 'إضافة قسم / خدمة' : 'Add Department File Row'}
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {reportData.servicePerformance.departments.map((dep, idx) => (
+                        <div
+                          key={idx}
+                          className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs"
+                        >
+                          <div className="flex justify-between items-center mb-3">
+                            <div className="flex-1 max-w-sm">
+                              <span className="text-[10px] text-slate-400 block mb-0.5">{isAr ? 'اسم القسم / الخدمة' : 'Department / Service Name'}</span>
+                              <input
+                                type="text"
+                                value={isAr ? (dep.departmentAr || dep.department) : dep.department}
+                                onChange={(e) => {
+                                  const newDep = [...reportData.servicePerformance.departments];
+                                  if (isAr) {
+                                    newDep[idx].departmentAr = e.target.value;
+                                  } else {
+                                    newDep[idx].department = e.target.value;
+                                  }
+                                  setReportData({
+                                    ...reportData,
+                                    servicePerformance: { ...reportData.servicePerformance, departments: newDep }
+                                  });
+                                }}
+                                className="font-bold text-xs w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-white"
+                              />
+                            </div>
+                            <button
+                              onClick={() => {
+                                const newDep = reportData.servicePerformance.departments.filter((_, i) => i !== idx);
+                                setReportData({
+                                  ...reportData,
+                                  servicePerformance: { ...reportData.servicePerformance, departments: newDep }
+                                });
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-500 rounded-lg"
+                              title="Delete department"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-1">
+                                {isAr ? 'الملفات النشطة' : 'Active Files'}
+                              </span>
+                              <input
+                                type="number"
+                                value={dep.activeFiles}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  const newDep = [...reportData.servicePerformance.departments];
+                                  newDep[idx].activeFiles = val;
+                                  const total = val + newDep[idx].completedFiles;
+                                  newDep[idx].completionRate = total > 0 ? +((newDep[idx].completedFiles / total) * 100).toFixed(1) : 0;
+                                  setReportData({
+                                    ...reportData,
+                                    servicePerformance: { ...reportData.servicePerformance, departments: newDep }
+                                  });
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-bold"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-1">
+                                {isAr ? 'الملفات المنجزة' : 'Completed'}
+                              </span>
+                              <input
+                                type="number"
+                                value={dep.completedFiles}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  const newDep = [...reportData.servicePerformance.departments];
+                                  newDep[idx].completedFiles = val;
+                                  const total = val + newDep[idx].activeFiles;
+                                  newDep[idx].completionRate = total > 0 ? +((val / total) * 100).toFixed(1) : 0;
+                                  setReportData({
+                                    ...reportData,
+                                    servicePerformance: { ...reportData.servicePerformance, departments: newDep }
+                                  });
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-bold text-emerald-600"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-1">
+                                {isAr ? 'الملفات المتأخرة' : 'Delayed'}
+                              </span>
+                              <input
+                                type="number"
+                                value={dep.delayedFiles}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  const newDep = [...reportData.servicePerformance.departments];
+                                  newDep[idx].delayedFiles = val;
+                                  setReportData({
+                                    ...reportData,
+                                    servicePerformance: { ...reportData.servicePerformance, departments: newDep }
+                                  });
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-bold text-rose-600"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-1">
+                                {isAr ? 'نسبة الإنجاز %' : 'Completion Rate %'}
+                              </span>
+                              <div className="pt-2 text-sm font-black text-slate-900 dark:text-white">
+                                {dep.completionRate}%
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] text-slate-400 block mb-1">
+                              {isAr ? 'سبب التأخير والإجراء المتخذ' : 'Reason & Corrective Action Taken'}
+                            </span>
+                            <input
+                              type="text"
+                              value={dep.reasonAndAction}
+                              onChange={(e) => {
+                                const newDep = [...reportData.servicePerformance.departments];
+                                newDep[idx].reasonAndAction = e.target.value;
+                                setReportData({
+                                  ...reportData,
+                                  servicePerformance: { ...reportData.servicePerformance, departments: newDep }
+                                });
+                              }}
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-700 dark:text-slate-300 font-medium"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 4. Quality, Review Findings, Corrections and Preventive Actions */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <label className="block text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider mb-1">
+                      {isAr ? '4. الجودة وملاحظات المراجعة والإجراءات التصحيحية' : '4. Quality, Review Findings, Corrections and Preventive Actions'}
+                    </label>
+                    <p className="text-[10px] text-slate-400 mb-2">
+                      {isAr ? 'ملخص تدقيق الجودة والامتثال لمعايير IFRS وقوانين الضرائب والعمل العمانية' : 'Summary of quality sampling & regulatory IFRS / Omani compliance audits'}
+                    </p>
+                    <textarea
+                      rows={3}
+                      value={reportData.servicePerformance.qualityReviewNotes || ''}
+                      onChange={(e) =>
+                        setReportData({
+                          ...reportData,
+                          servicePerformance: {
+                            ...reportData.servicePerformance,
+                            qualityReviewNotes: e.target.value
+                          }
+                        })
+                      }
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-900 dark:text-white font-medium"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* TAB 4: CLIENTS & SALES */}
               {activeTab === 'p4' && (
                 <div className="space-y-6">
