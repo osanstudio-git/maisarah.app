@@ -2130,6 +2130,14 @@ export default function MonthlyPerformanceReportModal({
                     </div>
 
                     <div className="space-y-2.5">
+                      {reportData.nextMonthPlan.ceoComments.length === 0 && (
+                        <div className="text-center py-4 px-3 text-xs text-slate-400 italic bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                          {isAr
+                            ? 'متروك فارغاً بشكل افتراضي ليقوم الرئيس التنفيذي (عبدالله الحسني) بتدوين توجيهاته أثناء الاجتماع، أو اضغط "+ إضافة قرار مطلوب" لكتابة بنود مسبقة.'
+                            : 'Left blank by default for CEO (Abdullah Al Hasani) directives during the monthly session, or click "+ Add Decision Request" to add predefined points.'}
+                        </div>
+                      )}
+
                       {reportData.nextMonthPlan.ceoComments.map((dec, idx) => (
                         <div key={idx} className="flex items-center gap-2.5 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
                           <span className="w-7 h-7 rounded-lg bg-[#A11212]/10 text-[#A11212] flex items-center justify-center font-black text-xs shrink-0">

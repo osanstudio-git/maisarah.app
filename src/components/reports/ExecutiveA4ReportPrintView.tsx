@@ -75,16 +75,20 @@ export default function ExecutiveA4ReportPrintView({ data, isAr = false }: Execu
         <div>
           {renderPageHeader(1)}
 
-          <div className="text-center my-4 pb-4 border-b border-gray-100">
+          <div className="text-center my-3 pb-3 border-b border-gray-100">
             <span className="text-[10px] font-black text-[#A11212] uppercase tracking-widest bg-red-50 px-3 py-1 rounded-full">
               {isAr ? 'التقرير التنفيذي الشامل' : 'Executive Monthly Briefing'}
             </span>
             <h2 className="text-2xl font-black text-gray-900 mt-2">
               {isAr ? 'تقرير أداء المكتب الشهري' : 'Monthly Office Performance Report'}
             </h2>
-            <p className="text-xs text-gray-500 font-bold mt-1">
-              {isAr ? `فترة التقرير: شهر ${monthLabel} ${data.year}` : `Reporting Period: ${monthLabel} ${data.year}`} · {data.departmentScope}
-            </p>
+            <div className="flex flex-wrap justify-center items-center gap-x-3 gap-y-1 text-xs font-bold text-gray-600 mt-2">
+              <span>{isAr ? `فترة التقرير: شهر ${monthLabel} ${data.year}` : `Reporting Period: ${monthLabel} ${data.year}`}</span>
+              <span className="text-gray-300">·</span>
+              <span>{isAr ? 'إعداد: بدور الحسني (مدير العمليات)' : 'Prepared by: Budoor Al Hasani (Operations Manager)'}</span>
+              <span className="text-gray-300">·</span>
+              <span className="text-[#A11212] font-black">{isAr ? 'يُرفع إلى: عبدالله الحسني (الرئيس التنفيذي)' : 'Presented to: Abdullah Al Hasani (CEO)'}</span>
+            </div>
           </div>
 
           {/* 1 - Executive Summary */}
@@ -696,28 +700,38 @@ export default function ExecutiveA4ReportPrintView({ data, isAr = false }: Execu
 
             {/* CEO Comments & Review Box */}
             <div className="space-y-2">
-              <h4 className="text-xs font-black uppercase tracking-wider text-gray-900">
-                {isAr ? 'ملاحظات وتوجيهات الرئيس التنفيذي' : "CEO's Comments"}
+              <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 flex justify-between items-center">
+                <span>{isAr ? 'ملاحظات وتوجيهات الرئيس التنفيذي (عبدالله الحسني)' : "CEO's Directives & Decisions (Abdullah Al Hasani)"}</span>
+                <span className="text-[10px] text-gray-400 font-normal">{isAr ? 'جلسة الاعتماد الشهري' : 'Executive Monthly Review'}</span>
               </h4>
               <div className="border border-gray-300 rounded-xl p-4 bg-gray-50/50 space-y-2 min-h-[90px] text-xs font-medium text-gray-800">
-                {data.nextMonthPlan.ceoComments.map((com, idx) => (
-                  <p key={idx}>{com}</p>
-                ))}
+                {data.nextMonthPlan.ceoComments && data.nextMonthPlan.ceoComments.length > 0 ? (
+                  data.nextMonthPlan.ceoComments.map((com, idx) => (
+                    <p key={idx} className="flex items-start gap-1.5">
+                      <span className="font-bold text-[#A11212]">{idx + 1}.</span>
+                      <span>{com}</span>
+                    </p>
+                  ))
+                ) : (
+                  <div className="py-4 border-b border-dashed border-gray-300 text-center text-gray-400 text-xs italic">
+                    {isAr ? 'مساحة مخصصة لتدوين ملاحظات وقرارات الرئيس التنفيذي (عبدالله الحسني) أثناء جلسة المناقشة الشهرية' : 'Reserved for CEO directives & decisions recorded during the monthly executive session'}
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Formal Approvals & Signatures Block */}
             <div className="pt-4 border-t-2 border-gray-200 grid grid-cols-2 gap-8 text-xs">
               <div className="space-y-1">
-                <p className="font-bold text-gray-400 text-[10px] uppercase">{isAr ? 'اعتماد مدير العمليات / معد التقرير' : "Manager's Approval & Submission"}</p>
-                <p className="font-black text-gray-900 text-sm">{data.nextMonthPlan.managerApprovalSignature}</p>
+                <p className="font-bold text-gray-400 text-[10px] uppercase">{isAr ? 'إعداد واعتماد مدير العمليات' : "Prepared & Submitted by (Operations Manager)"}</p>
+                <p className="font-black text-gray-900 text-sm">{data.nextMonthPlan.managerApprovalSignature || 'Budoor Al Hasani (Operations Manager)'}</p>
                 <p className="text-[10px] text-gray-500 font-bold">{isAr ? 'التاريخ:' : 'Date:'} {data.nextMonthPlan.managerApprovalDate}</p>
               </div>
 
               <div className="space-y-1 text-end">
-                <p className="font-bold text-gray-400 text-[10px] uppercase">{isAr ? 'اعتماد وموافقة الرئيس التنفيذي' : "CEO Office Executive Sign-off"}</p>
-                <div className="inline-block border-b-2 border-gray-400 pb-1 min-w-[160px] text-end font-black text-gray-900">
-                  {data.nextMonthPlan.ceoApprovalSignature || 'Approved & Signed'}
+                <p className="font-bold text-gray-400 text-[10px] uppercase">{isAr ? 'اعتماد وموافقة الرئيس التنفيذي (CEO)' : "Reviewed & Approved by (Chief Executive Officer)"}</p>
+                <div className="inline-block border-b-2 border-gray-400 pb-1 min-w-[180px] text-end font-black text-gray-900">
+                  {data.nextMonthPlan.ceoApprovalSignature || 'Abdullah Al Hasani (CEO)'}
                 </div>
                 <p className="text-[10px] text-gray-500 font-bold">{isAr ? 'التاريخ:' : 'Date:'} {data.nextMonthPlan.managerApprovalDate}</p>
               </div>

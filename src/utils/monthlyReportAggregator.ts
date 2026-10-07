@@ -66,7 +66,7 @@ export function generateDefaultMonthlyReport(
     year,
     reportDate: new Date(year, monthIndex + 1, 0).toISOString().slice(0, 10),
     referenceNumber: refCode,
-    managerName: 'Shafnas / Executive Operations Manager',
+    managerName: 'Budoor Al Hasani (Operations Manager)',
     departmentScope: 'Consolidated Office Performance (All Departments)',
 
     // 1 - Executive Summary
@@ -308,14 +308,10 @@ export function generateDefaultMonthlyReport(
           supportRequired: 'Roll out co-branded promotional assets to top 5 Sanad partner channels.'
         }
       ],
-      ceoComments: [
-        '1. Excellent recovery on operating profit margin this month (+21.8%).',
-        '2. Audit file delays must be prioritized through formal client engagement agreements.',
-        '3. Recruitment of the Audit Assistant approved for immediate hiring.'
-      ],
+      ceoComments: [],
       managerApprovalDate: new Date(year, monthIndex + 1, 0).toISOString().slice(0, 10),
-      managerApprovalSignature: 'Shafnas (Executive Operations Manager)',
-      ceoApprovalSignature: 'Executive Board / CEO Office'
+      managerApprovalSignature: 'Budoor Al Hasani (Operations Manager)',
+      ceoApprovalSignature: 'Abdullah Al Hasani (Chief Executive Officer)'
     }
   };
 }
