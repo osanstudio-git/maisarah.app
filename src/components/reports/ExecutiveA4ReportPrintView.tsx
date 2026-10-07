@@ -333,11 +333,30 @@ export default function ExecutiveA4ReportPrintView({ data, isAr = false }: Execu
                     <tr>
                       <td className="py-2 px-3 font-bold">{isAr ? 'عدد الموظفين نهاية الشهر' : 'Number of employees at month-end'}</td>
                       <td className="py-2 px-3 font-black text-center">{data.humanResources.totalStaffMonthEnd}</td>
-                      <td className="py-2 px-3 text-gray-500 text-[11px] font-bold">Stable active staff capacity</td>
+                      <td className="py-2 px-3 text-gray-500 text-[11px] font-bold">{isAr ? 'طاقة تشغيلية مستقرة' : 'Stable active staff capacity'}</td>
                     </tr>
-                    <tr className="bg-gray-50/50">
-                      <td className="py-2 px-3 font-bold">{isAr ? 'التعيينات والاستقالات' : 'Hires and departures'}</td>
-                      <td className="py-2 px-3 font-black text-center text-rose-700">{data.humanResources.departuresCount}</td>
+                    <tr className="bg-emerald-50/40">
+                      <td className="py-2 px-3 font-bold text-emerald-950 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                        {isAr ? 'التعيينات والكوادر الجديدة' : 'New hires & onboardings'}
+                      </td>
+                      <td className="py-2 px-3 font-black text-center text-emerald-700">
+                        {data.humanResources.hiresCount > 0 ? `+${data.humanResources.hiresCount}` : data.humanResources.hiresCount}
+                      </td>
+                      <td className="py-2 px-3 text-gray-600 text-[11px]">
+                        {data.humanResources.hiresNotes || (data.humanResources.hiresCount > 0 
+                          ? (isAr ? `تم تعيين ${data.humanResources.hiresCount} موظف جديد وبدء برنامج التأهيل` : `${data.humanResources.hiresCount} new hire(s) onboarded successfully`)
+                          : (isAr ? 'لا توجد تعيينات جديدة هذا الشهر؛ المقابلات قيد التنفيذ' : 'No new hires this month; recruitment pipelines active'))}
+                      </td>
+                    </tr>
+                    <tr className="bg-rose-50/40">
+                      <td className="py-2 px-3 font-bold text-rose-950 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                        {isAr ? 'المغادرون والاستقالات' : 'Departures & turnover'}
+                      </td>
+                      <td className="py-2 px-3 font-black text-center text-rose-700">
+                        {data.humanResources.departuresCount > 0 ? `-${data.humanResources.departuresCount}` : data.humanResources.departuresCount}
+                      </td>
                       <td className="py-2 px-3 text-gray-600 text-[11px]">{data.humanResources.departuresNotes}</td>
                     </tr>
                     <tr>

@@ -86,6 +86,7 @@ export interface MonthlyPerformanceReportData {
   humanResources: {
     totalStaffMonthEnd: number;
     hiresCount: number;
+    hiresNotes?: string;
     departuresCount: number;
     departuresNotes: string;
     leaveImpactCount: number;

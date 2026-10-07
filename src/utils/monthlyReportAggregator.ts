@@ -134,6 +134,7 @@ export function generateDefaultMonthlyReport(
     humanResources: {
       totalStaffMonthEnd: liveData.staff?.length || 8,
       hiresCount: 0,
+      hiresNotes: 'Active recruitment pipelines underway; candidate screenings in progress.',
       departuresCount: 2,
       departuresNotes: 'Two departures recorded; transitional handover completed successfully.',
       leaveImpactCount: 1,

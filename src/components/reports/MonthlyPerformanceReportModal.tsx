@@ -622,17 +622,58 @@ export default function MonthlyPerformanceReportModal({
 
                   {/* Service breakdown table */}
                   <div>
-                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-3">
-                      {isAr ? 'تفصيل إيرادات الخدمات والمستهدف' : 'Service Revenue Breakdown vs Strategic Targets'}
-                    </h4>
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
+                        {isAr ? 'تفصيل إيرادات الخدمات والمستهدف' : 'Service Revenue Breakdown vs Strategic Targets'}
+                      </h4>
+                      <button
+                        onClick={() => {
+                          const newBreakdown = [
+                            ...reportData.financialPerformance.revenueByService,
+                            { serviceName: 'New Advisory Service', serviceNameAr: 'خدمة استشارية جديدة', revenue: 0, target: 1000, achievementRate: 0 }
+                          ];
+                          setReportData({
+                            ...reportData,
+                            financialPerformance: {
+                              ...reportData.financialPerformance,
+                              revenueByService: newBreakdown
+                            }
+                          });
+                        }}
+                        className="text-xs text-[#A11212] font-bold flex items-center gap-1 hover:underline"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {isAr ? 'إضافة خدمة' : 'Add Service'}
+                      </button>
+                    </div>
                     <div className="space-y-3">
                       {reportData.financialPerformance.revenueByService.map((srv, idx) => (
                         <div
                           key={idx}
-                          className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60 items-center"
+                          className="grid grid-cols-1 sm:grid-cols-5 gap-3 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60 items-center"
                         >
-                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                            {isAr ? srv.serviceNameAr || srv.serviceName : srv.serviceName}
+                          <div className="sm:col-span-2">
+                            <span className="text-[10px] text-slate-400 block mb-0.5">{isAr ? 'اسم الخدمة' : 'Service Name'}</span>
+                            <input
+                              type="text"
+                              value={isAr ? (srv.serviceNameAr || srv.serviceName) : srv.serviceName}
+                              onChange={(e) => {
+                                const newBreakdown = [...reportData.financialPerformance.revenueByService];
+                                if (isAr) {
+                                  newBreakdown[idx].serviceNameAr = e.target.value;
+                                } else {
+                                  newBreakdown[idx].serviceName = e.target.value;
+                                }
+                                setReportData({
+                                  ...reportData,
+                                  financialPerformance: {
+                                    ...reportData.financialPerformance,
+                                    revenueByService: newBreakdown
+                                  }
+                                });
+                              }}
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs font-bold"
+                            />
                           </div>
                           <div>
                             <span className="text-[10px] text-slate-400 block mb-0.5">
@@ -688,214 +729,111 @@ export default function MonthlyPerformanceReportModal({
                               className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs font-bold"
                             />
                           </div>
-                          <div className="text-end">
-                            <span className="text-[10px] text-slate-400 block mb-0.5">
-                              {isAr ? 'نسبة الإنجاز' : 'Achievement'}
-                            </span>
-                            <span
-                              className={`text-xs font-black px-2 py-0.5 rounded-full ${
-                                srv.achievementRate >= 80
-                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                  : srv.achievementRate >= 50
-                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                  : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-                              }`}
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-0.5">
+                                {isAr ? 'نسبة الإنجاز' : 'Achievement'}
+                              </span>
+                              <span
+                                className={`text-xs font-black px-2 py-0.5 rounded-full ${
+                                  srv.achievementRate >= 80
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                    : srv.achievementRate >= 50
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                    : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                                }`}
+                              >
+                                {srv.achievementRate}%
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const newBreakdown = reportData.financialPerformance.revenueByService.filter((_, i) => i !== idx);
+                                setReportData({
+                                  ...reportData,
+                                  financialPerformance: {
+                                    ...reportData.financialPerformance,
+                                    revenueByService: newBreakdown
+                                  }
+                                });
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg"
+                              title="Delete service"
                             >
-                              {srv.achievementRate}%
-                            </span>
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                </div>
-              )}
 
-              {/* TAB 3: HR & DEPARTMENT DELIVERABLES */}
-              {activeTab === 'p3' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">
-                        {isAr ? 'إجمالي الموظفين' : 'Total Employees'}
-                      </label>
-                      <input
-                        type="number"
-                        value={reportData.humanResources.totalStaffMonthEnd}
-                        onChange={(e) =>
+                  {/* Reasons for Changes & Profitability Plan Notes */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <div className="flex justify-between items-center mb-3">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                          {isAr ? 'أسباب التغيرات وخطة تحسين التحصيل والربحية' : 'Reasons for Changes & Profitability / Collection Improvement Plan'}
+                        </h4>
+                        <p className="text-[10px] text-slate-400">
+                          {isAr ? 'بنود خطة العمل التنفيذية لمعالجة الفجوات المالية والتحصيل' : 'Actionable points explaining financial trends & recovery plans'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const currentNotes = reportData.financialPerformance.profitabilityPlanNotes || [];
                           setReportData({
                             ...reportData,
-                            humanResources: {
-                              ...reportData.humanResources,
-                              totalStaffMonthEnd: Number(e.target.value)
+                            financialPerformance: {
+                              ...reportData.financialPerformance,
+                              profitabilityPlanNotes: [...currentNotes, '']
                             }
-                          })
-                        }
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
-                      />
+                          });
+                        }}
+                        className="text-xs text-[#A11212] font-bold flex items-center gap-1 hover:underline"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {isAr ? 'إضافة بند للخطة' : 'Add Action Point'}
+                      </button>
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">
-                        {isAr ? 'الموظفون الجدد' : 'New Hires'}
-                      </label>
-                      <input
-                        type="number"
-                        value={reportData.humanResources.hiresCount}
-                        onChange={(e) =>
-                          setReportData({
-                            ...reportData,
-                            humanResources: {
-                              ...reportData.humanResources,
-                              hiresCount: Number(e.target.value)
-                            }
-                          })
-                        }
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">
-                        {isAr ? 'المغادرون' : 'Departures'}
-                      </label>
-                      <input
-                        type="number"
-                        value={reportData.humanResources.departuresCount}
-                        onChange={(e) =>
-                          setReportData({
-                            ...reportData,
-                            humanResources: {
-                              ...reportData.humanResources,
-                              departuresCount: Number(e.target.value)
-                            }
-                          })
-                        }
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">
-                        {isAr ? 'تأثير الإجازات' : 'Leave Impact Count'}
-                      </label>
-                      <input
-                        type="number"
-                        value={reportData.humanResources.leaveImpactCount}
-                        onChange={(e) =>
-                          setReportData({
-                            ...reportData,
-                            humanResources: {
-                              ...reportData.humanResources,
-                              leaveImpactCount: Number(e.target.value)
-                            }
-                          })
-                        }
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
-                      />
-                    </div>
-                  </div>
 
-                  {/* Department Deliverables Table */}
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-3">
-                      {isAr ? 'متابعة إنجاز الأقسام والملفات' : 'Department Deliverables & File Tracking'}
-                    </h4>
-                    <div className="space-y-4">
-                      {reportData.servicePerformance.departments.map((dep, idx) => (
-                        <div
-                          key={idx}
-                          className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60"
-                        >
-                          <div className="font-bold text-xs text-slate-900 dark:text-white mb-2">
-                            {isAr ? dep.departmentAr || dep.department : dep.department}
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
-                            <div>
-                              <span className="text-[10px] text-slate-400 block">
-                                {isAr ? 'النشطة' : 'Active Files'}
-                              </span>
-                              <input
-                                type="number"
-                                value={dep.activeFiles}
-                                onChange={(e) => {
-                                  const val = Number(e.target.value);
-                                  const newDep = [...reportData.servicePerformance.departments];
-                                  newDep[idx].activeFiles = val;
-                                  const total = val + newDep[idx].completedFiles;
-                                  newDep[idx].completionRate = total > 0 ? +((newDep[idx].completedFiles / total) * 100).toFixed(1) : 0;
-                                  setReportData({
-                                    ...reportData,
-                                    servicePerformance: { ...reportData.servicePerformance, departments: newDep }
-                                  });
-                                }}
-                                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs"
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-slate-400 block">
-                                {isAr ? 'المكتملة' : 'Completed'}
-                              </span>
-                              <input
-                                type="number"
-                                value={dep.completedFiles}
-                                onChange={(e) => {
-                                  const val = Number(e.target.value);
-                                  const newDep = [...reportData.servicePerformance.departments];
-                                  newDep[idx].completedFiles = val;
-                                  const total = val + newDep[idx].activeFiles;
-                                  newDep[idx].completionRate = total > 0 ? +((val / total) * 100).toFixed(1) : 0;
-                                  setReportData({
-                                    ...reportData,
-                                    servicePerformance: { ...reportData.servicePerformance, departments: newDep }
-                                  });
-                                }}
-                                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs"
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-slate-400 block">
-                                {isAr ? 'المتأخرة' : 'Delayed'}
-                              </span>
-                              <input
-                                type="number"
-                                value={dep.delayedFiles}
-                                onChange={(e) => {
-                                  const val = Number(e.target.value);
-                                  const newDep = [...reportData.servicePerformance.departments];
-                                  newDep[idx].delayedFiles = val;
-                                  setReportData({
-                                    ...reportData,
-                                    servicePerformance: { ...reportData.servicePerformance, departments: newDep }
-                                  });
-                                }}
-                                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs text-red-500 font-bold"
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-slate-400 block">
-                                {isAr ? 'نسبة الإنجاز' : 'Completion Rate'}
-                              </span>
-                              <div className="pt-2 text-xs font-black text-slate-800 dark:text-slate-200">
-                                {dep.completionRate}%
-                              </div>
-                            </div>
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-slate-400 block mb-1">
-                              {isAr ? 'سبب التأخير والإجراء المتخذ' : 'Reason & Corrective Action Taken'}
-                            </span>
-                            <input
-                              type="text"
-                              value={dep.reasonAndAction}
-                              onChange={(e) => {
-                                const newDep = [...reportData.servicePerformance.departments];
-                                newDep[idx].reasonAndAction = e.target.value;
-                                setReportData({
-                                  ...reportData,
-                                  servicePerformance: { ...reportData.servicePerformance, departments: newDep }
-                                });
-                              }}
-                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-700 dark:text-slate-300"
-                            />
-                          </div>
+                    <div className="space-y-2">
+                      {(reportData.financialPerformance.profitabilityPlanNotes || []).map((note, nIdx) => (
+                        <div key={nIdx} className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-lg bg-[#A11212]/10 text-[#A11212] flex items-center justify-center font-black text-xs shrink-0">
+                            {nIdx + 1}
+                          </span>
+                          <input
+                            type="text"
+                            value={note}
+                            onChange={(e) => {
+                              const newNotes = [...(reportData.financialPerformance.profitabilityPlanNotes || [])];
+                              newNotes[nIdx] = e.target.value;
+                              setReportData({
+                                ...reportData,
+                                financialPerformance: {
+                                  ...reportData.financialPerformance,
+                                  profitabilityPlanNotes: newNotes
+                                }
+                              });
+                            }}
+                            className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-medium text-slate-900 dark:text-white"
+                          />
+                          <button
+                            onClick={() => {
+                              const newNotes = (reportData.financialPerformance.profitabilityPlanNotes || []).filter((_, i) => i !== nIdx);
+                              setReportData({
+                                ...reportData,
+                                financialPerformance: {
+                                  ...reportData.financialPerformance,
+                                  profitabilityPlanNotes: newNotes
+                                }
+                              });
+                            }}
+                            className="p-2 text-slate-400 hover:text-red-500 rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       ))}
                     </div>
