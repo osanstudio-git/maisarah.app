@@ -1307,130 +1307,413 @@ export default function MonthlyPerformanceReportModal({
               {/* TAB 4: CLIENTS & SALES */}
               {activeTab === 'p4' && (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">
-                        {isAr ? 'تقييم رضا العملاء (من 5)' : 'Client Satisfaction Rating (out of 5)'}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={reportData.clientSatisfaction.averageRating}
-                        onChange={(e) =>
-                          setReportData({
-                            ...reportData,
-                            clientSatisfaction: {
-                              ...reportData.clientSatisfaction,
-                              averageRating: Number(e.target.value)
-                            }
-                          })
-                        }
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">
-                        {isAr ? 'عقود مجددة' : 'Contracts Renewed'}
-                      </label>
-                      <input
-                        type="number"
-                        value={reportData.clientSatisfaction.renewedClientsCount}
-                        onChange={(e) =>
-                          setReportData({
-                            ...reportData,
-                            clientSatisfaction: {
-                              ...reportData.clientSatisfaction,
-                              renewedClientsCount: Number(e.target.value)
-                            }
-                          })
-                        }
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">
-                        {isAr ? 'عملاء محولون (B2B)' : 'Referrals (B2B)'}
-                      </label>
-                      <input
-                        type="number"
-                        value={reportData.marketingAndSales.sourcesDistribution.referralsB2B}
-                        onChange={(e) =>
-                          setReportData({
-                            ...reportData,
-                            marketingAndSales: {
-                              ...reportData.marketingAndSales,
-                              sourcesDistribution: {
-                                ...reportData.marketingAndSales.sourcesDistribution,
-                                referralsB2B: Number(e.target.value)
+                  {/* 1. Client Satisfaction & Complaints */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white mb-3">
+                      {isAr ? '1. رضا العملاء والشكاوى (الصفحة 4)' : '1. Client Satisfaction & Retention (Page 4)'}
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">
+                          {isAr ? 'عدد العملاء المطلوب تقييمهم' : 'Clients Surveyed'}
+                        </label>
+                        <input
+                          type="number"
+                          value={reportData.clientSatisfaction.clientsSurveyed}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              clientSatisfaction: {
+                                ...reportData.clientSatisfaction,
+                                clientsSurveyed: Number(e.target.value)
                               }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">
+                          {isAr ? 'عدد الردود المستلمة' : 'Responses Received'}
+                        </label>
+                        <input
+                          type="number"
+                          value={reportData.clientSatisfaction.responsesReceived}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              clientSatisfaction: {
+                                ...reportData.clientSatisfaction,
+                                responsesReceived: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-[#A11212] mb-1">
+                          {isAr ? 'متوسط تقييم الرضا (من 5 ⭐)' : 'Average Rating (out of 5 ⭐)'}
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          max={5}
+                          min={1}
+                          value={reportData.clientSatisfaction.averageRating}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              clientSatisfaction: {
+                                ...reportData.clientSatisfaction,
+                                averageRating: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-red-300 dark:border-red-900/60 rounded-xl p-2.5 text-xs font-black text-[#A11212]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">
+                          {isAr ? 'الشكاوى المستلمة والمعالجة' : 'Complaints (Received / Resolved)'}
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            placeholder="Received"
+                            value={reportData.clientSatisfaction.complaintsReceived}
+                            onChange={(e) =>
+                              setReportData({
+                                ...reportData,
+                                clientSatisfaction: {
+                                  ...reportData.clientSatisfaction,
+                                  complaintsReceived: Number(e.target.value)
+                                }
+                              })
+                            }
+                            className="w-1/2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                          />
+                          <input
+                            type="number"
+                            placeholder="Resolved"
+                            value={reportData.clientSatisfaction.closedComplaints}
+                            onChange={(e) =>
+                              setReportData({
+                                ...reportData,
+                                clientSatisfaction: {
+                                  ...reportData.clientSatisfaction,
+                                  closedComplaints: Number(e.target.value)
+                                }
+                              })
+                            }
+                            className="w-1/2 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-xl p-2 text-xs font-bold text-emerald-600"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-emerald-600 mb-1">
+                          {isAr ? 'العملاء المجددون للخدمة (+)' : 'Renewed Clients (+)'}
+                        </label>
+                        <input
+                          type="number"
+                          value={reportData.clientSatisfaction.renewedClientsCount}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              clientSatisfaction: {
+                                ...reportData.clientSatisfaction,
+                                renewedClientsCount: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700/60 rounded-xl p-2.5 text-xs font-bold text-emerald-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-rose-600 mb-1">
+                          {isAr ? 'العملاء المنسحبون (-)' : 'Withdrawn Clients (-)'}
+                        </label>
+                        <input
+                          type="number"
+                          value={reportData.clientSatisfaction.withdrawnClientsCount}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              clientSatisfaction: {
+                                ...reportData.clientSatisfaction,
+                                withdrawnClientsCount: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-700/60 rounded-xl p-2.5 text-xs font-bold text-rose-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        {isAr ? 'ملاحظات وأسباب انسحاب العملاء (إن وجدت)' : 'Withdrawal Reasons & Corrective Actions'}
+                      </label>
+                      <input
+                        type="text"
+                        value={reportData.clientSatisfaction.withdrawalReasons || ''}
+                        placeholder={isAr ? 'مثال: لا يوجد انسحاب؛ انتقال عميل واحد خارج السلطنة' : 'e.g. No significant drop-offs recorded'}
+                        onChange={(e) =>
+                          setReportData({
+                            ...reportData,
+                            clientSatisfaction: {
+                              ...reportData.clientSatisfaction,
+                              withdrawalReasons: e.target.value
                             }
                           })
                         }
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-medium"
                       />
                     </div>
                   </div>
 
-                  {/* Quotations summary */}
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">{isAr ? 'عروض مرسلة' : 'Sent'}</span>
-                      <input
-                        type="number"
-                        value={reportData.marketingAndSales.quotationsSent}
-                        onChange={(e) =>
-                          setReportData({
-                            ...reportData,
-                            marketingAndSales: {
-                              ...reportData.marketingAndSales,
-                              quotationsSent: Number(e.target.value)
-                            }
-                          })
-                        }
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs font-bold"
-                      />
+                  {/* 2. Marketing & Sales Funnel */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white mb-3">
+                      {isAr ? '2. مسار التسويق والمبيعات وعروض الأسعار' : '2. Marketing & Sales Pipeline Funnel'}
+                    </h4>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'المكالمات التسويقية' : 'Marketing Calls'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.marketingCalls}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                marketingCalls: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'الاجتماعات مع عملاء محتملين' : 'Prospective Meetings'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.prospectiveMeetings}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                prospectiveMeetings: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'الفرص الجديدة المسجلة' : 'New Leads Captured'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.newLeadsCount}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                newLeadsCount: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'عروض الأسعار المرسلة' : 'Quotations Sent'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.quotationsSent}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                quotationsSent: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">{isAr ? 'عروض مقبولة' : 'Accepted'}</span>
-                      <input
-                        type="number"
-                        value={reportData.marketingAndSales.quotationsAccepted}
-                        onChange={(e) =>
-                          setReportData({
-                            ...reportData,
-                            marketingAndSales: {
-                              ...reportData.marketingAndSales,
-                              quotationsAccepted: Number(e.target.value)
-                            }
-                          })
-                        }
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs font-bold"
-                      />
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'عروض الأسعار المعتمدة' : 'Accepted Quotations'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.quotationsAccepted}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                quotationsAccepted: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-xl p-2 text-xs font-bold text-emerald-600"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'العملاء الجدد المتعاقد معهم' : 'Newly Contracted Clients'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.newlyContractedClients}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                newlyContractedClients: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'قيمة العقود الجديدة (ر.ع)' : 'New Contracts Value (OMR)'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.newContractsValue}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                newContractsValue: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-red-300 dark:border-red-900 rounded-xl p-2 text-xs font-black text-[#A11212]"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'تكلفة التسويق (ر.ع)' : 'Marketing Cost (OMR)'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.marketingCost}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                marketingCost: Number(e.target.value)
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">{isAr ? 'عملاء جدد متعاقد معهم' : 'Contracted'}</span>
-                      <input
-                        type="number"
-                        value={reportData.marketingAndSales.newlyContractedClients}
-                        onChange={(e) =>
-                          setReportData({
-                            ...reportData,
-                            marketingAndSales: {
-                              ...reportData.marketingAndSales,
-                              newlyContractedClients: Number(e.target.value)
-                            }
-                          })
-                        }
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-xs font-bold"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">{isAr ? 'معدل القبول' : 'Win Rate'}</span>
-                      <div className="pt-2 text-xs font-black text-emerald-600">
-                        {reportData.marketingAndSales.quotationsSent > 0
-                          ? ((reportData.marketingAndSales.quotationsAccepted / reportData.marketingAndSales.quotationsSent) * 100).toFixed(1)
-                          : 0}
-                        %
+                  </div>
+
+                  {/* 3. New Client Acquisition Channels */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white mb-1">
+                      {isAr ? '3. توزيع مصادر واستقطاب العملاء الجدد' : '3. Client Acquisition Channels Breakdown'}
+                    </h4>
+                    <p className="text-[10px] text-slate-400 mb-3">
+                      {isAr ? 'عدد العملاء الواردين من مختلف القنوات الاستراتيجية' : 'Distribution of incoming client inquiries by source'}
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'مراكز سند والاتصال' : 'Sanad / Direct Calls'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.sourcesDistribution?.calls || 0}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                sourcesDistribution: {
+                                  ...reportData.marketingAndSales.sourcesDistribution,
+                                  calls: Number(e.target.value)
+                                }
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'الاستثمار الأجنبي (FDI)' : 'FDI / In-Person Visits'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.sourcesDistribution?.visits || 0}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                sourcesDistribution: {
+                                  ...reportData.marketingAndSales.sourcesDistribution,
+                                  visits: Number(e.target.value)
+                                }
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'التسويق الرقمي والموقع' : 'Digital & Social Media'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.sourcesDistribution?.socialMedia || 0}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                sourcesDistribution: {
+                                  ...reportData.marketingAndSales.sourcesDistribution,
+                                  socialMedia: Number(e.target.value)
+                                }
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">{isAr ? 'شركاء الأعمال (B2B)' : 'B2B Partner Referrals'}</span>
+                        <input
+                          type="number"
+                          value={reportData.marketingAndSales.sourcesDistribution?.referralsB2B || 0}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              marketingAndSales: {
+                                ...reportData.marketingAndSales,
+                                sourcesDistribution: {
+                                  ...reportData.marketingAndSales.sourcesDistribution,
+                                  referralsB2B: Number(e.target.value)
+                                }
+                              }
+                            })
+                          }
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold text-emerald-600"
+                        />
                       </div>
                     </div>
                   </div>

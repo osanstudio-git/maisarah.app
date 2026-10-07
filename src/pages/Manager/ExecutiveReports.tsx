@@ -39,6 +39,7 @@ const ExecutiveReports = () => {
   const [dbClients, setDbClients] = useState<any[]>([]);
   const [dbContracts, setDbContracts] = useState<any[]>([]);
   const [dbProfiles, setDbProfiles] = useState<any[]>([]);
+  const [dbQuotations, setDbQuotations] = useState<any[]>([]);
 
   const fetchLiveReportData = useCallback(async () => {
     try {
@@ -47,13 +48,15 @@ const ExecutiveReports = () => {
         { data: srvs },
         { data: cls },
         { data: cntrs },
-        { data: profs }
+        { data: profs },
+        { data: quots }
       ] = await Promise.all([
         supabase.from('invoices').select('*, clients(company_name)').order('created_at', { ascending: false }),
         supabase.from('services').select('*, clients(company_name), profiles:profiles!employee_id(full_name)').order('created_at', { ascending: false }),
         supabase.from('clients').select('*, assigned_employee:profiles!assigned_employee_id(full_name)').eq('is_archived', false).order('created_at', { ascending: false }),
         supabase.from('hr_contracts').select('*').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('*')
+        supabase.from('profiles').select('*'),
+        supabase.from('quotations').select('*').order('created_at', { ascending: false })
       ]);
 
       setDbInvoices(invs || []);
@@ -61,6 +64,7 @@ const ExecutiveReports = () => {
       setDbClients(cls || []);
       setDbContracts(cntrs || []);
       setDbProfiles(profs || []);
+      setDbQuotations(quots || []);
     } catch (err) {
       console.error('Error fetching live report data:', err);
     }
@@ -466,6 +470,7 @@ const ExecutiveReports = () => {
         invoices={dbInvoices}
         services={dbServices}
         clients={dbClients}
+        quotations={dbQuotations}
         staff={dbProfiles}
       />
     </div>
