@@ -89,7 +89,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
         {/* Header Bar */}
         <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-green-600/20 border border-green-500/30 text-green-400 rounded-xl">
+            <div className="p-2.5 bg-[#A11212]/20 border border-red-500/30 text-red-400 rounded-xl">
               <FileCheck size={22} />
             </div>
             <div>
@@ -106,14 +106,14 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
             <button
               type="button"
               onClick={() => window.print()}
-              className="bg-green-700 hover:bg-green-800 text-white text-xs font-black uppercase tracking-wider px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-green-700/30"
+              className="bg-[#A11212] hover:bg-red-800 text-white text-xs font-black uppercase tracking-wider px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-red-900/30 cursor-pointer"
             >
               <Printer size={15} /> Print / Export Invoice PDF
             </button>
 
             <button 
               onClick={onClose} 
-              className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors"
+              className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
             >
               <X size={20} />
             </button>
@@ -125,7 +125,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
           
           {/* Left Controls */}
           <div className="w-full md:w-1/3 p-6 overflow-y-auto space-y-5 bg-slate-900 border-r border-slate-800 text-xs">
-            <h4 className="text-xs font-black uppercase tracking-widest text-green-400 border-b border-slate-800 pb-2">
+            <h4 className="text-xs font-black uppercase tracking-widest text-red-400 border-b border-slate-800 pb-2">
               Invoice Parameters
             </h4>
 
@@ -135,7 +135,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
                 type="text"
                 value={invoiceNo}
                 onChange={e => setInvoiceNo(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-green-500"
+                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
               />
             </div>
 
@@ -145,7 +145,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
                 type="text"
                 value={invoiceDate}
                 onChange={e => setInvoiceDate(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-green-500"
+                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
               />
             </div>
 
@@ -155,7 +155,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
                 type="text"
                 value={buyerName}
                 onChange={e => setBuyerName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-green-500"
+                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
               />
             </div>
 
@@ -165,7 +165,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
                 type="text"
                 value={buyerCountry}
                 onChange={e => setBuyerCountry(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-green-500"
+                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
               />
             </div>
 
@@ -175,7 +175,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
                 type="text"
                 value={serviceParticulars}
                 onChange={e => setServiceParticulars(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-green-500"
+                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
               />
             </div>
 
@@ -186,7 +186,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
                 step="0.001"
                 value={lineAmount}
                 onChange={e => setLineAmount(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-950 border border-slate-700 text-green-400 font-black rounded-xl px-3 py-2 text-sm outline-none focus:border-green-500"
+                className="w-full bg-slate-950 border border-slate-700 text-red-400 font-black rounded-xl px-3 py-2 text-sm outline-none focus:border-red-500"
               />
             </div>
 
@@ -195,7 +195,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, clientData }: TaxInvo
                 type="checkbox"
                 checked={includeVat}
                 onChange={e => setIncludeVat(e.target.checked)}
-                className="accent-green-500 rounded w-4 h-4"
+                className="accent-[#A11212] rounded w-4 h-4"
               />
               <span>Include 5% Oman VAT</span>
             </label>
