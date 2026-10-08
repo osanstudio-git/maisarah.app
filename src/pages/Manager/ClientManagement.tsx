@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
+import { autoCreateDSREntryFromTask } from '../../utils/dsrSync';
 
 interface Client {
   id: string;
@@ -374,6 +375,19 @@ const ClientManagement = () => {
         }]);
 
       if (error) throw error;
+
+      // Auto-create DSR draft for assigned employee
+      const assignedEmp = employees.find(e => e.id === (quickOpForm.employee_id || employees[0]?.id));
+      autoCreateDSREntryFromTask({
+        serviceTitle: quickOpForm.title.trim(),
+        companyName: selectedClient.company_name || selectedClient.full_name || 'Valued Client',
+        crNumber: selectedClient.cr_number || selectedClient.civil_id || '',
+        clientId: selectedClient.id,
+        employeeName: assignedEmp?.full_name || 'Staff Member',
+        employeeId: quickOpForm.employee_id || employees[0]?.id || undefined,
+        amount: 0,
+        date: new Date().toISOString().split('T')[0]
+      });
 
       setShowQuickOpModal(false);
       setQuickOpForm({

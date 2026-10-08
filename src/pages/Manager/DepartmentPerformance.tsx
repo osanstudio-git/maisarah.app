@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabaseClient';
 import { getAllDepartments, getDepartmentById } from '../../config/departments';
 import { isDirectEmployeeMode } from '../../utils/workflowConfig';
+import { autoCreateDSREntryFromTask } from '../../utils/dsrSync';
 import {
   Layers,
   ChevronDown,
@@ -335,6 +336,17 @@ const DepartmentPerformance = () => {
         }]);
 
       if (error) throw error;
+
+      // Auto-create DSR draft for assigned employee
+      const assignedEmp = employees.find(e => e.id === (assignForm.employee_id || employees[0]?.id));
+      autoCreateDSREntryFromTask({
+        serviceTitle: assignForm.title.trim(),
+        companyName: assignForm.client_name || `${selectedDept.name} Corporate Client`,
+        employeeName: assignedEmp?.name || 'Staff Member',
+        employeeId: assignForm.employee_id || employees[0]?.id || undefined,
+        amount: 0,
+        date: new Date().toISOString().split('T')[0]
+      });
 
       setShowAssignModal(false);
       setAssignForm({

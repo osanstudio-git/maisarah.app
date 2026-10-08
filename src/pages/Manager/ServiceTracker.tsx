@@ -29,6 +29,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { getAllDepartments } from '../../config/departments';
+import { autoCreateDSREntryFromTask } from '../../utils/dsrSync';
 
 const DEPARTMENT_CODES: Record<string, string> = {
   audit: 'AUD',
@@ -306,6 +307,21 @@ const OperationsCenter = () => {
           }]);
 
         if (error) throw error;
+
+        // Auto-create DSR Draft for assigned employee so they never forget to log
+        const selectedClientObj = clients.find(c => c.id === selectedClientId);
+        const selectedEmployeeObj = employees.find(e => e.id === selectedEmployeeId);
+
+        autoCreateDSREntryFromTask({
+          serviceTitle: formData.title,
+          companyName: selectedClientObj?.company_name || 'Valued Corporate Client',
+          crNumber: selectedClientObj?.cr_number || '',
+          clientId: selectedClientId || undefined,
+          employeeName: selectedEmployeeObj?.full_name || 'Staff Member',
+          employeeId: selectedEmployeeId || undefined,
+          amount: 0,
+          date: new Date().toISOString().split('T')[0]
+        });
       }
 
       setShowCreateModal(false);

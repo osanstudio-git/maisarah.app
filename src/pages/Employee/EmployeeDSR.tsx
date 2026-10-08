@@ -127,6 +127,11 @@ export default function EmployeeDSR() {
     });
   }, [entries, searchTerm, statusFilter, invoiceFilter, serviceFilter]);
 
+  // Tasks auto-assigned awaiting employee payment logging
+  const pendingPaymentTasks = useMemo(() => {
+    return entries.filter(e => e.status === 'Unpaid' || Number(e.amount || 0) === 0);
+  }, [entries]);
+
   // Financial KPIs Overview
   const kpis = useMemo(() => {
     let totalGross = 0;
@@ -442,12 +447,65 @@ export default function EmployeeDSR() {
             setInvoiceFilter('all');
             setServiceFilter('all');
           }}
-          className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition"
+          className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition cursor-pointer"
           title={isAr ? 'إعادة ضبط الفلاتر' : 'Reset Filters'}
         >
           <RefreshCw size={16} />
         </button>
       </div>
+
+      {/* ── Auto-Assigned Tasks Awaiting Payment Settlement ──────────────── */}
+      {pendingPaymentTasks.length > 0 && (
+        <div className="bg-gradient-to-r from-brand-dark/10 via-brand-dark/5 to-transparent border-2 border-brand-dark/20 rounded-3xl p-5 shadow-sm space-y-3">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Sparkles size={18} className="text-brand-dark" />
+              <h3 className="text-sm font-black text-gray-900">
+                {isAr ? 'مهام ومشاريع بانتظار تسجيل التحصيل المالي' : 'Auto-Assigned Tasks Awaiting Payment Entry'}
+              </h3>
+              <span className="px-2.5 py-0.5 bg-brand-dark text-white rounded-full text-[10px] font-black">
+                {pendingPaymentTasks.length} {isAr ? 'مهام' : 'Tasks'}
+              </span>
+            </div>
+            <p className="text-[10px] text-gray-400 font-bold hidden sm:block">
+              {isAr ? 'تم سحب المهام تلقائياً من إدارة العمليات - فقط أدخل المبلغ وطريقة الدفع' : 'Auto-populated from Manager Operations - just confirm amount & payment'}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pendingPaymentTasks.slice(0, 6).map(task => (
+              <div key={task.id} className="bg-white border border-brand-dark/20 rounded-2xl p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-3">
+                <div>
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-[9px] font-black uppercase text-brand-dark bg-brand-dark/10 px-2 py-0.5 rounded font-mono">
+                      CR: {task.cr_number || '1527047'}
+                    </span>
+                    <span className="text-[9px] font-bold text-gray-400">{task.date}</span>
+                  </div>
+                  <p className="font-black text-xs text-gray-900 line-clamp-1">{task.service}</p>
+                  <p className="text-[11px] font-bold text-gray-600 truncate">{task.company_name}</p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setEditingEntry({
+                      ...task,
+                      amount: task.amount || 30,
+                      status: 'Paid',
+                      payment_date: new Date().toISOString().split('T')[0],
+                      payment_method: 'Mobile Payment'
+                    });
+                  }}
+                  className="w-full py-2 bg-brand-dark hover:bg-brand text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <DollarSign size={14} />
+                  <span>{isAr ? 'تسجيل السداد والتحصيل' : 'Enter Payment (OMR)'}</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* DSR Data Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

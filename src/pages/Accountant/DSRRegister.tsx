@@ -24,7 +24,9 @@ export default function DSRRegister() {
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [invoiceFilter, setInvoiceFilter] = useState('all');
+  const [verificationFilter, setVerificationFilter] = useState('all');
   const [serviceFilter, setServiceFilter] = useState('all');
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
   // Inline edit state for note & gov fee
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -76,6 +78,65 @@ export default function DSRRegister() {
     };
   }, [loadData]);
 
+  // Quick 1-Click Verification Handler
+  const handleQuickVerify = async (entry: DSREntry) => {
+    setVerifyingId(entry.id);
+    try {
+      updateDSREntry(entry.id, {
+        verified_by_accountant: true,
+      });
+
+      // Notify Manager of Verified DSR Record
+      await supabase.from('notifications').insert([{
+        recipient_role: 'manager',
+        title: isAr ? 'اعتماد ومطابقة قيد DSR' : 'DSR Record Verified & Audited',
+        message: isAr
+          ? `اعتمد المحاسب قيد DSR للعميل "${entry.company_name}" بقيمة OMR ${entry.amount.toFixed(3)} المنفذ بواسطة (${entry.employee_name}).`
+          : `Accountant verified & locked DSR record for "${entry.company_name}" (OMR ${entry.amount.toFixed(3)}) by ${entry.employee_name}.`,
+        type: 'dsr_verified'
+      }]);
+    } catch (err: any) {
+      console.warn('Verification sync notice:', err?.message);
+    } finally {
+      setVerifyingId(null);
+      loadData();
+    }
+  };
+
+  // Quick Unverify / Re-open Handler
+  const handleQuickUnverify = (entry: DSREntry) => {
+    updateDSREntry(entry.id, {
+      verified_by_accountant: false,
+    });
+    loadData();
+  };
+
+  // Bulk Verify All Pending
+  const handleBulkVerifyPending = async (pendingItems: DSREntry[]) => {
+    if (pendingItems.length === 0) return;
+    if (!confirm(isAr ? `هل تريد اعتماد وتدقيق ${pendingItems.length} سجل مالي دفعة واحدة؟` : `Verify and lock all ${pendingItems.length} pending DSR records?`)) {
+      return;
+    }
+
+    pendingItems.forEach(item => {
+      updateDSREntry(item.id, { verified_by_accountant: true });
+    });
+
+    try {
+      await supabase.from('notifications').insert([{
+        recipient_role: 'manager',
+        title: isAr ? 'اعتماد جماعي لقيود DSR' : 'Bulk DSR Records Verified',
+        message: isAr
+          ? `قام المحاسب باعتماد وتدقيق ${pendingItems.length} سجل DSR بنجاح.`
+          : `Accountant bulk-verified ${pendingItems.length} DSR records in audit queue.`,
+        type: 'dsr_verified'
+      }]);
+    } catch (err) {
+      // ignore
+    }
+    loadData();
+  };
+
   // Unique lists for filters
   const uniqueEmployees = useMemo(() => {
     const set = new Set(entries.map(e => e.employee_name).filter(Boolean));
@@ -103,11 +164,15 @@ export default function DSRRegister() {
         invoiceFilter === 'all' ||
         (invoiceFilter === 'true' && e.invoice_issued) ||
         (invoiceFilter === 'false' && !e.invoice_issued);
+      const matchVerification =
+        verificationFilter === 'all' ||
+        (verificationFilter === 'verified' && e.verified_by_accountant) ||
+        (verificationFilter === 'unverified' && !e.verified_by_accountant);
       const matchSvc = serviceFilter === 'all' || e.service === serviceFilter;
 
-      return matchSearch && matchEmp && matchStatus && matchInvoice && matchSvc;
+      return matchSearch && matchEmp && matchStatus && matchInvoice && matchVerification && matchSvc;
     });
-  }, [entries, searchTerm, employeeFilter, statusFilter, invoiceFilter, serviceFilter]);
+  }, [entries, searchTerm, employeeFilter, statusFilter, invoiceFilter, verificationFilter, serviceFilter]);
 
   // Financial KPIs
   const kpis = useMemo(() => {
@@ -117,6 +182,8 @@ export default function DSRRegister() {
     let totalPaidAmt = 0;
     let unpaidCount = 0;
     let totalInvoicesIssued = 0;
+    let unverifiedCount = 0;
+    let verifiedCount = 0;
 
     filteredEntries.forEach(e => {
       totalGross += e.amount || 0;
@@ -125,6 +192,11 @@ export default function DSRRegister() {
       if (e.status === 'Paid') totalPaidAmt += e.amount || 0;
       if (e.status === 'Unpaid') unpaidCount += 1;
       if (e.invoice_issued) totalInvoicesIssued += 1;
+      if (e.verified_by_accountant) {
+        verifiedCount += 1;
+      } else {
+        unverifiedCount += 1;
+      }
     });
 
     return {
@@ -135,6 +207,8 @@ export default function DSRRegister() {
       totalPaidAmt,
       unpaidCount,
       totalInvoicesIssued,
+      unverifiedCount,
+      verifiedCount
     };
   }, [filteredEntries]);
 
@@ -391,13 +465,59 @@ export default function DSRRegister() {
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-          <p className="text-xs text-gray-500 font-medium">{isAr ? 'فواتير تم إصدارها' : 'Invoices Issued'}</p>
-          <p className="text-xl font-bold text-red-700 mt-1">{kpis.totalInvoicesIssued} / {kpis.count}</p>
-          <span className="text-[10px] text-red-500">
-            {kpis.unpaidCount > 0 ? `${kpis.unpaidCount} ${isAr ? 'معلقة' : 'pending'}` : isAr ? 'الكل جاهز' : 'All cleared'}
+          <p className="text-xs text-gray-500 font-medium">{isAr ? 'حالة التدقيق والاعتماد' : 'Audit & Verification'}</p>
+          <p className="text-xl font-bold text-red-700 mt-1">
+            {kpis.verifiedCount} <span className="text-xs font-normal text-gray-400">/ {kpis.count}</span>
+          </p>
+          <span className="text-[10px] text-amber-600 font-medium">
+            {kpis.unverifiedCount > 0 ? `${kpis.unverifiedCount} ${isAr ? 'بانتظار الاعتماد' : 'awaiting audit'}` : isAr ? '✓ تم اعتماد الكل' : '✓ All Audited'}
           </span>
         </div>
       </div>
+
+      {/* Unverified Entries Audit Notification Banner */}
+      {kpis.unverifiedCount > 0 && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-rose-500/10 border border-amber-300/60 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-md shrink-0 animate-pulse">
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                {isAr ? 'قيود يومية جديدة بانتظار المطابقة والاعتماد المحاسبي' : 'Pending DSR Records Awaiting Accountant Verification'}
+                <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-xs font-black">
+                  {kpis.unverifiedCount} {isAr ? 'قيد معلق' : 'Pending'}
+                </span>
+              </h4>
+              <p className="text-xs text-gray-600 font-light mt-0.5">
+                {isAr
+                  ? 'تم تسجيل هذه القيود من قبل الموظفين ومسؤولي العمليات. قم بمطابقة التحويلات البنكية واعتمادها لقفل الحساب وإصدار الفواتير.'
+                  : 'Submitted by field/department staff. Review payment amounts, reconcile bank/POS, and verify & lock records.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setVerificationFilter(verificationFilter === 'unverified' ? 'all' : 'unverified')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                verificationFilter === 'unverified'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'bg-white text-gray-700 hover:bg-amber-50 border border-gray-200'
+              }`}
+            >
+              {verificationFilter === 'unverified' ? (isAr ? 'عرض الكل' : 'Show All') : (isAr ? 'تصفية المعلقة فقط' : 'Filter Pending')}
+            </button>
+            <button
+              onClick={() => handleBulkVerifyPending(filteredEntries.filter(e => !e.verified_by_accountant))}
+              className="px-4 py-1.5 bg-red-800 hover:bg-red-900 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1.5"
+            >
+              <CheckSquare size={14} />
+              {isAr ? 'اعتماد المعروض دفعة واحدة' : 'Bulk Verify Visible'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filters Bar */}
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-3">
@@ -443,10 +563,21 @@ export default function DSRRegister() {
           onChange={e => setStatusFilter(e.target.value)}
           className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 outline-none focus:border-red-700 cursor-pointer"
         >
-          <option value="all">{isAr ? 'جميع الحالات' : 'All Status'}</option>
+          <option value="all">{isAr ? 'جميع حالات الدفع' : 'All Payment Status'}</option>
           <option value="Paid">{isAr ? 'مدفوع (Paid)' : 'Paid'}</option>
           <option value="Unpaid">{isAr ? 'غير مدفوع (Unpaid)' : 'Unpaid'}</option>
           <option value="Partial">{isAr ? 'جزئي (Partial)' : 'Partial'}</option>
+        </select>
+
+        {/* Verification Audit Filter */}
+        <select
+          value={verificationFilter}
+          onChange={e => setVerificationFilter(e.target.value)}
+          className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 outline-none focus:border-red-700 cursor-pointer"
+        >
+          <option value="all">{isAr ? 'حالة الاعتماد: الكل' : 'Verification: All'}</option>
+          <option value="verified">{isAr ? '✓ معتمد ومقفل' : '✓ Verified & Locked'}</option>
+          <option value="unverified">{isAr ? '⏳ بانتظار الاعتماد' : '⏳ Pending Audit'}</option>
         </select>
 
         {/* Invoice Issued Filter */}
@@ -466,6 +597,7 @@ export default function DSRRegister() {
             setEmployeeFilter('all');
             setStatusFilter('all');
             setInvoiceFilter('all');
+            setVerificationFilter('all');
             setServiceFilter('all');
           }}
           className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition"
@@ -478,7 +610,7 @@ export default function DSRRegister() {
       {/* DSR Data Table (Matching User Excel Screenshot) */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-start text-xs border-collapse min-w-[1200px]">
+          <table className="w-full text-start text-xs border-collapse min-w-[1300px]">
             <thead>
               <tr className="bg-gray-100/80 border-b border-gray-200 text-gray-700 uppercase font-bold text-[11px] tracking-wider">
                 <th className="px-3 py-3.5 text-start border-e border-gray-200">{isAr ? 'التاريخ' : 'Date'}</th>
@@ -490,6 +622,7 @@ export default function DSRRegister() {
                 <th className="px-3 py-3.5 text-end border-e border-gray-200">{isAr ? 'الحكومي' : 'Gov'}</th>
                 <th className="px-3 py-3.5 text-end border-e border-gray-200">{isAr ? 'الربح' : 'Profit'}</th>
                 <th className="px-3 py-3.5 text-center border-e border-gray-200">{isAr ? 'الحالة' : 'Status'}</th>
+                <th className="px-3 py-3.5 text-center border-e border-gray-200">{isAr ? 'الاعتماد المحاسبي' : 'Audit Status'}</th>
                 <th className="px-3 py-3.5 text-start border-e border-gray-200">{isAr ? 'تاريخ الدفع' : 'Payment Date'}</th>
                 <th className="px-3 py-3.5 text-start border-e border-gray-200">{isAr ? 'طريقة الدفع' : 'Payment Method'}</th>
                 <th className="px-3 py-3.5 text-start border-e border-gray-200">{isAr ? 'ملاحظة المحاسب' : 'Accountant Note'}</th>
@@ -500,12 +633,14 @@ export default function DSRRegister() {
             <tbody className="divide-y divide-gray-200">
               {filteredEntries.map(e => {
                 const isEditing = editingRowId === e.id;
+                const isVerifying = verifyingId === e.id;
 
                 return (
                   <tr
                     key={e.id}
-                    className={`hover:bg-amber-50/40 transition-colors ${e.status === 'Unpaid' ? 'bg-red-50/20' : e.status === 'Partial' ? 'bg-amber-50/20' : ''
-                      }`}
+                    className={`hover:bg-amber-50/40 transition-colors ${
+                      !e.verified_by_accountant ? 'bg-amber-50/15' : ''
+                    } ${e.status === 'Unpaid' ? 'bg-red-50/20' : e.status === 'Partial' ? 'bg-amber-50/20' : ''}`}
                   >
                     {/* Date */}
                     <td className="px-3 py-2.5 font-medium text-gray-600 border-e border-gray-200 whitespace-nowrap">
@@ -585,6 +720,34 @@ export default function DSRRegister() {
                         >
                           {e.status === 'Paid' ? (isAr ? 'مدفوع' : 'Paid') : e.status === 'Unpaid' ? (isAr ? 'غير مدفوع' : 'Unpaid') : (isAr ? 'جزئي' : 'Partial')}
                         </span>
+                      )}
+                    </td>
+
+                    {/* Accountant Verification Status */}
+                    <td className="px-3 py-2.5 text-center border-e border-gray-200 whitespace-nowrap">
+                      {e.verified_by_accountant ? (
+                        <button
+                          onClick={() => handleQuickUnverify(e)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300 font-bold text-[10px] transition"
+                          title={isAr ? 'معتمد ومقفل (انقر لإلغاء القفل)' : 'Verified & Locked (Click to unlock)'}
+                        >
+                          <ShieldCheck size={12} className="text-emerald-600" />
+                          {isAr ? 'معتمد ومقفل' : 'Verified'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleQuickVerify(e)}
+                          disabled={isVerifying}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] transition shadow-xs hover:shadow"
+                          title={isAr ? 'اعتماد ومطابقة القيد الآن' : 'Verify and lock this DSR record now'}
+                        >
+                          {isVerifying ? (
+                            <RefreshCw size={11} className="animate-spin" />
+                          ) : (
+                            <Clock size={11} className="text-amber-700" />
+                          )}
+                          {isAr ? 'اعتماد وقفل' : 'Verify & Lock'}
+                        </button>
                       )}
                     </td>
 

@@ -443,6 +443,69 @@ export function updateDSREntry(id: string, patch: Partial<DSREntry>): DSREntry |
   return updatedEntry;
 }
 
+export function autoCreateDSREntryFromTask(params: {
+  serviceTitle: string;
+  companyName: string;
+  crNumber?: string;
+  clientId?: string;
+  employeeName: string;
+  employeeId?: string;
+  amount?: number;
+  govFee?: number;
+  date?: string;
+  paymentMethod?: DSREntry['payment_method'];
+}): DSREntry {
+  const dateStr = params.date || new Date().toISOString().split('T')[0];
+  const amt = Number(params.amount || 0);
+  const gov = Number(params.govFee || 0);
+
+  const entry = addDSREntry({
+    date: dateStr,
+    employee_name: params.employeeName || 'Staff Member',
+    employee_id: params.employeeId,
+    service: params.serviceTitle || 'Professional Accounting Service',
+    company_name: params.companyName || 'Valued Corporate Client',
+    client_id: params.clientId,
+    cr_number: params.crNumber || '',
+    amount: amt,
+    gov_fee: gov,
+    profit: amt - gov,
+    status: amt > 0 ? 'Paid' : 'Unpaid',
+    payment_date: amt > 0 ? dateStr : '',
+    payment_method: params.paymentMethod || '',
+    accountant_note: 'Auto-created from task assignment',
+    invoice_issued: false,
+    verified_by_accountant: false
+  });
+
+  // Async sync to Supabase
+  try {
+    supabase
+      .from('dsr_entries')
+      .insert([{
+        employee_name: entry.employee_name,
+        employee_id: entry.employee_id || null,
+        company_name: entry.company_name,
+        cr_number: entry.cr_number,
+        service_name: entry.service,
+        amount: entry.amount,
+        gov_fee: entry.gov_fee,
+        profit: entry.profit,
+        status: entry.status,
+        payment_date: entry.payment_date || null,
+        payment_method: entry.payment_method || null,
+        created_at: new Date().toISOString()
+      }])
+      .then(({ error }) => {
+        if (error) console.warn('Supabase DSR auto-sync note:', error.message);
+      });
+  } catch (err) {
+    console.warn('Auto DSR cloud sync caught:', err);
+  }
+
+  return entry;
+}
+
 export function deleteDSREntry(id: string): void {
   const current = getDSREntries();
   const next = current.filter(e => e.id !== id);
