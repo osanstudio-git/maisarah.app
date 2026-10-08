@@ -101,7 +101,7 @@ export default function FieldSalesPortal() {
 
   // Navigation State
   const [activeTab, setActiveTab] = useState<'leads' | 'capture' | 'visits' | 'rates' | 'targets'>('leads');
-  
+
   // Data State
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [visits, setVisits] = useState<VisitRecord[]>([]);
@@ -296,8 +296,8 @@ export default function FieldSalesPortal() {
     if (!phoneStr) return;
     const cleanPhone = phoneStr.replace(/[^0-9]/g, '');
     const msg = encodeURIComponent(
-      isAr 
-        ? `مرحباً ${clientName || 'عزيزي العميل'}، تحياتنا من شركة ميسرة لخدمات تدقيق الحسابات والضرائب. يسعدنا متابعة طلبكم.` 
+      isAr
+        ? `مرحباً ${clientName || 'عزيزي العميل'}، تحياتنا من شركة ميسرة لخدمات تدقيق الحسابات والضرائب. يسعدنا متابعة طلبكم.`
         : `Hello ${clientName || 'Client'}, greetings from Maisarah Audit & Tax. We are following up regarding your requested services.`
     );
     window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
@@ -306,7 +306,7 @@ export default function FieldSalesPortal() {
   // Filtered Leads
   const filteredLeads = useMemo(() => {
     return leads.filter(l => {
-      const matchSearch = 
+      const matchSearch =
         l.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         l.company_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         l.phone?.includes(searchQuery);
@@ -338,7 +338,7 @@ export default function FieldSalesPortal() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-24" dir={isAr ? 'rtl' : 'ltr'}>
-      
+
       {/* ── Sticky Mobile Top Header ────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-xs">
         <div className="max-w-lg mx-auto flex items-center justify-between">
@@ -397,8 +397,8 @@ export default function FieldSalesPortal() {
 
           {/* Progress Bar */}
           <div className="w-full bg-white/10 rounded-full h-2 mt-4 overflow-hidden">
-            <div 
-              className="bg-gradient-to-r from-amber-400 to-emerald-400 h-full rounded-full transition-all duration-500" 
+            <div
+              className="bg-gradient-to-r from-amber-400 to-emerald-400 h-full rounded-full transition-all duration-500"
               style={{ width: `${metrics.targetProgress}%` }}
             />
           </div>
@@ -407,7 +407,7 @@ export default function FieldSalesPortal() {
         {/* ── TAB 1: LEADS LIST ────────────────────────────────────────────── */}
         {activeTab === 'leads' && (
           <div className="space-y-3">
-            
+
             {/* Search & Filter Bar */}
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -417,9 +417,8 @@ export default function FieldSalesPortal() {
                   placeholder={isAr ? 'بحث بالاسم، الشركة، الهاتف...' : 'Search leads, company, phone...'}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark transition-all shadow-xs ${
-                    isAr ? 'pr-9 pl-3' : 'pl-9 pr-3'
-                  }`}
+                  className={`w-full py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark transition-all shadow-xs ${isAr ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                    }`}
                 />
               </div>
 
@@ -458,7 +457,7 @@ export default function FieldSalesPortal() {
                 filteredLeads.map((lead) => {
                   const isWon = lead.status === 'accepted';
                   return (
-                    <div 
+                    <div
                       key={lead.id}
                       className="bg-white border border-gray-200/90 hover:border-brand-dark/40 rounded-3xl p-4 shadow-xs hover:shadow-md transition-all space-y-3"
                     >
@@ -466,9 +465,8 @@ export default function FieldSalesPortal() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-0.5">
                             <h3 className="font-black text-xs text-gray-900 truncate">{lead.contact_name}</h3>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                              isWon ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
-                            }`}>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${isWon ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                              }`}>
                               {lead.status}
                             </span>
                           </div>
@@ -559,7 +557,7 @@ export default function FieldSalesPortal() {
             )}
 
             <form onSubmit={handleCaptureSubmit} className="space-y-3.5">
-              
+
               {/* Contact Name */}
               <div>
                 <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
@@ -618,9 +616,8 @@ export default function FieldSalesPortal() {
                     placeholder="+968 9123 4567"
                     value={leadForm.phone}
                     onChange={(e) => setLeadForm(prev => ({ ...prev, phone: e.target.value }))}
-                    className={`w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark focus:bg-white transition-all ${
-                      isAr ? 'pr-9 pl-3' : 'pl-9 pr-3'
-                    }`}
+                    className={`w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark focus:bg-white transition-all ${isAr ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                      }`}
                   />
                 </div>
               </div>
@@ -809,9 +806,8 @@ export default function FieldSalesPortal() {
                 placeholder={isAr ? 'بحث في دليل الخدمات والأسعار...' : 'Search services rate card...'}
                 value={rateSearch}
                 onChange={(e) => setRateSearch(e.target.value)}
-                className={`w-full py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark shadow-xs ${
-                  isAr ? 'pr-9 pl-3' : 'pl-9 pr-3'
-                }`}
+                className={`w-full py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark shadow-xs ${isAr ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                  }`}
               />
             </div>
 
@@ -879,12 +875,11 @@ export default function FieldSalesPortal() {
       {/* ── Mobile Bottom Navigation Bar (App Experience) ─────────────────── */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-gray-200 px-3 py-2 shadow-lg">
         <div className="max-w-lg mx-auto grid grid-cols-5 gap-1">
-          
+
           <button
             onClick={() => setActiveTab('leads')}
-            className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all cursor-pointer ${
-              activeTab === 'leads' ? 'text-brand-dark font-black scale-105' : 'text-gray-400 hover:text-gray-600'
-            }`}
+            className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all cursor-pointer ${activeTab === 'leads' ? 'text-brand-dark font-black scale-105' : 'text-gray-400 hover:text-gray-600'
+              }`}
           >
             <Users size={18} />
             <span className="text-[9px] mt-1">{isAr ? 'الفرص' : 'Leads'}</span>
@@ -892,9 +887,8 @@ export default function FieldSalesPortal() {
 
           <button
             onClick={() => setActiveTab('capture')}
-            className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all cursor-pointer ${
-              activeTab === 'capture' ? 'text-brand-dark font-black scale-105' : 'text-gray-400 hover:text-gray-600'
-            }`}
+            className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all cursor-pointer ${activeTab === 'capture' ? 'text-brand-dark font-black scale-105' : 'text-gray-400 hover:text-gray-600'
+              }`}
           >
             <div className="p-1 bg-brand-dark text-white rounded-lg shadow-sm">
               <Plus size={16} />
@@ -904,9 +898,8 @@ export default function FieldSalesPortal() {
 
           <button
             onClick={() => setActiveTab('visits')}
-            className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all cursor-pointer ${
-              activeTab === 'visits' ? 'text-brand-dark font-black scale-105' : 'text-gray-400 hover:text-gray-600'
-            }`}
+            className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all cursor-pointer ${activeTab === 'visits' ? 'text-brand-dark font-black scale-105' : 'text-gray-400 hover:text-gray-600'
+              }`}
           >
             <MapPin size={18} />
             <span className="text-[9px] mt-1">{isAr ? 'الزيارات' : 'Visits'}</span>
@@ -914,9 +907,8 @@ export default function FieldSalesPortal() {
 
           <button
             onClick={() => setActiveTab('rates')}
-            className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all cursor-pointer ${
-              activeTab === 'rates' ? 'text-brand-dark font-black scale-105' : 'text-gray-400 hover:text-gray-600'
-            }`}
+            className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all cursor-pointer ${activeTab === 'rates' ? 'text-brand-dark font-black scale-105' : 'text-gray-400 hover:text-gray-600'
+              }`}
           >
             <Bookmark size={18} />
             <span className="text-[9px] mt-1">{isAr ? 'الأسعار' : 'Rates'}</span>
@@ -924,9 +916,8 @@ export default function FieldSalesPortal() {
 
           <button
             onClick={() => setActiveTab('targets')}
-            className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all cursor-pointer ${
-              activeTab === 'targets' ? 'text-brand-dark font-black scale-105' : 'text-gray-400 hover:text-gray-600'
-            }`}
+            className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all cursor-pointer ${activeTab === 'targets' ? 'text-brand-dark font-black scale-105' : 'text-gray-400 hover:text-gray-600'
+              }`}
           >
             <Target size={18} />
             <span className="text-[9px] mt-1">{isAr ? 'الهدف' : 'Target'}</span>
