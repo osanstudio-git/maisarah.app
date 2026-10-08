@@ -33,20 +33,9 @@ import {
   DollarSign,
   Users,
   Check,
-  Filter
+  Filter,
+  X
 } from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  AreaChart,
-  Area
-} from 'recharts';
 
 interface EmployeeWorkload {
   id: string;
@@ -70,6 +59,8 @@ interface DelayIncident {
   description_en: string;
   description_ar: string;
 }
+
+const STATIC_DEPARTMENTS = getAllDepartments();
 
 const DEPARTMENT_BENCHMARKS: Record<string, {
   revenueMultiplier: number;
@@ -136,14 +127,12 @@ const DepartmentPerformance = () => {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
 
-  const departments = getAllDepartments();
-  const [selectedDeptId, setSelectedDeptId] = useState<string>(departments[0]?.id || 'tax_vat');
+  const [selectedDeptId, setSelectedDeptId] = useState<string>('audit');
   const [activeTab, setActiveTab] = useState<'financial' | 'staff' | 'deliverables' | 'leadership'>('financial');
   
   const [hodProfile, setHodProfile] = useState<any | null>(null);
   const [employees, setEmployees] = useState<EmployeeWorkload[]>([]);
   const [deptServices, setDeptServices] = useState<any[]>([]);
-  const [allInvoices, setAllInvoices] = useState<any[]>([]);
   const [delayIncidents, setDelayIncidents] = useState<DelayIncident[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -160,8 +149,13 @@ const DepartmentPerformance = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const selectedDept = getDepartmentById(selectedDeptId) || departments[0];
-  const benchmark = DEPARTMENT_BENCHMARKS[selectedDeptId] || DEPARTMENT_BENCHMARKS.tax_vat;
+  const selectedDept = useMemo(() => {
+    return getDepartmentById(selectedDeptId) || STATIC_DEPARTMENTS[0];
+  }, [selectedDeptId]);
+
+  const benchmark = useMemo(() => {
+    return DEPARTMENT_BENCHMARKS[selectedDeptId] || DEPARTMENT_BENCHMARKS.tax_vat;
+  }, [selectedDeptId]);
 
   // ── Fetch Department Multi-Source Data ──────────────────────────────────────
   const fetchDepartmentData = useCallback(async (deptId: string, isSilent = false) => {
@@ -169,37 +163,25 @@ const DepartmentPerformance = () => {
     else setRefreshing(true);
 
     try {
-      const [
-        { data: allProfiles },
-        { data: servicesData },
-        { data: invoicesData },
-        { data: actLogs }
-      ] = await Promise.all([
-        supabase.from('profiles').select('*'),
-        supabase.from('services').select(`
-          id,
-          title,
-          description,
-          status,
-          due_date,
-          created_at,
-          employee_id,
-          client_id,
-          department_id,
-          profiles:employee_id(id, full_name, email, role),
-          clients:client_id(id, company_name, cr_number)
-        `).order('created_at', { ascending: false }),
-        supabase.from('invoices').select('id, client_id, amount, total, status, created_at'),
+      const currentDeptObj = getDepartmentById(deptId) || STATIC_DEPARTMENTS[0];
+      const deptBench = DEPARTMENT_BENCHMARKS[deptId] || DEPARTMENT_BENCHMARKS.tax_vat;
+
+      // Safe defensive queries
+      const [pRes, sRes, aRes] = await Promise.all([
+        supabase.from('profiles').select('id, full_name, role, department_id, email, phone').order('full_name'),
+        supabase.from('services').select('id, title, description, status, due_date, created_at, employee_id, client_id, clients(id, company_name), profiles:profiles!employee_id(id, full_name, email, role)').order('created_at', { ascending: false }),
         supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(10)
       ]);
 
+      const allProfiles = pRes.data || [];
+      const servicesData = sRes.data || [];
+      const actLogs = aRes.data || [];
       const now = new Date();
-      const currentDeptObj = getDepartmentById(deptId) || departments[0];
 
       // 1. Filter Profiles for this Department
-      const deptProfiles = (allProfiles || []).filter(p => {
-        const d = (p.department_id || p.department || '').toLowerCase().trim();
-        if (deptId === 'audit' && d.includes('audit')) return true;
+      const deptProfiles = allProfiles.filter(p => {
+        const d = (p.department_id || '').toLowerCase().trim();
+        if (deptId === 'audit' && (d.includes('audit') || p.full_name?.toLowerCase().includes('shafnas'))) return true;
         if (deptId === 'tax_vat' && (d.includes('tax') || d.includes('vat'))) return true;
         if (deptId === 'bookkeeping' && (d.includes('book') || d.includes('account'))) return true;
         if (deptId === 'business_advisory' && (d.includes('advisor') || d.includes('consult'))) return true;
@@ -209,38 +191,37 @@ const DepartmentPerformance = () => {
 
       // HOD
       const hod = deptProfiles.find(p => p.role === 'department_head') ||
-                  (allProfiles || []).find(p => p.role === 'department_head') ||
+                  allProfiles.find(p => p.role === 'department_head') ||
                   null;
       setHodProfile(hod);
 
       // 2. Filter Deliverables matching this Department
-      const matchedServices = (servicesData || []).filter(s => {
-        if (s.department_id && s.department_id.toLowerCase() === deptId.toLowerCase()) return true;
+      const matchedServices = servicesData.filter(s => {
         return currentDeptObj.services.some(svcName => 
           (s.title || '').toLowerCase().includes(svcName.toLowerCase())
         );
       });
 
-      // If matched services are low in DB, generate rich realistic department deliverables
+      // Supplement with structured baseline deliverables if low
       let enrichedServices = matchedServices;
       if (enrichedServices.length < 3) {
         const sampleServicesList = currentDeptObj.services.slice(0, 4).map((svcTitle, idx) => ({
           id: `sample-${deptId}-${idx}`,
           title: svcTitle,
-          description: `${svcTitle} for ${benchmark.baseClients[idx % benchmark.baseClients.length]}`,
+          description: `${svcTitle} for ${deptBench.baseClients[idx % deptBench.baseClients.length]}`,
           status: idx === 0 ? 'ongoing' : idx === 1 ? 'under_review' : 'completed',
           due_date: new Date(Date.now() + (idx * 3 + 2) * 86400000).toISOString(),
           created_at: new Date(Date.now() - (idx * 5) * 86400000).toISOString(),
-          employee_id: (allProfiles || [])[0]?.id || 'emp-1',
+          employee_id: allProfiles[0]?.id || 'emp-1',
           profiles: {
-            id: (allProfiles || [])[0]?.id || 'emp-1',
-            full_name: (allProfiles || [])[idx % (allProfiles?.length || 1)]?.full_name || 'Shafnas / Staff Lead',
+            id: allProfiles[0]?.id || 'emp-1',
+            full_name: allProfiles[idx % (allProfiles.length || 1)]?.full_name || 'Shafnas (Audit Head)',
             email: 'operations@maisarah.one',
-            role: 'Senior Consultant'
+            role: 'Lead Specialist'
           },
           clients: {
             id: `cl-${idx}`,
-            company_name: benchmark.baseClients[idx % benchmark.baseClients.length],
+            company_name: deptBench.baseClients[idx % deptBench.baseClients.length],
             cr_number: `152704${idx + 1}`
           }
         }));
@@ -251,7 +232,7 @@ const DepartmentPerformance = () => {
       // 3. Workload per Staff
       const effectiveTeam = deptProfiles.length > 0
         ? deptProfiles
-        : (allProfiles || []).filter(p => p.role === 'employee' || p.role === 'department_head' || p.role === 'manager');
+        : (allProfiles.filter(p => p.role === 'employee' || p.role === 'department_head' || p.role === 'manager').slice(0, 3));
 
       const employeeWorkloads: EmployeeWorkload[] = effectiveTeam.map(emp => {
         const empSvcs = enrichedServices.filter(s => s.employee_id === emp.id);
@@ -271,10 +252,10 @@ const DepartmentPerformance = () => {
 
         return {
           id: emp.id,
-          name: emp.full_name || emp.name || 'Staff Member',
+          name: emp.full_name || 'Staff Member',
           email: emp.email || '',
           phone: emp.phone || '',
-          role: emp.role,
+          role: emp.role || 'Specialist',
           tasksTotal: empTotal,
           tasksActive: empActive,
           tasksCompleted: empCompleted,
@@ -285,23 +266,21 @@ const DepartmentPerformance = () => {
       });
 
       setEmployees(employeeWorkloads);
-      setAllInvoices(invoicesData || []);
-      setDelayIncidents((actLogs as any[]) || []);
+      setDelayIncidents(actLogs as any[]);
     } catch (err) {
       console.error('Error loading department data:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [departments]);
+  }, []);
 
   useEffect(() => {
     fetchDepartmentData(selectedDeptId);
 
     const channel = supabase
-      .channel(`dept_perf_${selectedDeptId}`)
+      .channel(`dept_perf_sub_${selectedDeptId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => fetchDepartmentData(selectedDeptId, true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, () => fetchDepartmentData(selectedDeptId, true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_log' }, () => fetchDepartmentData(selectedDeptId, true))
       .subscribe();
 
@@ -318,7 +297,6 @@ const DepartmentPerformance = () => {
     const delayedOps = deptServices.filter(s => s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed')).length;
     const successRate = totalOps > 0 ? Math.round((completedOps / totalOps) * 100) : 92;
 
-    // Financial revenue calculation
     const baseRev = 7800 * (benchmark.revenueMultiplier || 1.0);
     const calculatedRevenue = Math.round(baseRev);
     const collectedRevenue = Math.round(calculatedRevenue * 0.85);
@@ -350,7 +328,6 @@ const DepartmentPerformance = () => {
         .from('services')
         .insert([{
           title: assignForm.title.trim(),
-          department_id: selectedDeptId,
           employee_id: assignForm.employee_id || employees[0]?.id || null,
           due_date: assignForm.due_date || null,
           description: assignForm.description || null,
@@ -383,8 +360,11 @@ const DepartmentPerformance = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-[70vh]">
+      <div className="flex flex-col justify-center items-center h-[70vh] gap-3">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-dark" />
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+          {isAr ? 'جاري مزامنة بيانات القسم...' : 'Syncing Practice Intelligence...'}
+        </p>
       </div>
     );
   }
@@ -392,7 +372,7 @@ const DepartmentPerformance = () => {
   return (
     <div className="space-y-6 pb-12" dir={isAr ? 'rtl' : 'ltr'}>
       {/* ── Top Header & Department Quick Bar ────────────────────────────── */}
-      <div className="bg-white rounded-[2.5rem] p-6 lg:p-7 shadow-sm border border-gray-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div className="bg-white rounded-[2.5rem] p-6 lg:p-7 shadow-sm border border-gray-100 flex flex-col md:flex-row items-start md:items-end justify-between gap-6">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-3 py-1 bg-brand-dark/10 text-brand-dark rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
@@ -415,6 +395,16 @@ const DepartmentPerformance = () => {
 
         {/* Top Actions & Department Switcher */}
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* Refresh */}
+          <button
+            onClick={() => fetchDepartmentData(selectedDeptId)}
+            className="p-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs"
+            title={isAr ? 'تحديث البيانات' : 'Refresh Data'}
+          >
+            <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">{isAr ? 'تحديث' : 'Sync'}</span>
+          </button>
+
           {/* Quick Print / Export */}
           <button
             onClick={handlePrintReport}
@@ -432,7 +422,7 @@ const DepartmentPerformance = () => {
               onChange={(e) => setSelectedDeptId(e.target.value)}
               className="w-full py-3 px-4 bg-brand-dark text-white rounded-2xl outline-none text-xs font-black appearance-none transition-all cursor-pointer shadow-lg shadow-brand-dark/20 pr-9 pl-4"
             >
-              {departments.map(dept => (
+              {STATIC_DEPARTMENTS.map(dept => (
                 <option key={dept.id} value={dept.id} className="bg-white text-gray-900">
                   {isAr ? dept.nameAr : dept.name} ({dept.head_title})
                 </option>
@@ -464,7 +454,7 @@ const DepartmentPerformance = () => {
 
       {/* ── Department Quick Switcher Chips ──────────────────────────────── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-        {departments.map(d => {
+        {STATIC_DEPARTMENTS.map(d => {
           const isSelected = d.id === selectedDeptId;
           return (
             <button
@@ -494,7 +484,7 @@ const DepartmentPerformance = () => {
                 {isAr ? 'إيرادات القسم التقديرية' : 'Practice Revenue'}
               </p>
               <div className="flex items-baseline gap-1.5">
-                <p className="text-3xl font-black leading-none tracking-tight">
+                <p className="text-3xl lg:text-4xl font-black leading-none tracking-tight">
                   {deptMetrics.calculatedRevenue.toLocaleString()}
                 </p>
                 <span className="text-xs font-bold text-white/70">OMR</span>
