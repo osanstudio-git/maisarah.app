@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { supabase } from '../../lib/supabaseClient';
+import { useAuth } from '../../hooks/useAuth';
 import {
   FileSpreadsheet, Plus, Search, Filter, Download, CheckCircle2,
   AlertCircle, Clock, Edit2, Trash2, Check, X, ShieldCheck, Printer,
   Building2, DollarSign, Wallet, ArrowUpRight, TrendingUp, RefreshCw,
-  FileText, Receipt, CheckSquare, Eye
+  FileText, Receipt, CheckSquare, Eye, Sparkles
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -166,11 +168,14 @@ export default function DSRRegister() {
   };
 
   // Confirm Invoice Issuance & Receipt
-  const handleIssueOfficialDocuments = () => {
+  const handleIssueOfficialDocuments = async () => {
     if (!selectedEntryForInvoice) return;
 
     const invNum = selectedEntryForInvoice.invoice_number || `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     const recNum = selectedEntryForInvoice.receipt_number || `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const invAmount = Number(selectedEntryForInvoice.amount) || 0;
+    const vatAmt = Number((invAmount * 0.05).toFixed(3));
+    const totalAmt = Number((invAmount + vatAmt).toFixed(3));
 
     updateDSREntry(selectedEntryForInvoice.id, {
       invoice_issued: true,
@@ -181,6 +186,29 @@ export default function DSRRegister() {
       payment_method: selectedEntryForInvoice.payment_method || 'Mobile Payment',
       verified_by_accountant: true,
     });
+
+    try {
+      await supabase.from('invoices').insert([{
+        invoice_number: invNum,
+        amount: invAmount,
+        vat_amount: vatAmt,
+        total_amount: totalAmt,
+        status: 'paid',
+        due_date: new Date().toISOString().split('T')[0],
+        notes: `Auto-generated from Employee DSR: ${selectedEntryForInvoice.service} (${selectedEntryForInvoice.employee_name})`
+      }]);
+
+      await supabase.from('notifications').insert([{
+        recipient_role: 'manager',
+        title: isAr ? 'تم إصدار فاتورة وسند قبض لقيد DSR' : 'Tax Invoice & Receipt Generated from DSR',
+        message: isAr
+          ? `أصدر المحاسب الفاتورة (${invNum}) للعميل "${selectedEntryForInvoice.company_name}" بقيمة OMR ${totalAmt} بناءً على سجل DSR للموظف (${selectedEntryForInvoice.employee_name}).`
+          : `Accountant issued Tax Invoice (${invNum}) for "${selectedEntryForInvoice.company_name}" (OMR ${totalAmt}) synced from ${selectedEntryForInvoice.employee_name}'s DSR.`,
+        type: 'invoice_created'
+      }]);
+    } catch (err: any) {
+      console.warn('Supabase invoice sync notice:', err?.message);
+    }
 
     setIsInvoiceGeneratorOpen(false);
     loadData();
