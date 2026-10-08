@@ -207,7 +207,7 @@ const ExpenseTracking = () => {
   };
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-6 pb-10" dir={isAr ? 'rtl' : 'ltr'}>
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">

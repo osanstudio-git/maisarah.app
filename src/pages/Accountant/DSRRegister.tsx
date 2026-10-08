@@ -294,7 +294,7 @@ export default function DSRRegister() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto min-h-screen">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto min-h-screen" dir={isAr ? 'rtl' : 'ltr'}>
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-red-900 via-red-800 to-rose-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="space-y-2">
@@ -542,9 +542,9 @@ export default function DSRRegister() {
                           onChange={ev => setEditStatus(ev.target.value as any)}
                           className="text-xs border border-red-700 rounded px-1 py-0.5 outline-none"
                         >
-                          <option value="Paid">Paid</option>
-                          <option value="Unpaid">Unpaid</option>
-                          <option value="Partial">Partial</option>
+                          <option value="Paid">{isAr ? 'مدفوع' : 'Paid'}</option>
+                          <option value="Unpaid">{isAr ? 'غير مدفوع' : 'Unpaid'}</option>
+                          <option value="Partial">{isAr ? 'جزئي' : 'Partial'}</option>
                         </select>
                       ) : (
                         <span
@@ -555,7 +555,7 @@ export default function DSRRegister() {
                                 : 'bg-amber-400 text-gray-900'
                             }`}
                         >
-                          {e.status}
+                          {e.status === 'Paid' ? (isAr ? 'مدفوع' : 'Paid') : e.status === 'Unpaid' ? (isAr ? 'غير مدفوع' : 'Unpaid') : (isAr ? 'جزئي' : 'Partial')}
                         </span>
                       )}
                     </td>
@@ -582,11 +582,11 @@ export default function DSRRegister() {
                           onChange={ev => setEditPayMethod(ev.target.value)}
                           className="text-xs border border-red-700 rounded px-1 py-0.5 outline-none"
                         >
-                          <option value="">-- None --</option>
-                          <option value="Mobile Payment">Mobile Payment</option>
-                          <option value="POS">POS</option>
-                          <option value="Bank transfer">Bank transfer</option>
-                          <option value="Cash">Cash</option>
+                          <option value="">{isAr ? '-- غير محدد --' : '-- None --'}</option>
+                          <option value="Mobile Payment">{isAr ? 'دفع بالهاتف' : 'Mobile Payment'}</option>
+                          <option value="POS">{isAr ? 'جهاز نقاط البيع (POS)' : 'POS'}</option>
+                          <option value="Bank transfer">{isAr ? 'تحويل بنكي' : 'Bank transfer'}</option>
+                          <option value="Cash">{isAr ? 'نقداً' : 'Cash'}</option>
                         </select>
                       ) : (
                         e.payment_method || <span className="text-gray-300">—</span>
@@ -600,7 +600,7 @@ export default function DSRRegister() {
                           type="text"
                           value={editNote}
                           onChange={ev => setEditNote(ev.target.value)}
-                          placeholder="Note..."
+                          placeholder={isAr ? 'ملاحظة...' : 'Note...'}
                           className="w-full px-1.5 py-0.5 border border-red-700 rounded text-xs outline-none"
                         />
                       ) : (
@@ -614,11 +614,11 @@ export default function DSRRegister() {
                     <td className="px-3 py-2.5 text-center border-e border-gray-200 whitespace-nowrap">
                       {e.invoice_issued ? (
                         <span className="font-mono font-black text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded text-[11px]">
-                          TRUE
+                          {isAr ? 'نعم (تم)' : 'TRUE'}
                         </span>
                       ) : (
                         <span className="font-mono font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded text-[11px]">
-                          FALSE
+                          {isAr ? 'لا (معلق)' : 'FALSE'}
                         </span>
                       )}
                     </td>
@@ -704,7 +704,7 @@ export default function DSRRegister() {
       {/* 1-Click Invoice & Receipt Generation Modal */}
       {isInvoiceGeneratorOpen && selectedEntryForInvoice && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-150">
+          <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-150" dir={isAr ? 'rtl' : 'ltr'}>
             <div className="p-6 bg-gradient-to-r from-red-900 to-rose-900 text-white flex justify-between items-center">
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wider text-rose-200">
@@ -791,10 +791,10 @@ export default function DSRRegister() {
                       }
                       className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none focus:border-red-700"
                     >
-                      <option value="Mobile Payment">Mobile Payment</option>
-                      <option value="POS">POS Terminal</option>
-                      <option value="Bank transfer">Bank Transfer</option>
-                      <option value="Cash">Cash</option>
+                      <option value="Mobile Payment">{isAr ? 'دفع بالهاتف' : 'Mobile Payment'}</option>
+                      <option value="POS">{isAr ? 'جهاز نقاط البيع (POS)' : 'POS Terminal'}</option>
+                      <option value="Bank transfer">{isAr ? 'تحويل بنكي' : 'Bank Transfer'}</option>
+                      <option value="Cash">{isAr ? 'نقداً' : 'Cash'}</option>
                     </select>
                   </div>
 
@@ -840,7 +840,7 @@ export default function DSRRegister() {
       {/* Add New DSR Record Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden border border-gray-100">
+          <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden border border-gray-100" dir={isAr ? 'rtl' : 'ltr'}>
             <div className="p-6 bg-gradient-to-r from-red-900 to-rose-900 text-white flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-bold">
@@ -953,9 +953,9 @@ export default function DSRRegister() {
                     onChange={e => setNewForm({ ...newForm, status: e.target.value as any })}
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
                   >
-                    <option value="Paid">Paid</option>
-                    <option value="Unpaid">Unpaid</option>
-                    <option value="Partial">Partial</option>
+                    <option value="Paid">{isAr ? 'مدفوع (Paid)' : 'Paid'}</option>
+                    <option value="Unpaid">{isAr ? 'غير مدفوع (Unpaid)' : 'Unpaid'}</option>
+                    <option value="Partial">{isAr ? 'جزئي (Partial)' : 'Partial'}</option>
                   </select>
                 </div>
 
@@ -966,10 +966,10 @@ export default function DSRRegister() {
                     onChange={e => setNewForm({ ...newForm, payment_method: e.target.value as any })}
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700"
                   >
-                    <option value="Mobile Payment">Mobile Payment</option>
-                    <option value="POS">POS Terminal</option>
-                    <option value="Bank transfer">Bank transfer</option>
-                    <option value="Cash">Cash</option>
+                    <option value="Mobile Payment">{isAr ? 'دفع بالهاتف' : 'Mobile Payment'}</option>
+                    <option value="POS">{isAr ? 'جهاز نقاط البيع (POS)' : 'POS Terminal'}</option>
+                    <option value="Bank transfer">{isAr ? 'تحويل بنكي' : 'Bank transfer'}</option>
+                    <option value="Cash">{isAr ? 'نقداً' : 'Cash'}</option>
                   </select>
                 </div>
 
@@ -981,7 +981,7 @@ export default function DSRRegister() {
                     type="text"
                     value={newForm.accountant_note}
                     onChange={e => setNewForm({ ...newForm, accountant_note: e.target.value })}
-                    placeholder="Any special remarks..."
+                    placeholder={isAr ? 'أي ملاحظات خاصة...' : 'Any special remarks...'}
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700"
                   />
                 </div>

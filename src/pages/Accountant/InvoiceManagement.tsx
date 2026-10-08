@@ -778,7 +778,10 @@ export default function InvoiceManagement() {
                               inv.status === 'partially_paid' ? 'bg-blue-100 text-blue-800' :
                                 inv.status === 'draft' ? 'bg-gray-100 text-gray-700' : 'bg-amber-100 text-amber-800'
                             }`}>
-                            {inv.status}
+                            {inv.status === 'paid' ? (isAr ? 'مدفوعة' : 'paid') :
+                             inv.status === 'partially_paid' ? (isAr ? 'مدفوعة جزئياً' : 'partially paid') :
+                             inv.status === 'draft' ? (isAr ? 'مسودة' : 'draft') :
+                             (isAr ? 'غير مدفوعة' : 'unpaid')}
                           </span>
                         </td>
                         <td className="py-4 px-4 text-end">

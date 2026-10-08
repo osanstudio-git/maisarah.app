@@ -306,7 +306,7 @@ const AccountantDashboard = () => {
   }
 
   return (
-    <div className="space-y-6 pb-10 max-w-[1600px] mx-auto">
+    <div className="space-y-6 pb-10 max-w-[1600px] mx-auto" dir={isAr ? 'rtl' : 'ltr'}>
 
       {/* ── Top Bar with Real-time Notification Bell ────────────────── */}
       <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
@@ -397,13 +397,13 @@ const AccountantDashboard = () => {
               <Wallet size={22} />
             </div>
             <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-full">
-              {isAr ? 'إجمالي' : 'ALL TIME'}
+              {isAr ? 'الإجمالي الكلي' : 'ALL TIME'}
             </span>
           </div>
-          <h4 className="text-gray-500 text-xs font-bold mb-1">{t('accountant.totalRevenue')}</h4>
+          <h4 className="text-gray-500 text-xs font-bold mb-1">{isAr ? 'إجمالي الإيرادات' : 'Total Revenue'}</h4>
           <div className="text-2xl font-bold text-gray-800">
             {formatOMR(invoiceMetrics.totalRevenue)}
-            <span className="text-sm font-semibold text-gray-400 ms-1">OMR</span>
+            <span className="text-sm font-semibold text-gray-400 ms-1">{isAr ? 'ر.ع' : 'OMR'}</span>
           </div>
           <p className="text-xs text-gray-400 mt-1.5">
             {invoiceMetrics.totalCount} {isAr ? 'فاتورة إجمالاً' : 'total invoices'}
@@ -420,10 +420,10 @@ const AccountantDashboard = () => {
               {invoiceMetrics.paidCount} {isAr ? 'فاتورة' : 'invoices'}
             </span>
           </div>
-          <h4 className="text-gray-500 text-xs font-bold mb-1">{t('accountant.paidInvoices')}</h4>
+          <h4 className="text-gray-500 text-xs font-bold mb-1">{isAr ? 'الفواتير المدفوعة' : 'Paid Invoices'}</h4>
           <div className="text-2xl font-bold text-gray-800">
             {formatOMR(invoiceMetrics.paidSum)}
-            <span className="text-sm font-semibold text-gray-400 ms-1">OMR</span>
+            <span className="text-sm font-semibold text-gray-400 ms-1">{isAr ? 'ر.ع' : 'OMR'}</span>
           </div>
           {/* Paid/Unpaid Progress Bar */}
           <div className="mt-3">
@@ -450,10 +450,10 @@ const AccountantDashboard = () => {
               {invoiceMetrics.unpaidCount} {isAr ? 'فاتورة' : 'invoices'}
             </span>
           </div>
-          <h4 className="text-gray-500 text-xs font-bold mb-1">{t('accountant.unpaidInvoices')}</h4>
+          <h4 className="text-gray-500 text-xs font-bold mb-1">{isAr ? 'الفواتير غير المدفوعة' : 'Unpaid Invoices'}</h4>
           <div className="text-2xl font-bold text-gray-800">
             {formatOMR(invoiceMetrics.unpaidSum)}
-            <span className="text-sm font-semibold text-gray-400 ms-1">OMR</span>
+            <span className="text-sm font-semibold text-gray-400 ms-1">{isAr ? 'ر.ع' : 'OMR'}</span>
           </div>
           {/* Unpaid ratio bar (inverse) */}
           <div className="mt-3">
@@ -479,10 +479,10 @@ const AccountantDashboard = () => {
               {isAr ? 'هذا الشهر' : 'This month'}
             </span>
           </div>
-          <h4 className="text-gray-500 text-xs font-bold mb-1">{t('accountant.monthlyIncome')}</h4>
+          <h4 className="text-gray-500 text-xs font-bold mb-1">{isAr ? 'الدخل الشهري' : 'Monthly Income'}</h4>
           <div className="text-2xl font-bold text-gray-800">
             {formatOMR(invoiceMetrics.monthlyIncome)}
-            <span className="text-sm font-semibold text-gray-400 ms-1">OMR</span>
+            <span className="text-sm font-semibold text-gray-400 ms-1">{isAr ? 'ر.ع' : 'OMR'}</span>
           </div>
           <p className="text-xs text-gray-400 mt-1.5">
             {isAr ? 'من الفواتير المدفوعة هذا الشهر' : 'From paid invoices this month'}
@@ -500,11 +500,11 @@ const AccountantDashboard = () => {
           <div className="flex items-center gap-4 text-xs font-semibold">
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-sm bg-green-500" />
-              {isAr ? 'مدفوعة' : 'Paid'} · {formatOMR(invoiceMetrics.paidSum)} OMR
+              {isAr ? 'مدفوعة' : 'Paid'} · {formatOMR(invoiceMetrics.paidSum)} {isAr ? 'ر.ع' : 'OMR'}
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-sm bg-brand-dark" />
-              {isAr ? 'غير مدفوعة' : 'Unpaid'} · {formatOMR(invoiceMetrics.unpaidSum)} OMR
+              {isAr ? 'غير مدفوعة' : 'Unpaid'} · {formatOMR(invoiceMetrics.unpaidSum)} {isAr ? 'ر.ع' : 'OMR'}
             </span>
           </div>
         </div>
@@ -519,8 +519,8 @@ const AccountantDashboard = () => {
           />
         </div>
         <div className="flex justify-between text-[10px] text-gray-400 mt-1.5 font-medium">
-          <span>0 OMR</span>
-          <span className="font-bold text-gray-600">{formatOMR(invoiceMetrics.totalRevenue)} OMR {isAr ? 'إجمالي' : 'total'}</span>
+          <span>0 {isAr ? 'ر.ع' : 'OMR'}</span>
+          <span className="font-bold text-gray-600">{formatOMR(invoiceMetrics.totalRevenue)} {isAr ? 'ر.ع' : 'OMR'} {isAr ? 'إجمالي' : 'total'}</span>
         </div>
       </div>
 
@@ -530,9 +530,9 @@ const AccountantDashboard = () => {
         {/* Current Projects (Col 8) */}
         <div className="lg:col-span-8 space-y-4">
           <div className="flex justify-between items-center">
-            <h3 className="font-bold text-lg text-gray-800">{t('dashboard.currentProjects', 'مشاريعك الحالية')}</h3>
+            <h3 className="font-bold text-lg text-gray-800">{isAr ? 'المشاريع الحالية' : 'Current Projects'}</h3>
             <button className="text-brand-dark text-sm font-semibold hover:underline">
-              {t('dashboard.viewAllProjects', 'عرض جميع المشاريع')}
+              {isAr ? 'عرض جميع المشاريع' : 'View All Projects'}
             </button>
           </div>
           
@@ -551,7 +551,7 @@ const AccountantDashboard = () => {
                   {/* Progress Bar */}
                   <div>
                     <div className="flex justify-between text-[10px] mb-1">
-                      <span className="text-gray-500 font-medium">{t('dashboard.inProgress', 'قيد التنفيذ')}</span>
+                      <span className="text-gray-500 font-medium">{isAr ? 'قيد التنفيذ' : 'In Progress'}</span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-1.5">
                       <div className="bg-brand-dark h-1.5 rounded-full" style={{ width: `${proj.progress}%` }}></div>
@@ -561,17 +561,17 @@ const AccountantDashboard = () => {
                   {/* Stats */}
                   <div className="space-y-2 pt-2 border-t border-gray-50">
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500 font-medium">{t('dashboard.budget', 'الميزانية')}</span>
-                      <span className="font-bold text-gray-800">{proj.budget.toLocaleString()} ر.ع</span>
+                      <span className="text-gray-500 font-medium">{isAr ? 'الميزانية' : 'Budget'}</span>
+                      <span className="font-bold text-gray-800">{proj.budget.toLocaleString()} {isAr ? 'ر.ع' : 'OMR'}</span>
                     </div>
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500 font-medium">{t('dashboard.costSoFar', 'التكلفة حتى الآن')}</span>
-                      <span className="font-bold text-gray-800">{proj.cost.toLocaleString()} ر.ع</span>
+                      <span className="text-gray-500 font-medium">{isAr ? 'التكلفة حتى الآن' : 'Cost So Far'}</span>
+                      <span className="font-bold text-gray-800">{proj.cost.toLocaleString()} {isAr ? 'ر.ع' : 'OMR'}</span>
                     </div>
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500 font-medium">{t('dashboard.profit', 'الربح / الخسارة')}</span>
+                      <span className="text-gray-500 font-medium">{isAr ? 'الربح / الخسارة' : 'Profit / Loss'}</span>
                       <span className={`font-bold ${proj.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {proj.profit > 0 ? '+' : ''}{proj.profit.toLocaleString()} ر.ع
+                        {proj.profit > 0 ? '+' : ''}{proj.profit.toLocaleString()} {isAr ? 'ر.ع' : 'OMR'}
                       </span>
                     </div>
                   </div>
@@ -591,22 +591,22 @@ const AccountantDashboard = () => {
                 <AlertCircle size={20} />
                 <span className="absolute -top-1 -end-1 w-2.5 h-2.5 bg-red-600 rounded-full"></span>
               </div>
-              <h3>{t('dashboard.taxAlerts', 'تنبيهات الضريبة (VAT)')}</h3>
+              <h3>{isAr ? 'تنبيهات الضريبة (VAT)' : 'Tax Alerts (VAT)'}</h3>
             </div>
             <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4">
-              {t('dashboard.taxAlertDesc', 'تنتهي فترة الإقرار الضريبي خلال')} <span className="font-bold text-brand-dark">{t('dashboard.days', '5 أيام')}</span>
+              {isAr ? 'تنتهي فترة الإقرار الضريبي خلال' : 'Tax filing period ends in'} <span className="font-bold text-brand-dark">{isAr ? '5 أيام' : '5 days'}</span>
             </p>
             <button className="w-full bg-brand-dark text-white font-bold py-2.5 rounded-lg hover:bg-red-800 transition-colors text-sm">
-              {t('dashboard.prepareTax', 'جهز الإقرار الآن')}
+              {isAr ? 'جهز الإقرار الآن' : 'Prepare Return Now'}
             </button>
           </div>
 
           {/* Recent Documents */}
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-sm text-gray-800">{t('dashboard.recentDocuments', 'المستندات الحديثة')}</h3>
+              <h3 className="font-bold text-sm text-gray-800">{isAr ? 'المستندات الحديثة' : 'Recent Documents'}</h3>
               <button className="text-brand-dark text-xs font-semibold hover:underline">
-                {t('dashboard.viewAll', 'عرض الكل')}
+                {isAr ? 'عرض الكل' : 'View All'}
               </button>
             </div>
             <div className="space-y-3">
@@ -629,9 +629,9 @@ const AccountantDashboard = () => {
         {/* Expenses Donut */}
         <div className="lg:col-span-3 bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-sm text-gray-800">{t('dashboard.expensesOverview', 'نظرة على المصروفات')}</h3>
+            <h3 className="font-bold text-sm text-gray-800">{isAr ? 'نظرة على المصروفات' : 'Expenses Overview'}</h3>
             <button className="text-xs text-gray-400 flex items-center font-medium hover:text-gray-600">
-              {t('dashboard.thisMonth', 'هذا الشهر')} <ChevronDown size={14} className="ms-1" />
+              {isAr ? 'هذا الشهر' : 'This Month'} <ChevronDown size={14} className="ms-1" />
             </button>
           </div>
           
@@ -658,7 +658,6 @@ const AccountantDashboard = () => {
                 />
               </PieChart>
             </ResponsiveContainer>
-            {/* Center Label (Optional, left blank in design but usually good) */}
           </div>
 
           <div className="grid grid-cols-2 gap-y-3 mt-4">
@@ -674,9 +673,9 @@ const AccountantDashboard = () => {
         {/* Revenue Line Chart */}
         <div className="lg:col-span-4 bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-sm text-gray-800">{t('dashboard.revenueVsExpenses', 'الإيرادات مقابل المصروفات')}</h3>
+            <h3 className="font-bold text-sm text-gray-800">{isAr ? 'الإيرادات مقابل المصروفات' : 'Revenue vs Expenses'}</h3>
             <button className="text-xs text-gray-400 flex items-center font-medium hover:text-gray-600">
-              {t('dashboard.last6Months', 'أخر 6 أشهر')} <ChevronDown size={14} className="ms-1" />
+              {isAr ? 'أخر 6 أشهر' : 'Last 6 Months'} <ChevronDown size={14} className="ms-1" />
             </button>
           </div>
 
@@ -689,8 +688,8 @@ const AccountantDashboard = () => {
                 <Tooltip 
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
                 />
-                <Line type="monotone" dataKey="rev" name={t('dashboard.revenue', 'الإيرادات')} stroke="#A11212" strokeWidth={2} dot={{ r: 3, fill: '#A11212' }} activeDot={{ r: 5 }} />
-                <Line type="monotone" dataKey="exp" name={t('dashboard.expenses', 'المصروفات')} stroke="#1f2937" strokeWidth={2} dot={{ r: 3, fill: '#1f2937' }} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="rev" name={isAr ? 'الإيرادات' : 'Revenue'} stroke="#A11212" strokeWidth={2} dot={{ r: 3, fill: '#A11212' }} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="exp" name={isAr ? 'المصروفات' : 'Expenses'} stroke="#1f2937" strokeWidth={2} dot={{ r: 3, fill: '#1f2937' }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -698,11 +697,11 @@ const AccountantDashboard = () => {
           <div className="flex justify-center gap-6 mt-4 pt-4 border-t border-gray-50">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-brand-dark"></span>
-              <span className="text-xs text-gray-600 font-medium">{t('dashboard.revenue', 'الإيرادات')}</span>
+              <span className="text-xs text-gray-600 font-medium">{isAr ? 'الإيرادات' : 'Revenue'}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-gray-800"></span>
-              <span className="text-xs text-gray-600 font-medium">{t('dashboard.expenses', 'المصروفات')}</span>
+              <span className="text-xs text-gray-600 font-medium">{isAr ? 'المصروفات' : 'Expenses'}</span>
             </div>
           </div>
         </div>
@@ -710,9 +709,9 @@ const AccountantDashboard = () => {
         {/* Upcoming Payments */}
         <div className="lg:col-span-3 bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-5">
-            <h3 className="font-bold text-sm text-gray-800">{t('dashboard.upcomingPayments', 'الدفعات القادمة')}</h3>
+            <h3 className="font-bold text-sm text-gray-800">{isAr ? 'الدفعات القادمة' : 'Upcoming Payments'}</h3>
             <button className="text-brand-dark text-xs font-semibold hover:underline">
-              {t('dashboard.viewAll', 'عرض الكل')}
+              {isAr ? 'عرض الكل' : 'View All'}
             </button>
           </div>
           
@@ -729,7 +728,7 @@ const AccountantDashboard = () => {
                   </div>
                 </div>
                 <div className="font-bold text-sm text-brand-dark">
-                  {payment.amount.toLocaleString()} ر.ع
+                  {payment.amount.toLocaleString()} {isAr ? 'ر.ع' : 'OMR'}
                 </div>
               </div>
             ))}
@@ -738,23 +737,23 @@ const AccountantDashboard = () => {
 
         {/* Quick Actions */}
         <div className="lg:col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <h3 className="font-bold text-sm text-gray-800 mb-5 text-center">{t('dashboard.quickActions', 'إجراءات سريعة')}</h3>
+          <h3 className="font-bold text-sm text-gray-800 mb-5 text-center">{isAr ? 'إجراءات سريعة' : 'Quick Actions'}</h3>
           <div className="grid grid-cols-2 gap-3 h-full pb-6">
             <button className="flex flex-col items-center justify-center gap-2 bg-gray-50 hover:bg-brand-dark hover:text-white text-gray-600 rounded-xl transition-colors p-3 border border-transparent hover:border-brand-dark group">
               <PlusCircle size={20} className="text-brand-dark group-hover:text-white" />
-              <span className="text-xs font-bold">{t('dashboard.newProject', 'مشروع جديد')}</span>
+              <span className="text-xs font-bold">{isAr ? 'مشروع جديد' : 'New Project'}</span>
             </button>
             <button className="flex flex-col items-center justify-center gap-2 bg-gray-50 hover:bg-brand-dark hover:text-white text-gray-600 rounded-xl transition-colors p-3 border border-transparent hover:border-brand-dark group">
               <Upload size={20} className="text-brand-dark group-hover:text-white" />
-              <span className="text-xs font-bold">{t('dashboard.uploadDocument', 'رفع مستند')}</span>
+              <span className="text-xs font-bold">{isAr ? 'رفع مستند' : 'Upload Doc'}</span>
             </button>
             <button className="flex flex-col items-center justify-center gap-2 bg-gray-50 hover:bg-brand-dark hover:text-white text-gray-600 rounded-xl transition-colors p-3 border border-transparent hover:border-brand-dark group">
               <CreditCard size={20} className="text-brand-dark group-hover:text-white" />
-              <span className="text-xs font-bold">{t('dashboard.newExpense', 'مصروف جديد')}</span>
+              <span className="text-xs font-bold">{isAr ? 'مصروف جديد' : 'New Expense'}</span>
             </button>
             <button className="flex flex-col items-center justify-center gap-2 bg-gray-50 hover:bg-brand-dark hover:text-white text-gray-600 rounded-xl transition-colors p-3 border border-transparent hover:border-brand-dark group">
               <BarChart2 size={20} className="text-brand-dark group-hover:text-white" />
-              <span className="text-xs font-bold">{t('dashboard.financialReport', 'تقرير مالي')}</span>
+              <span className="text-xs font-bold">{isAr ? 'تقرير مالي' : 'Finance Report'}</span>
             </button>
           </div>
         </div>
@@ -765,7 +764,7 @@ const AccountantDashboard = () => {
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-4 mt-6">
         <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
           <CreditCard className="text-brand-dark" size={22} />
-          {isAr ? 'رواتب الموظفين المعتمدة للصرف' : 'Approved Staff Payroll Queue ("To be Paid")'}
+          {isAr ? 'رواتب الموظفين المعتمدة للصرف ("بانتظار الصرف")' : 'Approved Staff Payroll Queue ("To be Paid")'}
         </h3>
         <p className="text-xs text-gray-500 font-bold">
           {isAr ? 'قائمة كشوف الرواتب المعتمدة من الإدارة بانتظار صرف المحاسب' : 'Payroll batches authorized by Executive Management requiring final bank release.'}
@@ -775,13 +774,13 @@ const AccountantDashboard = () => {
           <table className="w-full text-start">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">Employee</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">Department & Role</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">Basic Salary</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">Allowances</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">Net Payable</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">Status</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">Action</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الموظف' : 'Employee'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'القسم والمنصب' : 'Department & Role'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الراتب الأساسي' : 'Basic Salary'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'البدلات' : 'Allowances'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'صافي المستحق' : 'Net Payable'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الحالة' : 'Status'}</th>
+                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الإجراء' : 'Action'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white">
@@ -798,14 +797,14 @@ const AccountantDashboard = () => {
                       <p className="text-xs font-bold text-gray-800">{r.dept}</p>
                       <p className="text-[9px] text-gray-400 font-bold">{r.role}</p>
                     </td>
-                    <td className="px-6 py-4 text-xs font-bold text-gray-700">{r.basicSalary} OMR</td>
-                    <td className="px-6 py-4 text-xs font-bold text-gray-700">{allowancesSum} OMR</td>
-                    <td className="px-6 py-4 text-xs font-black text-brand-dark">{netPay} OMR</td>
+                    <td className="px-6 py-4 text-xs font-bold text-gray-700">{r.basicSalary} {isAr ? 'ر.ع' : 'OMR'}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-gray-700">{allowancesSum} {isAr ? 'ر.ع' : 'OMR'}</td>
+                    <td className="px-6 py-4 text-xs font-black text-brand-dark">{netPay} {isAr ? 'ر.ع' : 'OMR'}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${
                         r.status === 'Paid' ? 'bg-green-50 text-green-700 border-green-150' : 'bg-red-50 text-red-700 border-red-150'
                       }`}>
-                        {r.status}
+                        {r.status === 'Paid' ? (isAr ? 'تم الصرف' : 'Paid') : (isAr ? 'بانتظار الصرف' : 'Pending')}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -814,10 +813,10 @@ const AccountantDashboard = () => {
                           onClick={() => handleDisbursePayroll(r.id)}
                           className="bg-brand-dark text-white text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors shadow-sm"
                         >
-                          Disburse
+                          {isAr ? 'صرف الراتب' : 'Disburse'}
                         </button>
                       ) : (
-                        <span className="text-[10px] text-gray-400 font-bold italic">Disbursed</span>
+                        <span className="text-[10px] text-gray-400 font-bold italic">{isAr ? 'تم التحويل' : 'Disbursed'}</span>
                       )}
                     </td>
                   </tr>
@@ -826,7 +825,7 @@ const AccountantDashboard = () => {
               {pendingPayroll.length === 0 && (
                 <tr>
                   <td colSpan={7} className="text-center p-8 text-gray-400 italic">
-                    No approved salary sheets in "To be Paid" queue.
+                    {isAr ? 'لا توجد كشوف رواتب معتمدة في طابور الصرف حالياً.' : 'No approved salary sheets in "To be Paid" queue.'}
                   </td>
                 </tr>
               )}

@@ -67,12 +67,13 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
         ];
       case 'accountant':
         return [
-          { title: t('accountant.dashboardTitle'), icon: Home, path: '/accountant' },
+          { title: isAr ? 'لوحة تحكم المحاسب' : 'Accountant Dashboard', icon: Home, path: '/accountant' },
           { title: isAr ? 'سجل الخدمات اليومي (DSR)' : 'DSR Daily Register', icon: FileSpreadsheet, path: '/accountant/dsr' },
-          { title: t('accountant.invoiceManagement'), icon: FileText, path: '/accountant/invoices' },
-          { title: t('accountant.expenseTracking'), icon: Wallet, path: '/accountant/expenses' },
-          { title: t('messaging.messages'), icon: MessageCircle, path: '/accountant/messages' },
-          { title: t('vault.documents'), icon: Folder, path: '/accountant/documents' },
+          { title: isAr ? 'إدارة الفواتير والتحصيل' : 'Invoice Management', icon: FileText, path: '/accountant/invoices' },
+          { title: isAr ? 'مدفوعات ودفعات العملاء' : 'Client Payments', icon: CreditCard, path: '/accountant/clients' },
+          { title: isAr ? 'تتبع وتوثيق المصروفات' : 'Expense Tracking', icon: Wallet, path: '/accountant/expenses' },
+          { title: isAr ? 'المراسلات والتواصل' : 'Messages', icon: MessageCircle, path: '/accountant/messages' },
+          { title: isAr ? 'أرشيف الوثائق والمستندات' : 'Documents', icon: Folder, path: '/accountant/documents' },
         ];
       case 'manager':
         return [
