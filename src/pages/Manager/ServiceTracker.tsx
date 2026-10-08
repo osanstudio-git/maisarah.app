@@ -403,39 +403,118 @@ const OperationsCenter = () => {
         </div>
       </div>
 
-      {/* ── Section 1: Real-Time Pulse Bar ──────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-brand-dark text-white rounded-[2rem] p-6 flex items-center justify-between shadow-lg relative overflow-hidden">
-          <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl" />
-          <div className="relative z-10">
-            <p className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-1">{isAr ? 'العمليات النشطة' : 'Active Operations'}</p>
-            <p className="text-4xl font-black leading-none">{stats.active}</p>
+      {/* ── Section 1: Real-Time Executive Pulse Bar ───────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Active Operations */}
+        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-brand-dark text-white rounded-3xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none" />
+          <div className="flex items-center justify-between relative z-10 mb-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">
+              {isAr ? 'العمليات النشطة' : 'Active Operations'}
+            </span>
+            <div className="p-2 rounded-xl bg-white/10 text-white">
+              <Activity size={16} />
+            </div>
           </div>
-          <Activity size={32} className="text-white/20 relative z-10" />
+          <div className="relative z-10">
+            <p className="text-3xl font-black">{stats.active}</p>
+            <p className="text-[11px] text-slate-300 font-medium mt-0.5">
+              {isAr ? 'معاملة قيد التنفيذ حالياً' : 'Files in production line'}
+            </p>
+          </div>
         </div>
 
-        <div className="bg-red-500 text-white rounded-[2rem] p-6 flex items-center justify-between shadow-lg relative overflow-hidden">
-          <div className="absolute -right-4 -top-4 w-24 h-24 bg-black/10 rounded-full blur-xl" />
-          <div className="relative z-10">
-            <p className="text-[10px] font-black uppercase tracking-widest text-white/80 mb-1">{isAr ? 'عقبات حرجة' : 'Critical Bottlenecks'}</p>
-            <p className="text-4xl font-black leading-none">{stats.bottlenecks}</p>
+        {/* Card 2: Critical Bottlenecks */}
+        <div className={`rounded-3xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between border transition-all ${
+          stats.bottlenecks > 0 
+            ? 'bg-gradient-to-br from-red-600 via-red-700 to-rose-900 text-white border-red-500' 
+            : 'bg-white border-gray-100 text-gray-900'
+        }`}>
+          <div className="flex items-center justify-between relative z-10 mb-3">
+            <span className={`text-[10px] font-black uppercase tracking-wider ${stats.bottlenecks > 0 ? 'text-rose-200' : 'text-gray-400'}`}>
+              {isAr ? 'عقبات / متأخرة' : 'Critical Bottlenecks'}
+            </span>
+            <div className={`p-2 rounded-xl ${stats.bottlenecks > 0 ? 'bg-white/20 text-white' : 'bg-red-50 text-red-600'}`}>
+              <ShieldAlert size={16} />
+            </div>
           </div>
-          <ShieldAlert size={32} className="text-white/20 relative z-10" />
+          <div className="relative z-10">
+            <p className={`text-3xl font-black ${stats.bottlenecks > 0 ? 'text-white' : 'text-gray-900'}`}>{stats.bottlenecks}</p>
+            <p className={`text-[11px] font-medium mt-0.5 ${stats.bottlenecks > 0 ? 'text-rose-200' : 'text-gray-500'}`}>
+              {stats.bottlenecks > 0 ? (isAr ? 'تتطلب تدخلاً فورياً' : 'Requires manager action') : (isAr ? 'لا توجد تأخيرات' : 'All jobs on SLA track')}
+            </p>
+          </div>
         </div>
 
-        <div className="bg-white border border-gray-100 rounded-[2rem] p-6 flex items-center justify-between shadow-sm relative overflow-hidden">
-          <div className="relative z-10">
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">{isAr ? 'إنجاز اليوم' : 'Today\'s Throughput'}</p>
-            <p className="text-4xl font-black leading-none text-gray-900">{stats.completedToday}</p>
+        {/* Card 3: Today's Completed Throughput */}
+        <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div className="flex items-center justify-between relative z-10 mb-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+              {isAr ? 'إنجاز اليوم' : 'Today\'s Throughput'}
+            </span>
+            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+              <CheckCircle2 size={16} />
+            </div>
           </div>
-          <CheckCircle2 size={32} className="text-green-500/20 relative z-10" />
+          <div className="relative z-10">
+            <p className="text-3xl font-black text-gray-900">{stats.completedToday}</p>
+            <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
+              {isAr ? 'معاملة سلمت للعملاء' : 'Deliverables completed'}
+            </p>
+          </div>
+        </div>
+
+        {/* Card 4: Assigned Team Capacity */}
+        <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div className="flex items-center justify-between relative z-10 mb-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+              {isAr ? 'تغطية الفريق' : 'Team Allocation'}
+            </span>
+            <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
+              <UserCheck size={16} />
+            </div>
+          </div>
+          <div className="relative z-10">
+            <p className="text-3xl font-black text-gray-900">{employees.length} <span className="text-xs text-gray-400 font-normal">{isAr ? 'موظفين' : 'Staff'}</span></p>
+            <p className="text-[11px] text-blue-600 font-bold mt-0.5">
+              {isAr ? 'توزيع مباشر حسب القسم' : 'Direct employee dispatch'}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* ── Section 2: Global Pipeline Operations (Full Width) ───────────── */}
+      {/* ── Section 2: Global Pipeline Operations ─────────────────────────── */}
       <div className="space-y-4">
 
-        {/* Filters Bar */}
+        {/* Department Quick Filter Chips */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+          <button
+            onClick={() => setDeptFilter('all')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+              deptFilter === 'all'
+                ? 'bg-brand-dark text-white shadow-sm'
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {isAr ? 'جميع الأقسام' : 'All Operations'}
+          </button>
+          
+          {getAllDepartments().map(d => (
+            <button
+              key={d.id}
+              onClick={() => setDeptFilter(d.id)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                deptFilter === d.id
+                  ? 'bg-brand-dark text-white shadow-sm font-black'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <span>{d.name}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Search & Status Filters Bar */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-[220px]">
             <Search className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={16} />
@@ -444,39 +523,68 @@ const OperationsCenter = () => {
               placeholder={isAr ? 'بحث سريع باسم الخدمة، الشركة أو الموظف...' : 'Search by service, company, or employee...'}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full ${isAr ? 'pr-10' : 'pl-10'} py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:border-brand-dark text-sm font-bold transition-all`}
+              className={`w-full ${isAr ? 'pr-10' : 'pl-10'} py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:border-brand-dark text-xs font-bold transition-all`}
             />
           </div>
-          <select
-            value={deptFilter}
-            onChange={(e) => setDeptFilter(e.target.value)}
-            className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-brand-dark min-w-[140px]"
-          >
-            <option value="all">{isAr ? 'كل الأقسام' : 'All Departments'}</option>
-            {getAllDepartments().map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-brand-dark min-w-[120px]"
+            className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-brand-dark min-w-[130px] cursor-pointer"
           >
             <option value="all">{isAr ? 'كل الحالات' : 'All Statuses'}</option>
-            <option value="ongoing">Ongoing</option>
-            <option value="under_review">Review</option>
-            <option value="delayed">Delayed</option>
-            <option value="completed">Completed</option>
+            <option value="ongoing">{isAr ? 'قيد التنفيذ' : 'Ongoing'}</option>
+            <option value="under_review">{isAr ? 'قيد المراجعة' : 'Under Review'}</option>
+            <option value="delayed">{isAr ? 'متأخرة' : 'Delayed'}</option>
+            <option value="completed">{isAr ? 'مكتملة' : 'Completed'}</option>
           </select>
         </div>
 
-        {/* High-Density Pipeline Table */}
-        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 min-h-[360px]">
+        {/* High-Density Pipeline Table & Rich Empty State */}
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden min-h-[360px]">
           {loading ? (
-            <div className="p-20 flex justify-center">
+            <div className="p-20 flex flex-col justify-center items-center gap-3">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark" />
+              <p className="text-xs text-gray-400 font-bold">{isAr ? 'جاري مزامنة خط العمليات...' : 'Syncing operations line...'}</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="p-16 text-center text-gray-400 font-bold text-sm">
-              {isAr ? 'لا توجد عمليات تطابق البحث' : 'No operations found matching your filters.'}
+            <div className="p-10 lg:p-14 text-center space-y-6">
+              <div className="w-16 h-16 rounded-3xl bg-red-50 text-brand-dark mx-auto flex items-center justify-center shadow-inner">
+                <Zap size={32} />
+              </div>
+
+              <div className="max-w-md mx-auto space-y-2">
+                <h3 className="text-lg font-black text-gray-900">
+                  {isAr ? 'لا توجد عمليات جارية حالياً' : 'No Active Operations Found'}
+                </h3>
+                <p className="text-xs text-gray-500 font-medium leading-relaxed">
+                  {isAr 
+                    ? 'يمكنك بدء معاملة جديدة للعميل فوراً وإسنادها للموظف المختص لتبدأ مزامنة سجل DSR ومهام الموظف.'
+                    : 'Launch a new client service to dispatch work directly to staff, auto-initiate Employee DSRs, and track completion SLAs.'}
+                </p>
+              </div>
+
+              {/* Quick Action Buttons */}
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setEditingService(null);
+                    setFormData({
+                      title: 'VAT Return Filing Q2 2026',
+                      client_id: clients[0]?.id || '',
+                      employee_id: employees[0]?.id || '',
+                      due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+                      description: 'Quarterly compliance review and VAT return submission.',
+                      status: 'ongoing'
+                    });
+                    setShowCreateModal(true);
+                  }}
+                  className="px-5 py-3 bg-brand-dark hover:bg-red-800 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-brand-dark/20 transition-all cursor-pointer"
+                >
+                  <Plus size={16} />
+                  <span>{isAr ? '+ إنشاء أول عملية جديدة' : '+ Launch First Operation'}</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="overflow-x-auto">
