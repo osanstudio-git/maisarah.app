@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabaseClient';
 import { getAllDepartments, getDepartmentById } from '../../config/departments';
+import { isDirectEmployeeMode } from '../../utils/workflowConfig';
 import {
   Layers,
   ChevronDown,
@@ -18,7 +19,8 @@ import {
   Calendar,
   Activity,
   ArrowUpRight,
-  RefreshCw
+  RefreshCw,
+  Cpu
 } from 'lucide-react';
 
 interface EmployeeWorkload {
@@ -365,29 +367,35 @@ const DepartmentPerformance = () => {
             </div>
           </div>
 
-          {/* ── HOD Leadership & Direct Accountability Card ────────────── */}
+          {/* ── HOD Leadership / Direct Operations Supervision Card ────────────── */}
           <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-[#5C0A0A] rounded-[2rem] p-6 lg:p-8 text-white shadow-lg relative overflow-hidden">
             <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 blur-3xl pointer-events-none" />
             <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
               <div className="flex items-center gap-5">
                 <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center font-black text-2xl shadow-xl flex-shrink-0">
-                  {hodProfile?.full_name?.charAt(0) || hodProfile?.name?.charAt(0) || 'H'}
+                  {hodProfile?.full_name?.charAt(0) || (isDirectEmployeeMode() ? 'B' : 'H')}
                 </div>
                 <div>
                   <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/20 text-red-200 border border-red-400/30 rounded-full text-[10px] font-black uppercase tracking-wider mb-2">
                     <ShieldCheck size={12} />
-                    <span>{selectedDept.head_title} ({selectedDept.name})</span>
+                    <span>
+                      {isDirectEmployeeMode() && !hodProfile
+                        ? (isAr ? `إشراف مباشر: ${selectedDept.name}` : `Direct Supervision: ${selectedDept.name}`)
+                        : `${selectedDept.head_title} (${selectedDept.name})`}
+                    </span>
                   </div>
                   <h2 className="text-xl lg:text-2xl font-black tracking-tight">
-                    {hodProfile?.full_name || hodProfile?.name || (isAr ? 'رئيس القسم المسؤول' : 'Assigned Department Head')}
+                    {hodProfile?.full_name || hodProfile?.name || (
+                      isDirectEmployeeMode() 
+                        ? (isAr ? 'بدور الحسني (مديرة العمليات)' : 'Budoor Al Hasani (Operations Manager)')
+                        : (isAr ? 'رئيس القسم المسؤول' : 'Assigned Department Head')
+                    )}
                   </h2>
                   <div className="flex flex-wrap items-center gap-4 text-xs text-gray-300 mt-1 font-medium">
-                    {hodProfile?.email && (
-                      <span className="flex items-center gap-1.5">
-                        <Mail size={13} className="text-red-300" />
-                        {hodProfile.email}
-                      </span>
-                    )}
+                    <span className="flex items-center gap-1.5">
+                      <Mail size={13} className="text-red-300" />
+                      {hodProfile?.email || (isDirectEmployeeMode() ? 'budoor@maisarah.one' : '')}
+                    </span>
                     {hodProfile?.phone && (
                       <span className="flex items-center gap-1.5">
                         <Phone size={13} className="text-red-300" />
@@ -396,7 +404,7 @@ const DepartmentPerformance = () => {
                     )}
                     <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      {isAr ? 'نشط في النظام' : 'Active On Duty'}
+                      {isAr ? 'إشراف مباشر نشط' : 'Active Direct Supervision'}
                     </span>
                   </div>
                 </div>
