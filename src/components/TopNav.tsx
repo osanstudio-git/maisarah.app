@@ -8,6 +8,8 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabaseClient';
 import LanguageSwitcher from './LanguageSwitcher';
 
+import { getHierarchyMode, subscribeHierarchyMode, type HierarchyMode } from '../utils/workflowConfig';
+
 export interface AppNotification {
   id: string;
   sender_id?: string | null;
@@ -34,6 +36,11 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const [hierarchyMode, setHierarchyModeState] = useState<HierarchyMode>(getHierarchyMode());
+
+  useEffect(() => {
+    return subscribeHierarchyMode((mode) => setHierarchyModeState(mode));
+  }, []);
 
   const displayName = user?.user_metadata?.full_name || 
                       user?.email?.split('@')[0] || 
@@ -45,19 +52,26 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
     department_head: { en: 'HOD Leadership', ar: 'بوابة رئيس القسم (HOD)', icon: '👑' },
     hr: { en: 'HR Control Center', ar: 'إدارة الموارد البشرية', icon: '📋' },
     crm: { en: 'CRM & Client Portal', ar: 'بوابة علاقات العملاء', icon: '🤝' },
+    sales: { en: 'Field Sales Portal', ar: 'بوابة المبيعات الميدانية', icon: '🚀' },
     manager: { en: 'Executive Manager Panel', ar: 'لوحة المدير التنفيذي', icon: '⭐' }
   };
 
   const availablePortals = useMemo(() => {
-    const primaryRole = localStorage.getItem('app_user_primary_role') || role;
-    if (primaryRole === 'manager') {
-      return ['manager', 'hr', 'accountant', 'department_head', 'crm', 'employee'];
+    // In Manager mode, Manager operates directly from their unified Command Center without needing switching
+    if (role === 'manager') {
+      return ['manager'];
     }
     const list = new Set<string>();
     if (role) list.add(role);
     (secondaryRoles || []).forEach(r => list.add(r));
+
+    // Filter out HOD portal if in Flat / Direct Employee Mode
+    if (hierarchyMode === 'direct_employee') {
+      list.delete('department_head');
+    }
+
     return Array.from(list);
-  }, [role, secondaryRoles]);
+  }, [role, secondaryRoles, hierarchyMode]);
 
   // ── Fetch Notifications ───────────────────────────────────────────────────
   const fetchNotifications = useCallback(async () => {

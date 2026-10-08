@@ -1,15 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useTranslation } from 'react-i18next';
-import { Settings, Megaphone, Send, ShieldCheck, Clock, CheckCircle } from 'lucide-react';
+import { 
+  Settings, Megaphone, Send, ShieldCheck, Clock, CheckCircle,
+  ToggleLeft, ToggleRight, Sparkles, GitFork, UserCheck, CheckCircle2,
+  Workflow, ArrowRight, ShieldAlert, Cpu
+} from 'lucide-react';
 import { logActivity } from '../../lib/activityLogger';
 import { useAuth } from '../../hooks/useAuth';
+import { getHierarchyMode, setHierarchyMode, subscribeHierarchyMode, type HierarchyMode } from '../../utils/workflowConfig';
 
 const SystemControl = () => {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const isAr = i18n.language === 'ar';
   
+  // Hierarchy Mode State
+  const [hierarchyMode, setHierarchyModeState] = useState<HierarchyMode>(getHierarchyMode());
+  const [modeNotice, setModeNotice] = useState<string>('');
+
   // Announcements State
   const [announcementContent, setAnnouncementContent] = useState('');
   const [announcementTitle, setAnnouncementTitle] = useState('');
@@ -28,6 +37,10 @@ const SystemControl = () => {
     fetchPendingApprovals();
     fetchActivities();
 
+    const unsubscribe = subscribeHierarchyMode((mode) => {
+      setHierarchyModeState(mode);
+    });
+
     // Subscribe to real-time activity updates
     const channel = supabase
       .channel('activity_log_changes')
@@ -41,9 +54,33 @@ const SystemControl = () => {
       .subscribe();
 
     return () => {
+      unsubscribe();
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const handleToggleHierarchyMode = async (newMode: HierarchyMode) => {
+    setHierarchyMode(newMode);
+    setHierarchyModeState(newMode);
+
+    const descEn = newMode === 'direct_employee' 
+      ? 'Switched organization workflow to Flat Mode (Direct Employee Assignment)' 
+      : 'Switched organization workflow to Enterprise Mode (HOD Department Routing)';
+    const descAr = newMode === 'direct_employee'
+      ? 'تم تبديل مسار العمل إلى الهيكل المباشر (توزيع المهام مباشرة للموظفين بدون وسيط)'
+      : 'تم تبديل مسار العمل إلى الهيكل الموسع (عبر رؤساء الأقسام HOD)';
+
+    await logActivity(
+      user?.id || '',
+      user?.user_metadata?.full_name || user?.email || 'Manager',
+      'system_config_change',
+      descEn,
+      descAr
+    );
+
+    setModeNotice(isAr ? 'تم تحديث نظام توزيع المهام وهيكل المؤسسة بنجاح' : 'Organization workflow & routing hierarchy updated successfully');
+    setTimeout(() => setModeNotice(''), 4000);
+  };
 
   const fetchActivities = async () => {
     setLoadingActivities(true);
@@ -132,10 +169,117 @@ const SystemControl = () => {
 
   return (
     <div className="space-y-6" dir={isAr ? 'rtl' : 'ltr'}>
-      <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2 tracking-tight uppercase">
-        <Settings className="text-brand-dark" size={28}/>
-        {t('manager.systemControl')}
-      </h2>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2 tracking-tight uppercase">
+          <Settings className="text-brand-dark" size={28}/>
+          {t('manager.systemControl')}
+        </h2>
+        <span className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider ${
+          hierarchyMode === 'direct_employee' 
+            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+            : 'bg-amber-50 text-amber-700 border border-amber-200'
+        }`}>
+          <Cpu size={14} />
+          {hierarchyMode === 'direct_employee'
+            ? (isAr ? 'الهيكل التشغيلي: مباشر للموظفين (مفعّل)' : 'Workflow Engine: Flat / Direct Mode (Active)')
+            : (isAr ? 'الهيكل التشغيلي: عبر رؤساء الأقسام (HOD)' : 'Workflow Engine: HOD Enterprise Mode (Active)')}
+        </span>
+      </div>
+
+      {modeNotice && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-black flex items-center gap-2 animate-fade-in shadow-xs">
+          <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+          <span>{modeNotice}</span>
+        </div>
+      )}
+
+      {/* ── Organization Hierarchy & Workflow Architecture Control Card ── */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-brand-dark text-white rounded-3xl p-6 lg:p-8 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-white/5 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="relative z-10">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-white/10">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-amber-400 font-black text-xs uppercase tracking-widest">
+                <Sparkles size={16} />
+                <span>{isAr ? 'هيكل المؤسسة وتوزيع المهام' : 'Organization Workflow Engine'}</span>
+              </div>
+              <h3 className="text-xl lg:text-2xl font-black text-white tracking-tight">
+                {isAr ? 'محرك التوجيه التشغيلي وتدرج الصلاحيات' : 'Operational Routing & Hierarchy Switch'}
+              </h3>
+              <p className="text-xs lg:text-sm text-slate-300 font-medium max-w-2xl leading-relaxed">
+                {isAr 
+                  ? 'اختر نمط العمل المناسب لحجم الفريق الحالي. يمكنك التبديل بنقرة واحدة بين التوجيه المباشر للموظفين دون وسطاء، أو نظام رؤساء الأقسام الموسع.' 
+                  : 'Toggle between Direct Employee assignment (optimized for lean teams) and HOD Enterprise hierarchy. Code & data are 100% preserved.'}
+              </p>
+            </div>
+
+            {/* Toggle Controls */}
+            <div className="flex items-center bg-black/40 p-1.5 rounded-2xl border border-white/10 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleToggleHierarchyMode('direct_employee')}
+                className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  hierarchyMode === 'direct_employee'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/40'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <UserCheck size={16} />
+                <span>{isAr ? 'مباشر للموظفين (فريق رشيق)' : 'Flat / Direct Mode'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleToggleHierarchyMode('hod_hierarchical')}
+                className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  hierarchyMode === 'hod_hierarchical'
+                    ? 'bg-brand-dark text-white shadow-lg shadow-red-900/40 border border-red-500/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <GitFork size={16} />
+                <span>{isAr ? 'نظام رؤساء الأقسام (HOD)' : 'HOD Enterprise Mode'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Explanation Badges */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6">
+            <div className={`p-4 rounded-2xl border transition-all ${
+              hierarchyMode === 'direct_employee' 
+                ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200' 
+                : 'bg-white/5 border-white/5 text-slate-400'
+            }`}>
+              <div className="flex items-center gap-2 font-black text-xs uppercase tracking-wider mb-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${hierarchyMode === 'direct_employee' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                <span>{isAr ? 'خصائص النمط المباشر (الوضع النشط):' : 'Flat Mode Features (Active):'}</span>
+              </div>
+              <ul className="text-[11px] space-y-1.5 font-medium">
+                <li>• {isAr ? 'إسناد المعاملات من CRM إلى الموظف المختص فوراً حسب القسم والدور' : 'Direct task dispatch from CRM to specific employee by department & role'}</li>
+                <li>• {isAr ? 'التعيينات والتهيئة تسند للموظفين مباشرة دون الحاجة لبوابة رئيس قسم' : 'Employee placements managed directly by Manager without HOD queues'}</li>
+                <li>• {isAr ? 'توليد سجل DSR تلقائياً للموظف فور بدء المهمة' : 'Auto-initiates Employee DSR register as soon as tasks start'}</li>
+              </ul>
+            </div>
+
+            <div className={`p-4 rounded-2xl border transition-all ${
+              hierarchyMode === 'hod_hierarchical' 
+                ? 'bg-amber-950/40 border-amber-500/40 text-amber-200' 
+                : 'bg-white/5 border-white/5 text-slate-400'
+            }`}>
+              <div className="flex items-center gap-2 font-black text-xs uppercase tracking-wider mb-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${hierarchyMode === 'hod_hierarchical' ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'}`} />
+                <span>{isAr ? 'خصائص نمط رؤساء الأقسام (المؤسسي):' : 'HOD Enterprise Mode Features:'}</span>
+              </div>
+              <ul className="text-[11px] space-y-1.5 font-medium">
+                <li>• {isAr ? 'توجيه المعاملات لرئيس القسم (HOD) لتوزيعها ومراجعة الجودة' : 'Routes tasks to HOD work routing queues for intermediate QC'}</li>
+                <li>• {isAr ? 'تفعيل بوابات رؤساء الأقسام الـ 7 بالكامل في القائمة' : 'Activates all 7 HOD leadership modules in navigation'}</li>
+                <li>• {isAr ? 'اعتمادات متعددة المستويات قبل تسليم المعاملات' : 'Multi-tier executive approval chain for large corporate teams'}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="flex flex-col lg:grid lg:grid-cols-12 gap-6">
         

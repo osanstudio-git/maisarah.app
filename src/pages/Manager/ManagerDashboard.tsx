@@ -15,12 +15,17 @@ import {
 } from 'lucide-react';
 import { getAllDepartments } from '../../config/departments';
 import { supabase } from '../../lib/supabaseClient';
+import { getHierarchyMode, subscribeHierarchyMode, type HierarchyMode } from '../../utils/workflowConfig';
+import { Cpu, Settings2, UserCheck, GitFork } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ManagerDashboard = () => {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const isAr = i18n.language === 'ar';
 
   const [loading, setLoading] = useState(false);
+  const [hierarchyMode, setHierarchyModeState] = useState<HierarchyMode>(getHierarchyMode());
   const [metrics, setMetrics] = useState({
     overdueTasks: 0,
     strugglingDept: isAr ? 'الضرائب' : 'Tax & VAT',
@@ -133,21 +138,41 @@ const ManagerDashboard = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_leave_requests' }, () => fetchLiveIntelligence(true))
       .subscribe();
 
+    const unsubHierarchy = subscribeHierarchyMode((mode) => setHierarchyModeState(mode));
+
     return () => {
       supabase.removeChannel(channel);
+      unsubHierarchy();
     };
   }, [fetchLiveIntelligence]);
 
   return (
     <div className="space-y-8 pb-10" dir={isAr ? 'rtl' : 'ltr'}>
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-            <Activity className="text-brand-dark" size={32} />
-            {isAr ? 'لوحة القيادة التنفيذية' : 'Executive Dashboard'}
-          </h1>
-          <p className="text-sm text-gray-500 mt-2 font-medium">
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
+              <Activity className="text-brand-dark" size={32} />
+              {isAr ? 'لوحة القيادة التنفيذية' : 'Executive Dashboard'}
+            </h1>
+            
+            {/* Hierarchy Badge */}
+            <button
+              onClick={() => navigate('/manager/activity-log')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wide border transition-all cursor-pointer ${
+                hierarchyMode === 'direct_employee'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+              }`}
+              title={isAr ? 'انقر لتغيير إعدادات هيكل المؤسسة وتوزيع المهام' : 'Click to configure organization routing & hierarchy mode'}
+            >
+              {hierarchyMode === 'direct_employee' ? <UserCheck size={12} /> : <GitFork size={12} />}
+              <span>{hierarchyMode === 'direct_employee' ? (isAr ? 'هيكل مباشر (مفعّل)' : 'Flat Mode (Active)') : (isAr ? 'نظام HOD (مفعّل)' : 'HOD Mode (Active)')}</span>
+              <Settings2 size={11} className="opacity-60" />
+            </button>
+          </div>
+          <p className="text-sm text-gray-500 font-medium">
             {isAr ? 'نظرة شاملة ولحظية على أداء الشركة ومراكز العمليات' : 'Live, comprehensive overview of company performance and operations'}
           </p>
         </div>

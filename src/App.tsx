@@ -53,8 +53,9 @@ import DepartmentHeadWorkspace from './pages/DepartmentHead/DepartmentHeadWorksp
 // HR Views
 import HRWorkspace from './pages/HR/HRWorkspace';
 
-// CRM Views
+// CRM & Sales Views
 import CRMPortal from './pages/CRM/CRMPortal';
+import FieldSalesPortal from './pages/Sales/FieldSalesPortal';
 
 // Client Views
 import ClientDashboard from './pages/Client/ClientDashboard';
@@ -176,6 +177,11 @@ function App() {
               <Route path="/crm/club" element={<CRMPortal />} />
               <Route path="/crm/messages" element={<Messaging />} />
               <Route path="/crm/documents" element={<DocumentVault />} />
+            </Route>
+
+            {/* Field Sales Portal Routes */}
+            <Route element={<ProtectedRoute allowedRoles={['sales', 'crm', 'manager', 'employee']} />}>
+              <Route path="/sales" element={<FieldSalesPortal />} />
             </Route>
 
             {/* Client Routes */}

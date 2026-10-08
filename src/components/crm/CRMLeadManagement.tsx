@@ -10,6 +10,7 @@ import {
   Briefcase, CheckSquare, UserCheck, Key, Copy, Award
 } from 'lucide-react';
 import { provisionClientOrMemberAuth, type ProvisionResult } from '../../utils/clientAuthProvisioner';
+import { isDirectEmployeeMode } from '../../utils/workflowConfig';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -359,7 +360,23 @@ export default function CRMLeadManagement() {
         })
         .eq('id', quote.id);
 
-      // 3. Generate Service Deliverable Task
+      // 3. Generate Service Deliverable Task with Hierarchy-aware routing
+      const directMode = isDirectEmployeeMode();
+      let targetEmployeeId: string | null = lead.assigned_to || null;
+
+      // In Direct Mode, if not already assigned, pick staff member for that department
+      if (directMode && !targetEmployeeId) {
+        const { data: deptStaff } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('department_id', finalDept)
+          .limit(1)
+          .maybeSingle();
+        if (deptStaff?.id) {
+          targetEmployeeId = deptStaff.id;
+        }
+      }
+
       const { data: existingTask } = await supabase
         .from('services')
         .select('id')
@@ -381,7 +398,7 @@ export default function CRMLeadManagement() {
             status: 'pending',
             priority: lead.priority || 'medium',
             due_date: finalDueDate,
-            employee_id: null
+            employee_id: targetEmployeeId
           }])
           .select('id')
           .single();
@@ -390,29 +407,54 @@ export default function CRMLeadManagement() {
         createdServiceId = newService.id;
       }
 
-      // 4. HOD Realtime Routing & Notification
+      // 4. Realtime Routing & Notification (Hierarchy Aware)
       const deptConfig = DEPARTMENTS.find(d => d.id === finalDept);
       const deptLabel = isAr ? (deptConfig?.ar || finalDept) : (deptConfig?.en || finalDept);
 
-      await supabase.from('notifications').insert([{
-        sender_id: user?.id || null,
-        recipient_role: 'department_head',
-        service_id: createdServiceId,
-        title: isAr ? `مهمة عميل جديدة بانتظار الإسناد (${deptLabel})` : `New Client Task Pending Delegation (${deptLabel})`,
-        message: isAr
-          ? `تم اعتماد العقد وعرض السعر للعميل "${companyOrContactName}" بقيمة OMR ${formatOMR(finalBudget)}. تم توجيه المهمة إلى رئيس قسم (${deptLabel}) لإسنادها للموظف المختص.`
-          : `Quotation accepted for "${companyOrContactName}" (OMR ${formatOMR(finalBudget)}). Deliverable is ready for HOD (${deptLabel}) staff assignment.`,
-        type: 'task_started'
-      }]);
+      if (directMode) {
+        // Direct Employee Dispatch (Flat Mode)
+        await supabase.from('notifications').insert([{
+          sender_id: user?.id || null,
+          recipient_role: 'employee',
+          recipient_id: targetEmployeeId || undefined,
+          service_id: createdServiceId,
+          title: isAr ? `مهمة جديدة مسندة إليك (${deptLabel})` : `New Task Assigned (${deptLabel})`,
+          message: isAr
+            ? `تم تحويل العميل "${companyOrContactName}" بقيمة OMR ${formatOMR(finalBudget)}. تم إسناد المهمة إليك مباشرة لبدء العمل وسجل DSR.`
+            : `Client "${companyOrContactName}" converted (OMR ${formatOMR(finalBudget)}). Assigned directly to you to begin execution and DSR register.`,
+          type: 'task_started'
+        }]);
 
-      setToast({
-        show: true,
-        title: isAr ? 'تم التحويل إلى عميل وتوجيه المهمة لرئيس القسم' : 'Lead Converted & Routed to HOD',
-        message: isAr
-          ? `تم إنشاء حساب العميل (${companyOrContactName}) وإدراج المهمة في طابور رئيس قسم (${deptLabel}) بنجاح.`
-          : `Created client (${companyOrContactName}) and routed deliverable to the ${deptLabel} HOD delegation queue.`,
-        type: 'success'
-      });
+        setToast({
+          show: true,
+          title: isAr ? 'تم التحويل والإسناد المباشر للموظف' : 'Lead Converted & Assigned to Employee',
+          message: isAr
+            ? `تم إنشاء حساب العميل (${companyOrContactName}) وإسناد المهمة مباشرة لموظف قسم (${deptLabel}) بنجاح.`
+            : `Client (${companyOrContactName}) created and task assigned directly to ${deptLabel} staff.`,
+          type: 'success'
+        });
+      } else {
+        // HOD Queue Routing (Enterprise Mode)
+        await supabase.from('notifications').insert([{
+          sender_id: user?.id || null,
+          recipient_role: 'department_head',
+          service_id: createdServiceId,
+          title: isAr ? `مهمة عميل جديدة بانتظار الإسناد (${deptLabel})` : `New Client Task Pending Delegation (${deptLabel})`,
+          message: isAr
+            ? `تم اعتماد العقد وعرض السعر للعميل "${companyOrContactName}" بقيمة OMR ${formatOMR(finalBudget)}. تم توجيه المهمة إلى رئيس قسم (${deptLabel}) لإسنادها للموظف المختص.`
+            : `Quotation accepted for "${companyOrContactName}" (OMR ${formatOMR(finalBudget)}). Deliverable is ready for HOD (${deptLabel}) staff assignment.`,
+          type: 'task_started'
+        }]);
+
+        setToast({
+          show: true,
+          title: isAr ? 'تم التحويل إلى عميل وتوجيه المهمة لرئيس القسم' : 'Lead Converted & Routed to HOD',
+          message: isAr
+            ? `تم إنشاء حساب العميل (${companyOrContactName}) وإدراج المهمة في طابور رئيس قسم (${deptLabel}) بنجاح.`
+            : `Created client (${companyOrContactName}) and routed deliverable to the ${deptLabel} HOD delegation queue.`,
+          type: 'success'
+        });
+      }
 
       fetchLeads(true);
     } catch (err: any) {
