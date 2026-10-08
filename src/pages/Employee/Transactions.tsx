@@ -26,6 +26,7 @@ import {
   Filter,
   Check
 } from 'lucide-react';
+import { addDSREntry } from '../../utils/dsrSync';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -272,21 +273,39 @@ export default function Transactions() {
             sender_id: user?.id || null,
             recipient_role: 'accountant',
             service_id: task.id,
-            title: isAr ? 'بدء مهمة جديدة - مسودة فاتورة جاهزة' : 'New Task Started - Draft Invoice Ready',
+            title: isAr ? 'بدء مهمة جديدة - مسودة فاتورة وسجل DSR جاهز' : 'New Task Started - Draft Invoice & DSR Ready',
             message: isAr
-              ? `قام الموظف ببدء العمل على المهمة "${task.title}". تم إنشاء مسودة فاتورة بقيمة ${invoiceBudget.toFixed(3)} ر.ع جاهزة بالمحاسبة.`
-              : `Work started on task "${task.title}". Draft invoice ${generatedInvNumber} (OMR ${invoiceBudget.toFixed(3)}) is ready in Accounts.`,
+              ? `قام الموظف ببدء العمل على المهمة "${task.title}". تم إنشاء مسودة فاتورة وقيد DSR بقيمة ${invoiceBudget.toFixed(3)} ر.ع.`
+              : `Work started on task "${task.title}". Draft invoice ${generatedInvNumber} & DSR entry (OMR ${invoiceBudget.toFixed(3)}) synced to Accounts.`,
             type: 'task_started'
           }]);
         if (notifErr) console.warn('Notification notice:', notifErr);
+
+        // Step D: Auto-Register DSR Entry upon work start
+        addDSREntry({
+          id: `dsr-task-${task.id}`,
+          date: new Date().toISOString().split('T')[0],
+          employee_name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Staff Member',
+          employee_id: user?.id,
+          service: task.title,
+          company_name: task.clients?.company_name || 'Valued Client',
+          client_id: task.client_id || undefined,
+          cr_number: (task.clients as any)?.cr_number || '',
+          amount: invoiceBudget,
+          gov_fee: 0,
+          status: 'Unpaid',
+          accountant_note: `Auto-created on task start: ${task.title}`,
+          invoice_issued: false,
+          invoice_number: invoiceNumber || undefined,
+        });
       }
 
       setNotification({
         show: true,
-        title: isAr ? 'تم بدء المهمة بنجاح' : 'Work Started',
+        title: isAr ? 'تم بدء المهمة ومزامنة DSR بنجاح' : 'Work Started & DSR Synced',
         message: isAr
-          ? `تم تحديث حالة المهمة وإنشاء مسودة الفاتورة في قسم المحاسبة بنجاح.`
-          : `Task is now In Progress. Draft invoice automatically generated for Accounts.`,
+          ? `تم تحديث حالة المهمة، وقيد المعاملة تلقائياً في سجل DSR وإرسال إشعار للمحاسبة.`
+          : `Task is In Progress. DSR entry & draft invoice automatically created for Accounts.`,
         type: 'success'
       });
     } catch (err: any) {
@@ -391,6 +410,27 @@ export default function Transactions() {
         }]);
       if (notifErr) console.warn('Payment notification notice:', notifErr);
 
+      // Sync payment to DSR entry
+      addDSREntry({
+        id: `dsr-task-${selectedTaskForPayment.id}`,
+        date: paymentData.payment_date || new Date().toISOString().split('T')[0],
+        employee_name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Staff Member',
+        employee_id: user?.id,
+        service: selectedTaskForPayment.title,
+        company_name: selectedTaskForPayment.clients?.company_name || 'Valued Client',
+        client_id: selectedTaskForPayment.client_id || undefined,
+        cr_number: (selectedTaskForPayment.clients as any)?.cr_number || '',
+        amount: amountPaid,
+        gov_fee: Number(paymentData.gov_fee || 0),
+        status: 'Paid',
+        payment_date: paymentData.payment_date,
+        payment_method: paymentData.payment_method as any,
+        payment_reference: paymentData.payment_reference || undefined,
+        accountant_note: `Payment logged (${generatedReceiptNo}) for ${selectedTaskForPayment.title}`,
+        invoice_issued: false,
+        receipt_number: generatedReceiptNo,
+      });
+
       // Close modal & reset
       setSelectedTaskForPayment(null);
       setPaymentData({
@@ -404,10 +444,10 @@ export default function Transactions() {
 
       setNotification({
         show: true,
-        title: isAr ? 'تم تسجيل مسودة الإيصال' : 'Draft Payment Logged',
+        title: isAr ? 'تم تسجيل الدفعة وتحديث سجل DSR' : 'Payment Logged & DSR Updated',
         message: isAr
-          ? `تم تسجيل الدفعة (${generatedReceiptNo}) بنجاح وإرسال إشعار لفريق المحاسبة للتدقيق والمطابقة.`
-          : `Receipt ${generatedReceiptNo} logged as DRAFT and forwarded to Accounts for verification.`,
+          ? `تم تسجيل الدفعة (${generatedReceiptNo}) وتحديث سجل DSR بنجاح وإرسال إشعار لفريق المحاسبة.`
+          : `Receipt ${generatedReceiptNo} logged & DSR updated. Forwarded to Accounts for verification.`,
         type: 'success'
       });
     } catch (err: any) {

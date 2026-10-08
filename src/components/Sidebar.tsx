@@ -57,6 +57,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
       case 'employee':
         return [
           { title: t('employee.dashboardTitle'), icon: Home, path: '/employee' },
+          { title: isAr ? 'سجل العمليات اليومي (DSR)' : 'My DSR Register', icon: FileSpreadsheet, path: '/employee/dsr' },
           { title: t('employee.clientManager'), icon: Users, path: '/employee/clients' },
           { title: t('employee.invoiceCreator'), icon: FileText, path: '/employee/invoices' },
           { title: t('employee.tasksView'), icon: Briefcase, path: '/employee/tasks' },

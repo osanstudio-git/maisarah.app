@@ -26,6 +26,7 @@ import InvoiceCreator from './pages/Employee/InvoiceCreator';
 import Transactions from './pages/Employee/Transactions';
 import ServicesManager from './pages/Employee/ServicesManager';
 import EmployeeHR from './pages/Employee/EmployeeHR';
+import EmployeeDSR from './pages/Employee/EmployeeDSR';
 
 // Accountant Views
 import AccountantDashboard from './pages/Accountant/AccountantDashboard';
@@ -93,6 +94,7 @@ function App() {
             {/* Employee Routes */}
             <Route element={<ProtectedRoute allowedRoles={['employee', 'manager']} />}>
               <Route path="/employee" element={<EmployeeDashboard />} />
+              <Route path="/employee/dsr" element={<EmployeeDSR />} />
               <Route path="/employee/clients" element={<ClientManager />} />
               <Route path="/employee/invoices" element={<InvoiceCreator />} />
               <Route path="/employee/tasks" element={<Transactions />} />
