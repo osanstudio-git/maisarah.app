@@ -6,7 +6,7 @@ import {
   ChevronRight, XCircle, ArrowUpRight, BarChart2, ShieldCheck, Download,
   Trash2, Edit, Award, Sparkles, Building2, UserPlus, FileCheck, Check, ArrowRight,
   TrendingUp, RefreshCw, AlertTriangle, Calendar, Layers, Activity, Loader2,
-  PhoneCall, MessageSquare, Send, DollarSign, X, ExternalLink, Filter, Printer, Plus, CheckCheck
+  PhoneCall, MessageSquare, Send, DollarSign, X, ExternalLink, Filter, Printer, Plus, CheckCheck, Briefcase
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -476,11 +476,11 @@ export default function CRMPortal() {
   const [isSubmittingOnboard, setIsSubmittingOnboard] = useState(false);
   const [onboardIntakeMode, setOnboardIntakeMode] = useState<'quick' | 'full'>('quick');
   const [clientType, setClientType] = useState<'B2B' | 'B2C'>('B2B');
-  const [onboardForm, setOnboardForm] = useState({
+  const getInitialOnboardForm = (managerName?: string) => ({
     // B2B Channel Linking
     b2bPartnerId: '',
     b2bPartnerName: '',
-    
+
     // Core Contacts & Identifiers
     name: '',
     position: 'General Manager / Owner',
@@ -514,13 +514,13 @@ export default function CRMPortal() {
     estimatedOpportunityValue: 0,
     probabilityOfClosing: 80,
     expectedClosingDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-    assignedConsultant: MOCK_EMPLOYEES[0].name,
+    assignedConsultant: managerName || MOCK_EMPLOYEES[0].name,
     priority: 'high' as 'high' | 'medium' | 'low',
     meetingNotes: '',
     afterMeetingChecklist: ['Quotation Company Profile are sent', 'Add to CRM'] as string[],
 
     // Operations & Assignments
-    overallManager: MOCK_EMPLOYEES[0].name,
+    overallManager: managerName || MOCK_EMPLOYEES[0].name,
     initialActivity: '',
     monthlyBilling: 0,
     contractExpiryDate: '',
@@ -528,6 +528,8 @@ export default function CRMPortal() {
     clubTier: 'silver' as 'silver' | 'gold' | 'platinum',
     autoQuotation: true
   });
+
+  const [onboardForm, setOnboardForm] = useState(getInitialOnboardForm());
 
   const handleOpenOnboardWithPartner = (partnerId?: string, partnerName?: string) => {
     setOnboardForm(prev => ({
@@ -1254,12 +1256,7 @@ export default function CRMPortal() {
       setClients(prev => [newClientObj, ...prev.filter(c => c.id !== effectiveClientId)]);
 
       setShowOnboardingModal(false);
-      setOnboardForm({
-        name: '', email: '', phone: '', companyPhone: '', companyName: '',
-        registrationNumber: '', servicePackage: [], overallManager: staffList[0]?.name || MOCK_EMPLOYEES[0].name,
-        initialActivity: '', monthlyBilling: 0, contractExpiryDate: '',
-        isClubMember: false, clubTier: 'silver', autoQuotation: true,
-      });
+      setOnboardForm(getInitialOnboardForm(staffList[0]?.name || MOCK_EMPLOYEES[0].name));
 
       alert(isAr
         ? `🎉 تم تسجيل وإدخال العميل "${clientName}" بنجاح وتوليد عروض الأسعار وتوزيع مهام العمل!`
@@ -2508,18 +2505,16 @@ export default function CRMPortal() {
                   <button
                     type="button"
                     onClick={() => setOnboardIntakeMode('quick')}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                      onboardIntakeMode === 'quick' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-800'
-                    }`}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${onboardIntakeMode === 'quick' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-800'
+                      }`}
                   >
                     ⚡ {isAr ? 'تسجيل سريع' : 'Fast Mode'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setOnboardIntakeMode('full')}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                      onboardIntakeMode === 'full' ? 'bg-[#A11212] text-white shadow-xs' : 'text-gray-500 hover:text-gray-800'
-                    }`}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${onboardIntakeMode === 'full' ? 'bg-[#A11212] text-white shadow-xs' : 'text-gray-500 hover:text-gray-800'
+                      }`}
                   >
                     📋 {isAr ? 'ملف متكامل (صفحتين)' : 'Full 2-Page Form'}
                   </button>
@@ -2546,18 +2541,16 @@ export default function CRMPortal() {
                     <button
                       type="button"
                       onClick={() => setClientType('B2B')}
-                      className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${
-                        clientType === 'B2B' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
-                      }`}
+                      className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${clientType === 'B2B' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
+                        }`}
                     >
                       B2B Corporate
                     </button>
                     <button
                       type="button"
                       onClick={() => setClientType('B2C')}
-                      className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${
-                        clientType === 'B2C' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
-                      }`}
+                      className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${clientType === 'B2C' ? 'bg-[#A11212] text-white' : 'text-gray-500 hover:text-gray-900'
+                        }`}
                     >
                       B2C Standard
                     </button>
@@ -2896,11 +2889,10 @@ export default function CRMPortal() {
                     return (
                       <label
                         key={service}
-                        className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
-                          isChecked
-                            ? 'bg-red-50 border-red-200 text-[#A11212]'
-                            : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
-                        }`}
+                        className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${isChecked
+                          ? 'bg-red-50 border-red-200 text-[#A11212]'
+                          : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                          }`}
                       >
                         <input
                           type="checkbox"
@@ -2947,11 +2939,10 @@ export default function CRMPortal() {
                       return (
                         <label
                           key={plan}
-                          className={`flex items-center gap-2 p-2 rounded-xl border text-[11px] font-bold cursor-pointer transition-all ${
-                            isChecked
-                              ? 'bg-amber-50 border-amber-200 text-amber-900'
-                              : 'bg-white border-gray-200 text-gray-650 hover:border-gray-300'
-                          }`}
+                          className={`flex items-center gap-2 p-2 rounded-xl border text-[11px] font-bold cursor-pointer transition-all ${isChecked
+                            ? 'bg-amber-50 border-amber-200 text-amber-900'
+                            : 'bg-white border-gray-200 text-gray-650 hover:border-gray-300'
+                            }`}
                         >
                           <input
                             type="checkbox"
@@ -3113,11 +3104,10 @@ export default function CRMPortal() {
                       return (
                         <label
                           key={action}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase cursor-pointer transition-all ${
-                            isChecked
-                              ? 'bg-green-50 border-green-200 text-green-800'
-                              : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
-                          }`}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase cursor-pointer transition-all ${isChecked
+                            ? 'bg-green-50 border-green-200 text-green-800'
+                            : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                            }`}
                         >
                           <input
                             type="checkbox"
