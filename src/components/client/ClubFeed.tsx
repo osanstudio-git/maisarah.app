@@ -30,7 +30,7 @@ interface ClubAnnouncement {
   category: string;
   priority: string;
   attachment_url?: string;
-  target_tier: string;
+  target_tier?: string;
   published_at: string;
 }
 
@@ -61,7 +61,7 @@ interface ClubFeedProps {
 export const ClubFeed: React.FC<ClubFeedProps> = ({
   memberId,
   userId,
-  memberTier = 'community',
+  memberTier,
   onSelectEvent
 }) => {
   const { i18n } = useTranslation();

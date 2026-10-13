@@ -6,7 +6,7 @@ export interface ProvisionClientParams {
   companyName?: string | null;
   phone?: string | null;
   clientType: 'club_member' | 'client';
-  memberTier?: 'community' | 'silver' | 'gold' | 'platinum';
+  memberTier?: string;
   clientId?: string | null;
   leadId?: string | null;
 }
@@ -41,7 +41,6 @@ export const buildBusinessClubWelcomeEmailHtml = ({
   email,
   tempPassword,
   membershipNumber,
-  memberTier,
   portalUrl,
   isClient
 }: {
@@ -50,19 +49,10 @@ export const buildBusinessClubWelcomeEmailHtml = ({
   email: string;
   tempPassword: string;
   membershipNumber: string;
-  memberTier: string;
+  memberTier?: string;
   portalUrl: string;
   isClient: boolean;
 }) => {
-  const tierColors: Record<string, { bg: string; text: string; label: string; labelAr: string }> = {
-    community: { bg: '#2563eb', text: '#ffffff', label: 'Community Member', labelAr: 'عضوية المجتمع المجانية' },
-    silver: { bg: '#64748b', text: '#ffffff', label: 'Silver Member', labelAr: 'العضوية الفضية' },
-    gold: { bg: '#d97706', text: '#ffffff', label: 'Gold Executive', labelAr: 'العضوية الذهبية' },
-    platinum: { bg: '#0f172a', text: '#ffffff', label: 'Platinum Elite', labelAr: 'العضوية البلاتينية' }
-  };
-
-  const currentTier = tierColors[memberTier] || tierColors.community;
-
   return `
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -77,7 +67,7 @@ export const buildBusinessClubWelcomeEmailHtml = ({
     .header h1 { margin: 0; font-size: 24px; font-weight: 900; letter-spacing: -0.5px; }
     .header p { margin: 8px 0 0 0; font-size: 13px; color: #fecaca; font-weight: 600; }
     .content { padding: 32px 28px; }
-    .badge { display: inline-block; padding: 6px 14px; background-color: ${currentTier.bg}; color: ${currentTier.text}; font-size: 11px; font-weight: 800; border-radius: 9999px; text-transform: uppercase; margin-bottom: 16px; }
+    .badge { display: inline-block; padding: 6px 16px; background-color: #A11212; color: #ffffff; font-size: 11px; font-weight: 800; border-radius: 9999px; text-transform: uppercase; margin-bottom: 16px; letter-spacing: 0.5px; }
     .card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 18px; padding: 22px; margin: 20px 0; }
     .card-title { font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
     .credential-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; }
@@ -104,7 +94,7 @@ export const buildBusinessClubWelcomeEmailHtml = ({
 
     <div class="content">
       <div style="text-align: center;">
-        <span class="badge">${currentTier.labelAr} • ${currentTier.label}</span>
+        <span class="badge">عضوية نادي ميسرة للأعمال • Business Club Member</span>
       </div>
 
       <p style="font-size: 14px; line-height: 1.7; color: #334155; margin-top: 0;">
@@ -125,6 +115,10 @@ export const buildBusinessClubWelcomeEmailHtml = ({
             <td style="padding: 6px 0; text-align: left; font-family: monospace; font-weight: 800; color: #A11212;">${membershipNumber}</td>
           </tr>
           <tr>
+            <td style="padding: 6px 0; color: #64748b; font-weight: 700;">حالة العضوية (Status):</td>
+            <td style="padding: 6px 0; text-align: left; font-weight: 800; color: #0f172a;">عضو معتمد • Club Member</td>
+          </tr>
+          <tr>
             <td style="padding: 6px 0; color: #64748b; font-weight: 700;">البريد الإلكتروني (Login Email):</td>
             <td style="padding: 6px 0; text-align: left; font-family: monospace; font-weight: 800; color: #0f172a;">${email}</td>
           </tr>
@@ -134,7 +128,7 @@ export const buildBusinessClubWelcomeEmailHtml = ({
           </tr>
           <tr>
             <td style="padding: 6px 0; color: #64748b; font-weight: 700;">رصيد نقاط الترحيب (Bonus Points):</td>
-            <td style="padding: 6px 0; text-align: left; font-weight: 800; color: #16a34a;">+100 نقطة مكافأة</td>
+            <td style="padding: 6px 0; text-align: left; font-weight: 800; color: #16a34a;">+200 نقطة مكافأة (Welcome Bonus)</td>
           </tr>
         </table>
       </div>
@@ -175,7 +169,7 @@ export const buildBusinessClubWelcomeEmailHtml = ({
  * Main Controller: Provisions Auth User, Inserts Business Club Member Record, and Dispatches Welcome Email
  */
 export async function provisionClientOrMemberAuth(params: ProvisionClientParams): Promise<ProvisionResult> {
-  const { email, fullName, companyName, phone, clientType, memberTier = 'community', clientId, leadId } = params;
+  const { email, fullName, companyName, phone, clientType, memberTier = 'member', clientId, leadId } = params;
   const cleanEmail = email.trim().toLowerCase();
 
   if (!cleanEmail) {
@@ -247,8 +241,8 @@ export async function provisionClientOrMemberAuth(params: ProvisionClientParams)
           company_name: companyName || null,
           email: cleanEmail,
           phone: phone || null,
-          member_tier: memberTier,
-          loyalty_points: 100, // 100 welcome bonus points
+          member_tier: memberTier || 'member',
+          loyalty_points: 200, // 200 welcome bonus points
           qr_code_token: `QR-${membershipNumber}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
           compliance_health_score: 85,
           status: 'active'

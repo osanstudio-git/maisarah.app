@@ -1,12 +1,12 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { 
-  Star, 
-  Building2, 
-  Users, 
-  Layers, 
-  Activity, 
-  ArrowLeft, 
+import {
+  Star,
+  Building2,
+  Users,
+  Layers,
+  Activity,
+  ArrowLeft,
   ArrowRight,
   TrendingUp,
   Award,
@@ -30,7 +30,7 @@ export const ManagerBusinessClub: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold text-gray-400">
-              <button 
+              <button
                 onClick={() => navigate('/manager')}
                 className="hover:text-brand-dark transition-colors cursor-pointer"
               >

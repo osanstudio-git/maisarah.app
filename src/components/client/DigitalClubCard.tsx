@@ -19,7 +19,7 @@ export interface ClubMemberData {
   id?: string;
   full_name: string;
   membership_number: string;
-  member_tier: 'community' | 'silver' | 'gold' | 'platinum' | string;
+  member_tier?: string;
   loyalty_points: number;
   qr_code_token?: string;
   referral_code?: string;
@@ -43,62 +43,16 @@ export const DigitalClubCard: React.FC<DigitalClubCardProps> = ({
   const [copied, setCopied] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
 
-  const tier = (member.member_tier || 'community').toLowerCase();
-
-  // Tier Theme Config
-  const tierConfig: Record<string, {
-    bgGradient: string;
-    badgeBg: string;
-    badgeText: string;
-    glowColor: string;
-    border: string;
-    accentText: string;
-    nameEn: string;
-    nameAr: string;
-  }> = {
-    community: {
-      bgGradient: 'from-slate-900 via-indigo-950 to-slate-900',
-      badgeBg: 'bg-indigo-500/20 border-indigo-400/30 text-indigo-200',
-      badgeText: 'Community Member',
-      glowColor: 'shadow-indigo-900/30',
-      border: 'border-indigo-500/30',
-      accentText: 'text-indigo-400',
-      nameEn: 'Community Tier',
-      nameAr: 'العضوية المجتمعية',
-    },
-    silver: {
-      bgGradient: 'from-slate-800 via-slate-700 to-zinc-900',
-      badgeBg: 'bg-slate-300/20 border-slate-200/40 text-slate-100',
-      badgeText: 'Silver VIP',
-      glowColor: 'shadow-slate-700/30',
-      border: 'border-slate-400/40',
-      accentText: 'text-slate-300',
-      nameEn: 'Silver VIP',
-      nameAr: 'الفئة الفضية',
-    },
-    gold: {
-      bgGradient: 'from-amber-950 via-yellow-900 to-stone-900',
-      badgeBg: 'bg-amber-400/20 border-amber-300/40 text-amber-200',
-      badgeText: 'Gold Executive',
-      glowColor: 'shadow-amber-900/40',
-      border: 'border-amber-400/40',
-      accentText: 'text-amber-400',
-      nameEn: 'Gold Executive',
-      nameAr: 'الفئة الذهبية التنفيذية',
-    },
-    platinum: {
-      bgGradient: 'from-neutral-950 via-red-950 to-neutral-900',
-      badgeBg: 'bg-red-500/20 border-red-400/40 text-red-200',
-      badgeText: 'Platinum Prestige',
-      glowColor: 'shadow-red-900/40',
-      border: 'border-red-500/40',
-      accentText: 'text-red-400',
-      nameEn: 'Platinum Prestige',
-      nameAr: 'الفئة البلاتينية النخبوية',
-    }
+  // Unified Luxury Signature Theme for Maisarah Business Club
+  const cardTheme = {
+    bgGradient: 'from-slate-950 via-[#450a0a] to-neutral-950',
+    badgeBg: 'bg-amber-400/15 border-amber-300/40 text-amber-200',
+    glowColor: 'shadow-red-950/40',
+    border: 'border-amber-500/30',
+    accentText: 'text-amber-400',
+    nameEn: 'Club Member',
+    nameAr: 'عضو معتمد',
   };
-
-  const currentTheme = tierConfig[tier] || tierConfig.community;
   const qrCodeToken = member.qr_code_token || member.membership_number || 'MBC-2026-TOKEN';
 
   const copyMembershipNumber = (e: React.MouseEvent) => {
@@ -158,7 +112,7 @@ export const DigitalClubCard: React.FC<DigitalClubCardProps> = ({
         <div 
           className={`relative w-full aspect-[1.586/1] rounded-3xl p-6 sm:p-7 shadow-2xl transition-all duration-700 [transform-style:preserve-3d] ${
             isFlipped ? '[transform:rotateY(180deg)]' : ''
-          } bg-gradient-to-br ${currentTheme.bgGradient} border ${currentTheme.border} ${currentTheme.glowColor}`}
+          } bg-gradient-to-br ${cardTheme.bgGradient} border ${cardTheme.border} ${cardTheme.glowColor}`}
         >
           {/* Holographic Sheen Overlay */}
           <div className="absolute inset-0 rounded-3xl bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_60%)] pointer-events-none" />
@@ -182,9 +136,10 @@ export const DigitalClubCard: React.FC<DigitalClubCardProps> = ({
                 </div>
               </div>
 
-              {/* Tier Badge */}
-              <div className={`px-3 py-1 rounded-full border text-[11px] font-black uppercase tracking-wider backdrop-blur-md ${currentTheme.badgeBg}`}>
-                {isAr ? currentTheme.nameAr : currentTheme.nameEn}
+              {/* Membership Badge */}
+              <div className={`px-3 py-1 rounded-full border text-[11px] font-black uppercase tracking-wider backdrop-blur-md ${cardTheme.badgeBg} flex items-center gap-1.5`}>
+                <span className="text-amber-300">⭐</span>
+                <span>{isAr ? cardTheme.nameAr : cardTheme.nameEn}</span>
               </div>
             </div>
 
@@ -341,7 +296,7 @@ export const DigitalClubCard: React.FC<DigitalClubCardProps> = ({
           className="flex flex-col items-center justify-center gap-1 bg-gradient-to-r from-brand-dark to-red-700 hover:from-brand-dark hover:to-red-800 text-white p-2.5 rounded-2xl shadow-sm transition-all active:scale-95 text-center"
         >
           <Sparkles className="w-4 h-4 text-yellow-300" />
-          <span className="text-[11px] font-bold">{isAr ? 'ترقية العضوية' : 'Upgrade'}</span>
+          <span className="text-[11px] font-bold">{isAr ? 'طلب استشارة' : 'Advisory'}</span>
         </button>
       </div>
 

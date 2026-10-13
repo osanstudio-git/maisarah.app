@@ -79,8 +79,8 @@ export const ClientDashboard = () => {
           id: clubData.id,
           full_name: clubData.full_name || profileData?.full_name || user?.email?.split('@')[0] || 'Member',
           membership_number: clubData.membership_number || `MBC-2026-${currentUserId?.substring(0, 4).toUpperCase()}`,
-          member_tier: clubData.member_tier || (userClientType === 'client' ? 'silver' : 'community'),
-          loyalty_points: clubData.loyalty_points ?? 100,
+          member_tier: clubData.member_tier || 'member',
+          loyalty_points: clubData.loyalty_points ?? 200,
           qr_code_token: clubData.qr_code_token || clubData.membership_number,
           referral_code: clubData.referral_code || `MBC-${currentUserId?.substring(0, 6).toUpperCase()}`,
           company_name: clubData.company_name || profileData?.company_name,
@@ -92,8 +92,8 @@ export const ClientDashboard = () => {
         setMemberProfile({
           full_name: profileData?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Member',
           membership_number: `MBC-2026-${(currentUserId || '1080').substring(0, 4).toUpperCase()}`,
-          member_tier: userClientType === 'client' ? 'silver' : 'community',
-          loyalty_points: 100,
+          member_tier: 'member',
+          loyalty_points: 200,
           qr_code_token: `MBC-TOKEN-${currentUserId?.substring(0, 6)}`,
           referral_code: `MBC-${currentUserId?.substring(0, 6).toUpperCase()}`,
           company_name: profileData?.company_name || user?.user_metadata?.company_name || '',
@@ -476,18 +476,18 @@ export const ClientDashboard = () => {
 
             <div className="space-y-1">
               <h4 className="font-extrabold text-base text-gray-900">
-                {isAr ? 'ترقية العضوية أو طلب خدمة' : 'Upgrade Membership / Request Service'}
+                {isAr ? 'طلب استشارة أو خدمة متقدمة' : 'Request Advisory or Dedicated Service'}
               </h4>
               <p className="text-xs text-gray-500">
                 {isAr 
-                  ? 'اختر الخدمة الضريبية أو المحاسبية التي ترغب في الاستفادة منها، وسيقوم مستشارنا بالتواصل معك فوراً.' 
-                  : 'Connect with a senior tax advisor to upgrade to Silver/Gold VIP and unlock full filing services.'}
+                  ? 'تواصل مع مستشار ميسرة المالي والضريبي للاستفادة من خدمات التدقيق ومسك الدفاتر والفواتير الخاصة بالأعضاء.' 
+                  : 'Connect directly with a Maisarah financial & tax advisor to request dedicated audit, VAT, or bookkeeping deliverables.'}
               </p>
             </div>
 
             <div className="space-y-2 text-left rtl:text-right text-xs">
               <a
-                href="https://wa.me/96890000000?text=Hello%20Maisarah%2C%20I%20would%20like%20to%20upgrade%20my%20Business%20Club%20tier"
+                href="https://wa.me/96890000000?text=Hello%20Maisarah%2C%20I%20would%20like%20to%20request%20advisory%20under%20my%20Business%20Club%20membership"
                 target="_blank"
                 rel="noreferrer"
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors"

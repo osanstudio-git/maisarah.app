@@ -39,7 +39,6 @@ interface Lead {
   notes: string;
   created_at: string;
   isClubMember?: boolean;
-  clubTier?: 'silver' | 'gold' | 'platinum';
   activityHistory?: string[];
   portal_access_sent?: boolean;
 }
@@ -62,7 +61,6 @@ interface Client {
   activityHistory: string[];
   contractExpiryDate?: string;
   isClubMember?: boolean;
-  clubTier?: 'silver' | 'gold' | 'platinum';
   portal_access_sent?: boolean;
   portal_sent_at?: string;
   portal_user_id?: string;
@@ -123,8 +121,7 @@ const INITIAL_CLIENTS: Client[] = [
     yearlyBilling: 5400,
     activityHistory: ['Client onboarded.', 'Introductory call logged.', 'VAT registration certificate verified.'],
     contractExpiryDate: '2026-08-15',
-    isClubMember: true,
-    clubTier: 'platinum'
+    isClubMember: true
   },
   {
     id: 'CL-102',
@@ -143,8 +140,7 @@ const INITIAL_CLIENTS: Client[] = [
     yearlyBilling: 14400,
     activityHistory: ['Account created.', 'Statutory audit schedule confirmed.', 'Engagement letter signed.'],
     contractExpiryDate: '2027-06-01',
-    isClubMember: true,
-    clubTier: 'gold'
+    isClubMember: true
   },
   {
     id: 'CL-103',
@@ -271,7 +267,6 @@ export default function CRMPortal() {
     notes: row.notes ?? '',
     created_at: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
     isClubMember: row.is_club_member ?? false,
-    clubTier: row.club_tier ?? undefined,
     activityHistory: row.activity_history ?? [],
   });
 
@@ -294,7 +289,6 @@ export default function CRMPortal() {
     activityHistory: row.activity_history ?? [],
     contractExpiryDate: row.contract_expiry_date ?? undefined,
     isClubMember: row.is_club_member ?? false,
-    clubTier: row.club_tier ?? undefined,
     portal_access_sent: row.portal_access_sent ?? !!row.portal_user_id,
     portal_sent_at: row.portal_sent_at ?? undefined,
     portal_user_id: row.portal_user_id ?? undefined,
@@ -388,7 +382,6 @@ export default function CRMPortal() {
     { id: 'tip_2', title: 'Statutory Audit Readiness', content: 'Keep general ledgers reconciled and payroll PASI tax registries up to date before Q4 audit.', date: '2026-08-05', category: 'Audit' },
     { id: 'tip_3', title: 'SME Feasibility Checklists', content: 'For bank loan approvals, include a detailed 3-year cash flow projections model and sensitivity matrices.', date: '2026-08-10', category: 'Advisory' }
   ]);
-  const [selectedClubTierFilter, setSelectedClubTierFilter] = useState<'all' | 'silver' | 'gold' | 'platinum'>('all');
   const [clubSearch, setClubSearch] = useState('');
 
   // WhatsApp States
@@ -539,7 +532,6 @@ export default function CRMPortal() {
     monthlyBilling: 0,
     contractExpiryDate: '',
     isClubMember: false,
-    clubTier: 'silver' as 'silver' | 'gold' | 'platinum',
     autoQuotation: true
   });
 
@@ -1130,8 +1122,7 @@ export default function CRMPortal() {
       if (calculatedBilling === 0) {
         calculatedBilling = onboardForm.servicePackage.reduce((sum, pkg) => sum + (SERVICE_RATES[pkg] || 0), 0);
         if (onboardForm.isClubMember) {
-          const discount = onboardForm.clubTier === 'platinum' ? 0.20 : onboardForm.clubTier === 'gold' ? 0.15 : 0.10;
-          calculatedBilling = Math.round(calculatedBilling * (1 - discount));
+          calculatedBilling = Math.round(calculatedBilling * 0.90);
         }
       }
 
@@ -1161,7 +1152,6 @@ export default function CRMPortal() {
           .insert([{
             ...clientPayload,
             is_club_member: onboardForm.isClubMember,
-            club_tier: onboardForm.isClubMember ? onboardForm.clubTier : null,
           }])
           .select()
           .maybeSingle();
@@ -1190,8 +1180,7 @@ export default function CRMPortal() {
         const quoteRows = onboardForm.servicePackage.map(pkg => {
           let budget = SERVICE_RATES[pkg] || 0;
           if (onboardForm.isClubMember) {
-            const discount = onboardForm.clubTier === 'platinum' ? 0.20 : onboardForm.clubTier === 'gold' ? 0.15 : 0.10;
-            budget = Math.round(budget * (1 - discount));
+            budget = Math.round(budget * 0.90);
           }
           const vatAmt = +(budget * 0.05).toFixed(3);
           return {
@@ -1278,7 +1267,6 @@ export default function CRMPortal() {
         created_at: new Date().toISOString().slice(0, 10),
         contractExpiryDate: expiryDate,
         isClubMember: onboardForm.isClubMember,
-        clubTier: onboardForm.isClubMember ? onboardForm.clubTier : undefined,
         activityHistory: onboardForm.initialActivity ? [`${new Date().toISOString().slice(0, 10)} - ${onboardForm.initialActivity}`] : []
       };
 
@@ -3074,8 +3062,7 @@ export default function CRMPortal() {
                           (() => {
                             let sum = onboardForm.servicePackage.reduce((acc, pkg) => acc + (SERVICE_RATES[pkg] || 0), 0);
                             if (onboardForm.isClubMember) {
-                              const disc = onboardForm.clubTier === 'platinum' ? 0.20 : onboardForm.clubTier === 'gold' ? 0.15 : 0.10;
-                              sum = Math.round(sum * (1 - disc));
+                              sum = Math.round(sum * 0.90);
                             }
                             return `${sum} OMR`;
                           })()
@@ -3230,20 +3217,8 @@ export default function CRMPortal() {
                     onChange={(e) => setOnboardForm({ ...onboardForm, isClubMember: e.target.checked })}
                     className="w-4 h-4 rounded text-[#A11212] accent-[#A11212]"
                   />
-                  <span>Business Club Member</span>
+                  <span>{isAr ? 'عضو بنادي ميسرة للأعمال (خصم الشركاء 10%)' : 'Maisarah Business Club Member (10% Partner Benefit)'}</span>
                 </label>
-
-                {onboardForm.isClubMember && (
-                  <select
-                    value={onboardForm.clubTier}
-                    onChange={(e) => setOnboardForm({ ...onboardForm, clubTier: e.target.value as any })}
-                    className="bg-white border border-gray-200 rounded-xl px-3 py-1 text-xs font-bold outline-none focus:border-[#A11212]"
-                  >
-                    <option value="silver">Silver Tier (10% Off)</option>
-                    <option value="gold">Gold Tier (15% Off)</option>
-                    <option value="platinum">Platinum Tier (20% Off)</option>
-                  </select>
-                )}
 
                 <label className="flex items-center gap-2 text-xs font-bold text-gray-800 cursor-pointer">
                   <input

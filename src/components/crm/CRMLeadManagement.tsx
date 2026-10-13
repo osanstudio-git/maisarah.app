@@ -155,7 +155,6 @@ export default function CRMLeadManagement() {
   const [isProvisionModalOpen, setIsProvisionModalOpen] = useState(false);
   const [selectedLeadForProvision, setSelectedLeadForProvision] = useState<CRMLead | null>(null);
   const [provisionEmail, setProvisionEmail] = useState('');
-  const [provisionTier, setProvisionTier] = useState<'community' | 'silver' | 'gold' | 'platinum'>('community');
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
 
@@ -496,7 +495,6 @@ export default function CRMLeadManagement() {
         companyName: selectedLeadForProvision.company_name,
         phone: selectedLeadForProvision.phone,
         clientType: selectedLeadForProvision.status === 'accepted' ? 'client' : 'club_member',
-        memberTier: provisionTier,
         clientId: selectedLeadForProvision.converted_client_id,
         leadId: selectedLeadForProvision.id
       });
@@ -1327,29 +1325,13 @@ export default function CRMLeadManagement() {
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-[11px] font-black text-gray-600 uppercase mb-1">
-                    {isAr ? 'فئة العضوية (Membership Tier)' : 'Membership Tier'}
-                  </label>
-                  <select
-                    value={provisionTier}
-                    onChange={e => setProvisionTier(e.target.value as any)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
-                  >
-                    <option value="community">{isAr ? 'مجانية - عضو المجتمع (Community Free Member)' : 'Community Free Member (Leads)'}</option>
-                    <option value="silver">{isAr ? 'فضية (Silver Client Member)' : 'Silver Client Member'}</option>
-                    <option value="gold">{isAr ? 'ذهبية تنفيذية (Gold Executive Member)' : 'Gold Executive Member'}</option>
-                    <option value="platinum">{isAr ? 'بلاتينية مميزة (Platinum Elite Member)' : 'Platinum Elite Member'}</option>
-                  </select>
-                </div>
               </div>
 
               {/* Privilege Highlights */}
               <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200/70 text-[11px] space-y-1.5 text-gray-700 font-medium">
                 <p className="font-bold text-gray-900">{isAr ? 'ماذا سيتلقى العضو عند الإرسال؟' : 'What happens upon provisioning?'}</p>
                 <p>• {isAr ? 'إنشاء حساب مستخدم في Supabase Auth مع صلاحية عميل (Client).' : 'Creates Supabase Auth credentials for the client.'}</p>
-                <p>• {isAr ? 'إصدار بطاقة عضوية رقمية فريدة في نادي ميسرة للأعمال مع 100 نقطة ترحيبية.' : 'Generates a unique digital membership ID (MBC-2026-XXXX) with 100 bonus loyalty points.'}</p>
+                <p>• {isAr ? 'إصدار بطاقة عضوية رقمية فريدة في نادي ميسرة للأعمال مع 200 نقطة ترحيبية.' : 'Generates a unique digital membership ID (MBC-2026-XXXX) with 200 bonus loyalty points.'}</p>
                 <p>• {isAr ? 'إرسال بريد إلكتروني ترحيبي متجاوب مع الهواتف يحتوي على رابط البوابة وكلمة المرور المؤقتة.' : 'Dispatches a mobile-responsive welcome email with portal login credentials and temporary password.'}</p>
               </div>
 

@@ -43,7 +43,7 @@ export interface BusinessClubMember {
   company_name?: string;
   email: string;
   phone?: string;
-  member_tier: 'community' | 'silver' | 'gold' | 'platinum';
+  member_tier?: string;
   loyalty_points: number;
   referral_code?: string;
   qr_code_token?: string;
@@ -62,7 +62,7 @@ export interface ClubAnnouncement {
   category: 'tax_update' | 'vat_announcement' | 'compliance_deadline' | 'financial_tip' | 'exclusive_offer' | 'legislation' | string;
   priority: 'normal' | 'urgent' | 'featured' | string;
   attachment_url?: string;
-  target_tier: 'all' | 'community' | 'silver' | 'gold' | 'platinum' | string;
+  target_tier?: string;
   published_at: string;
   is_active: boolean;
 }
@@ -104,7 +104,7 @@ const DEFAULT_MEMBERS: BusinessClubMember[] = [
     company_name: 'Oman Digital Solutions LLC',
     email: 'tariq@omandigital.om',
     phone: '+968 9988 1234',
-    member_tier: 'platinum',
+    member_tier: 'member',
     loyalty_points: 1250,
     referral_code: 'TARIQ10',
     compliance_health_score: 98,
@@ -119,7 +119,7 @@ const DEFAULT_MEMBERS: BusinessClubMember[] = [
     company_name: 'Al-Harthy Healthcare Group',
     email: 'salim.alharthy@gmail.com',
     phone: '+968 9944 5566',
-    member_tier: 'gold',
+    member_tier: 'member',
     loyalty_points: 750,
     referral_code: 'SALIM20',
     compliance_health_score: 95,
@@ -134,7 +134,7 @@ const DEFAULT_MEMBERS: BusinessClubMember[] = [
     company_name: 'Al Mawaleh Logistics Services',
     email: 'fatma@almawaleh.om',
     phone: '+968 9123 4567',
-    member_tier: 'gold',
+    member_tier: 'member',
     loyalty_points: 620,
     referral_code: 'FATMA15',
     compliance_health_score: 92,
@@ -149,7 +149,7 @@ const DEFAULT_MEMBERS: BusinessClubMember[] = [
     company_name: 'Muscat Architectural Engineering',
     email: 'nasser@muscateng.com',
     phone: '+968 9765 4321',
-    member_tier: 'silver',
+    member_tier: 'member',
     loyalty_points: 380,
     referral_code: 'NASSER5',
     compliance_health_score: 90,
@@ -164,7 +164,7 @@ const DEFAULT_MEMBERS: BusinessClubMember[] = [
     company_name: 'Khasab Marine Trading SPC',
     email: 'ahmed@khasabmarine.om',
     phone: '+968 9555 8899',
-    member_tier: 'community',
+    member_tier: 'member',
     loyalty_points: 120,
     referral_code: 'AHMED01',
     compliance_health_score: 88,
@@ -195,7 +195,7 @@ const DEFAULT_ANNOUNCEMENTS: ClubAnnouncement[] = [
     content_ar: 'موجز تنفيذي حول جداول الاستهلاك المحدثة للمعدات والأنظمة التقنية، ومخصصات الديون المشكوك في تحصيلها المعتمدة، وسقوف المستندات الثبوتية المطلوبة من الأمانة العامة للضرائب.',
     category: 'tax_update',
     priority: 'urgent',
-    target_tier: 'gold',
+    target_tier: 'all',
     published_at: new Date(Date.now() - 10 * 86400000).toISOString(),
     is_active: true
   },
@@ -266,8 +266,8 @@ const DEFAULT_EVENTS: ClubEvent[] = [
     id: 'ev-seed-upcoming-1',
     title: 'Q4 Strategic CFO Roundtable: Corporate Tax & Financial Planning 2027',
     title_ar: 'طاولة حوار استراتيجية للمديرين الماليين: التخطيط الضريبي والموازنات لعام 2027',
-    description: 'Exclusive executive roundtable for VIP Gold & Platinum members discussing 2027 fiscal budgeting, tax incentives, and cash-flow safeguards.',
-    description_ar: 'طاولة حوارية حصرية للأعضاء الذهبيين والبلاتينيين لمناقشة موازنات عام 2027، والحوافز الضريبية، وحماية التدفقات النقدية.',
+    description: 'Exclusive executive roundtable for Maisarah Business Club members discussing 2027 fiscal budgeting, tax incentives, and cash-flow safeguards.',
+    description_ar: 'طاولة حوارية تنفيذية لأعضاء نادي ميسرة للأعمال لمناقشة موازنات عام 2027، والحوافز الضريبية، وحماية التدفقات النقدية.',
     event_type: 'networking',
     speaker_name: 'Executive Management & Maisarah Partners',
     event_date: new Date(Date.now() + 12 * 86400000).toISOString(),
@@ -314,7 +314,6 @@ export const BusinessClubAdmin = () => {
 
   // Search & Filter
   const [memberSearch, setMemberSearch] = useState('');
-  const [tierFilter, setTierFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'client' | 'lead'>('all');
 
   // Modals state
@@ -357,7 +356,6 @@ export const BusinessClubAdmin = () => {
   });
 
   const [adjustPointsDelta, setAdjustPointsDelta] = useState<number>(50);
-  const [adjustTier, setAdjustTier] = useState<string>('community');
   const [adjustStatus, setAdjustStatus] = useState<string>('active');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -585,10 +583,9 @@ export const BusinessClubAdmin = () => {
     }
   };
 
-  // --- Member Loyalty & Tier Handlers ---
+  // --- Member Loyalty Handlers ---
   const handleOpenMemberAdjust = (member: BusinessClubMember) => {
     setSelectedMemberForAdjust(member);
-    setAdjustTier(member.member_tier);
     setAdjustStatus(member.status);
     setAdjustPointsDelta(50);
   };
@@ -602,7 +599,6 @@ export const BusinessClubAdmin = () => {
       const { error } = await supabase
         .from('business_club_members')
         .update({
-          member_tier: adjustTier,
           status: adjustStatus,
           loyalty_points: updatedPoints
         })
@@ -637,25 +633,10 @@ export const BusinessClubAdmin = () => {
       (m.email || '').toLowerCase().includes(memberSearch.toLowerCase());
 
     if (!matchSearch) return false;
-    if (tierFilter !== 'all' && m.member_tier !== tierFilter) return false;
     if (typeFilter === 'client' && !m.client_id) return false;
     if (typeFilter === 'lead' && !m.lead_id) return false;
     return true;
   });
-
-  const getTierBadge = (tier: string) => {
-    switch (tier?.toLowerCase()) {
-      case 'platinum':
-        return 'bg-red-50 text-red-800 border-red-200';
-      case 'gold':
-        return 'bg-amber-50 text-amber-900 border-amber-300';
-      case 'silver':
-        return 'bg-slate-100 text-slate-800 border-slate-300';
-      case 'community':
-      default:
-        return 'bg-blue-50 text-blue-800 border-blue-200';
-    }
-  };
 
   return (
     <div className="space-y-6" dir={isAr ? 'rtl' : 'ltr'}>
@@ -707,10 +688,6 @@ export const BusinessClubAdmin = () => {
         const upcomingMeetingsCount = events.filter(e => e.status === 'upcoming' && new Date(e.event_date) >= new Date()).length;
         const activeAnnouncementsCount = announcements.filter(a => a.is_active).length;
         const featuredAnnouncementsCount = announcements.filter(a => a.priority === 'featured' || a.priority === 'urgent').length;
-        const platinumCount = members.filter(m => m.member_tier === 'platinum').length;
-        const goldCount = members.filter(m => m.member_tier === 'gold').length;
-        const silverCount = members.filter(m => m.member_tier === 'silver').length;
-        const communityCount = members.filter(m => m.member_tier === 'community').length;
         const totalLoyaltyPoints = members.reduce((acc, m) => acc + (m.loyalty_points || 0), 0);
         const totalAttendeesCount = registrations.length || 77;
 
@@ -735,18 +712,12 @@ export const BusinessClubAdmin = () => {
                   {isAr ? 'عضو نشط' : 'Active'}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-gray-100 flex-wrap text-[10px] font-bold">
-                <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200/60">
-                  VIP {platinumCount}
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 flex-wrap text-[10px] font-bold">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {isAr ? 'عضوية النادي المعتمدة' : 'Full Corporate Membership'}
                 </span>
-                <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200/60">
-                  Gold {goldCount}
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                  Silver {silverCount}
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600">
-                  Comm {communityCount}
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                  {isAr ? 'امتيازات حصرية' : 'Exclusive Access'}
                 </span>
               </div>
             </div>
@@ -896,25 +867,13 @@ export const BusinessClubAdmin = () => {
 
             <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1">
               <select
-                value={tierFilter}
-                onChange={(e) => setTierFilter(e.target.value)}
-                className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 outline-none focus:border-brand-dark"
-              >
-                <option value="all">{isAr ? 'كل الفئات' : 'All Tiers'}</option>
-                <option value="community">{isAr ? 'المجتمعية (Community)' : 'Community'}</option>
-                <option value="silver">{isAr ? 'الفضية (Silver)' : 'Silver'}</option>
-                <option value="gold">{isAr ? 'الذهبية (Gold)' : 'Gold'}</option>
-                <option value="platinum">{isAr ? 'البلاتينية (Platinum)' : 'Platinum'}</option>
-              </select>
-
-              <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value as any)}
                 className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 outline-none focus:border-brand-dark"
               >
                 <option value="all">{isAr ? 'كل أنواع الحسابات' : 'All Member Types'}</option>
                 <option value="client">{isAr ? 'عملاء معتمدون (Clients)' : 'Paying Clients'}</option>
-                <option value="lead">{isAr ? 'فرص النادي (Free Leads)' : 'Free Leads'}</option>
+                <option value="lead">{isAr ? 'فرص النادي (Inbound Leads)' : 'Inbound Leads'}</option>
               </select>
 
               <button
@@ -935,7 +894,7 @@ export const BusinessClubAdmin = () => {
                   <tr className="bg-gray-50/80 border-b border-gray-200 text-gray-400 text-[10px] font-black uppercase tracking-wider">
                     <th className="py-3.5 px-4 text-start">{isAr ? 'العضو / الشركة' : 'Member & Company'}</th>
                     <th className="py-3.5 px-4 text-start">{isAr ? 'رقم العضوية' : 'MBC Number'}</th>
-                    <th className="py-3.5 px-4 text-start">{isAr ? 'فئة العضوية' : 'Tier'}</th>
+                    <th className="py-3.5 px-4 text-start">{isAr ? 'حالة العضوية' : 'Membership'}</th>
                     <th className="py-3.5 px-4 text-start">{isAr ? 'نقاط الولاء' : 'Loyalty Pts'}</th>
                     <th className="py-3.5 px-4 text-start">{isAr ? 'النوع' : 'Origin'}</th>
                     <th className="py-3.5 px-4 text-start">{isAr ? 'الحالة' : 'Status'}</th>
@@ -971,8 +930,9 @@ export const BusinessClubAdmin = () => {
                           </td>
 
                           <td className="py-3.5 px-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${getTierBadge(m.member_tier)}`}>
-                              {m.member_tier}
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-900 border border-amber-200/80 flex items-center gap-1.5 w-fit">
+                              <Star size={11} className="fill-amber-500 text-amber-500" />
+                              <span>{isAr ? 'عضو النادي' : 'Club Member'}</span>
                             </span>
                           </td>
 
@@ -1113,7 +1073,7 @@ export const BusinessClubAdmin = () => {
                 </p>
 
                 <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-400 font-bold">
-                  <span>{isAr ? 'الفئة المستهدفة:' : 'Target:'} {ann.target_tier.toUpperCase()}</span>
+                  <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full font-bold">{isAr ? 'متاح لكافة أعضاء النادي' : 'All Club Members'}</span>
                   <span>{new Date(ann.published_at).toLocaleDateString()}</span>
                 </div>
               </div>
@@ -1349,20 +1309,6 @@ export const BusinessClubAdmin = () => {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-gray-700">{isAr ? 'الفئة المستهدفة' : 'Target Member Tier'}</label>
-                <select
-                  value={announcementForm.target_tier}
-                  onChange={(e) => setAnnouncementForm({ ...announcementForm, target_tier: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-semibold"
-                >
-                  <option value="all">All Tiers (Public Feed)</option>
-                  <option value="community">Community Only</option>
-                  <option value="silver">Silver & Above</option>
-                  <option value="gold">Gold & Platinum Only</option>
-                  <option value="platinum">Platinum VIP Only</option>
-                </select>
-              </div>
 
               <div className="space-y-1">
                 <label className="font-bold text-gray-700">{isAr ? 'نص المحتوى (EN)' : 'Content Body (English)'}</label>
@@ -1569,20 +1515,6 @@ export const BusinessClubAdmin = () => {
                 <p className="text-amber-700 font-bold">
                   {isAr ? 'الرصيد الحالي:' : 'Current Points:'} {selectedMemberForAdjust.loyalty_points} PTS
                 </p>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-gray-700">{isAr ? 'ترقية / تعديل فئة العضوية' : 'Membership Tier'}</label>
-                <select
-                  value={adjustTier}
-                  onChange={(e) => setAdjustTier(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold"
-                >
-                  <option value="community">Community (Free Lead)</option>
-                  <option value="silver">Silver VIP</option>
-                  <option value="gold">Gold Executive</option>
-                  <option value="platinum">Platinum Prestige</option>
-                </select>
               </div>
 
               <div className="space-y-1">

@@ -28,7 +28,7 @@ export interface PortalAccessTarget {
   phone?: string | null;
   portalAccessSent?: boolean;
   membershipNumber?: string;
-  memberTier?: 'community' | 'silver' | 'gold' | 'platinum';
+  memberTier?: string;
 }
 
 interface PortalAccessCredentialModalProps {
@@ -53,7 +53,6 @@ export const PortalAccessCredentialModal: React.FC<PortalAccessCredentialModalPr
   const isAr = i18n.language === 'ar';
 
   const [emailInput, setEmailInput] = useState('');
-  const [tier, setTier] = useState<'community' | 'silver' | 'gold' | 'platinum'>('community');
   const [sendEmailImmediately, setSendEmailImmediately] = useState(true);
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
@@ -63,7 +62,6 @@ export const PortalAccessCredentialModal: React.FC<PortalAccessCredentialModalPr
   useEffect(() => {
     if (target) {
       setEmailInput(target.email || '');
-      setTier(target.memberTier || (target.type === 'client' ? 'silver' : 'community'));
       setProvisionResult(null);
       setErrorMsg(null);
       setCopied(false);
@@ -92,7 +90,6 @@ export const PortalAccessCredentialModal: React.FC<PortalAccessCredentialModalPr
         companyName: target.companyName || target.name,
         phone: target.phone || '',
         clientType: target.type === 'client' ? 'client' : 'club_member',
-        memberTier: tier,
         clientId: target.type === 'client' ? target.id : undefined,
         leadId: target.type === 'lead' ? target.id : undefined
       });
@@ -244,21 +241,17 @@ Temporary Password: ${tempPass}
               </span>
             </div>
 
-            {/* Membership Tier */}
-            <div>
-              <label className="block text-[11px] font-black text-gray-700 uppercase mb-1.5">
-                {isAr ? 'فئة العضوية بنادي ميسرة للأعمال' : 'Business Club Tier'}
-              </label>
-              <select
-                value={tier}
-                onChange={e => setTier(e.target.value as any)}
-                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-gray-800 focus:outline-none focus:border-[#A11212]"
-              >
-                <option value="community">{isAr ? 'عضوية المجتمع المجانية (Community)' : 'Community Free Card'}</option>
-                <option value="silver">{isAr ? 'العضوية الفضية (Silver Retainer)' : 'Silver Member'}</option>
-                <option value="gold">{isAr ? 'العضوية الذهبية (Gold Corporate)' : 'Gold Executive'}</option>
-                <option value="platinum">{isAr ? 'العضوية البلاتينية (Platinum VIP)' : 'Platinum Elite'}</option>
-              </select>
+            {/* Membership Club Info */}
+            <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200/50 flex items-center gap-2.5">
+              <Sparkles size={16} className="text-amber-600 flex-shrink-0" />
+              <div className="text-xs">
+                <span className="font-bold text-gray-900 block">
+                  {isAr ? 'عضوية معتمدة بنادي ميسرة للأعمال' : 'Maisarah Business Club Membership'}
+                </span>
+                <span className="text-[10px] text-gray-500">
+                  {isAr ? 'تفعيل فوري للبطاقة الرقمية والوصول الشامل لكافة خدمات البوابة.' : 'Instant activation of digital corporate pass & full portal access.'}
+                </span>
+              </div>
             </div>
 
             {/* Auto send toggle */}
