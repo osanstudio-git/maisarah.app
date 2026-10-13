@@ -29,7 +29,10 @@ import {
   Edit,
   Download,
   Mail,
+  KeyRound,
+  RefreshCw,
 } from 'lucide-react';
+import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,6 +48,9 @@ interface Client {
   phone?: string | null;
   created_at: string;
   assigned_employee_id?: string | null;
+  portal_access_sent?: boolean;
+  portal_sent_at?: string;
+  portal_user_id?: string;
 }
 
 interface Invoice {
@@ -345,6 +351,10 @@ const ClientManager = () => {
     phone: string;
   } | null>(null);
 
+  // Portal Access Modal State
+  const [portalTarget, setPortalTarget] = useState<PortalAccessTarget | null>(null);
+  const [isPortalModalOpen, setIsPortalModalOpen] = useState(false);
+
   const handleDownloadTicket = async () => {
     if (!ticketRef.current) return;
     try {
@@ -389,7 +399,7 @@ const ClientManager = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('clients')
-      .select('id, company_name, cr_number, vat_number, activity, compliance_status, email, created_at, assigned_employee_id')
+      .select('id, company_name, cr_number, vat_number, activity, compliance_status, email, phone, created_at, assigned_employee_id, portal_access_sent, portal_sent_at, portal_user_id')
       .eq('is_archived', false)
       .order('created_at', { ascending: false });
     if (!error && data) setClients(data as Client[]);
@@ -492,6 +502,9 @@ const ClientManager = () => {
           email: formData.email,
           phone: formData.phone || null,
           assigned_employee_id: user?.id, // Capture the employee who registered the client
+          portal_access_sent: true,
+          portal_sent_at: new Date().toISOString(),
+          portal_user_id: userId,
         };
 
         const { error: clientError } = await supabase.from('clients').insert([payload]);
@@ -632,13 +645,14 @@ const ClientManager = () => {
                     <th className="px-5 py-3 text-start">{t('employee.vatNumber')}</th>
                     <th className="px-5 py-3 text-start">{t('employee.activity')}</th>
                     <th className="px-5 py-3 text-start">{t('employee.status')}</th>
+                    <th className="px-5 py-3 text-start">{isAr ? 'بوابة العميل' : 'Portal Access'}</th>
                     <th className="px-5 py-3 text-start"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="text-center py-12 text-gray-400">
+                      <td colSpan={7} className="text-center py-12 text-gray-400">
                         <Building2 size={32} className="mx-auto mb-2 opacity-30" />
                         <p className="text-sm">{t('employee.noClientsFound')}</p>
                       </td>
@@ -664,6 +678,53 @@ const ClientManager = () => {
                         <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
                           {client.compliance_status}
                         </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        {client.portal_access_sent || client.email ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                              <CheckCircle2 size={11} className="text-emerald-600" />
+                              {isAr ? 'مفعل' : 'Active'}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setPortalTarget({
+                                  id: client.id,
+                                  type: 'client',
+                                  name: client.company_name,
+                                  companyName: client.company_name,
+                                  email: client.email || '',
+                                  phone: client.phone,
+                                  portalAccessSent: true
+                                });
+                                setIsPortalModalOpen(true);
+                              }}
+                              title={isAr ? 'عرض أو إعادة إرسال بيانات الدخول' : 'View or Resend Portal Credentials'}
+                              className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <RefreshCw size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setPortalTarget({
+                                id: client.id,
+                                type: 'client',
+                                name: client.company_name,
+                                companyName: client.company_name,
+                                email: client.email || '',
+                                phone: client.phone,
+                                portalAccessSent: false
+                              });
+                              setIsPortalModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 text-[10px] font-bold rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer active:scale-95"
+                          >
+                            <KeyRound size={11} className="text-amber-600" />
+                            <span>{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
+                          </button>
+                        )}
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-2">
@@ -721,6 +782,57 @@ const ClientManager = () => {
                         {client.compliance_status}
                       </span>
                     </div>
+                  </div>
+
+                  {/* Mobile Portal Access Status */}
+                  <div className="flex items-center justify-between text-xs px-1 bg-gray-50/70 p-2 rounded-xl">
+                    <span className="text-gray-500 font-semibold text-[11px]">{isAr ? 'بوابة العميل:' : 'Client Portal:'}</span>
+                    {client.portal_access_sent || client.email ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                          <CheckCircle2 size={11} className="text-emerald-600" />
+                          {isAr ? 'مفعل' : 'Active'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPortalTarget({
+                              id: client.id,
+                              type: 'client',
+                              name: client.company_name,
+                              companyName: client.company_name,
+                              email: client.email || '',
+                              phone: client.phone,
+                              portalAccessSent: true
+                            });
+                            setIsPortalModalOpen(true);
+                          }}
+                          className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <RefreshCw size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPortalTarget({
+                            id: client.id,
+                            type: 'client',
+                            name: client.company_name,
+                            companyName: client.company_name,
+                            email: client.email || '',
+                            phone: client.phone,
+                            portalAccessSent: false
+                          });
+                          setIsPortalModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <KeyRound size={11} className="text-amber-600" />
+                        <span>{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
+                      </button>
+                    )}
                   </div>
                   
                   {/* Mobile Actions */}
@@ -1013,6 +1125,20 @@ const ClientManager = () => {
           </div>
         </div>
       )}
+
+      {/* ── Portal Access & Credential Handover Modal ── */}
+      <PortalAccessCredentialModal
+        isOpen={isPortalModalOpen}
+        onClose={() => {
+          setIsPortalModalOpen(false);
+          setPortalTarget(null);
+        }}
+        target={portalTarget}
+        onSuccess={({ targetId }) => {
+          setClients(prev => prev.map(c => c.id === targetId ? { ...c, portal_access_sent: true } : c));
+          fetchClients();
+        }}
+      />
     </div>
   );
 };

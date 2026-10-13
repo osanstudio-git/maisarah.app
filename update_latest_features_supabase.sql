@@ -230,3 +230,19 @@ BEGIN
         END;
     END LOOP;
 END $$;
+
+-- -------------------------------------------------------------------------
+-- 8. Client Portal Access & Handover Tracking Schema
+-- -------------------------------------------------------------------------
+-- Tracks whether client login credentials have been provisioned & sent,
+-- timestamp of dispatch, and the linked auth.users ID.
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS portal_access_sent BOOLEAN DEFAULT false;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS portal_sent_at TIMESTAMPTZ;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS portal_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+
+ALTER TABLE public.crm_leads ADD COLUMN IF NOT EXISTS portal_access_sent BOOLEAN DEFAULT false;
+ALTER TABLE public.crm_leads ADD COLUMN IF NOT EXISTS portal_sent_at TIMESTAMPTZ;
+ALTER TABLE public.crm_leads ADD COLUMN IF NOT EXISTS portal_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_clients_portal_sent ON public.clients (portal_access_sent);
+CREATE INDEX IF NOT EXISTS idx_crm_leads_portal_sent ON public.crm_leads (portal_access_sent);

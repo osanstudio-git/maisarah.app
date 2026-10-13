@@ -36,11 +36,13 @@ import {
   UserPlus,
   User,
   BadgeCheck,
-  IdCard
+  IdCard,
+  KeyRound
 } from 'lucide-react';
 import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
 import { autoCreateDSREntryFromTask } from '../../utils/dsrSync';
+import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 
 interface Client {
   id: string;
@@ -59,6 +61,9 @@ interface Client {
   created_at: string;
   address?: string;
   notes?: string;
+  portal_access_sent?: boolean;
+  portal_sent_at?: string;
+  portal_user_id?: string;
   assigned_employee?: {
     id?: string;
     full_name: string;
@@ -133,9 +138,14 @@ const ClientManagement = () => {
     service_type: 'Personal Tax Filing & Clearance',
     tier: 'Tier-A Corporate',
     assigned_employee_id: '',
-    address: 'Muscat, Sultanate of Oman'
+    address: 'Muscat, Sultanate of Oman',
+    send_portal_access: true
   });
   const [isSavingClient, setIsSavingClient] = useState(false);
+
+  // Portal Access Modal State
+  const [portalTarget, setPortalTarget] = useState<PortalAccessTarget | null>(null);
+  const [isPortalModalOpen, setIsPortalModalOpen] = useState(false);
 
   // Direct Operation Quick Modal from Dossier
   const [showQuickOpModal, setShowQuickOpModal] = useState(false);
@@ -332,6 +342,20 @@ const ClientManagement = () => {
 
       if (error) throw error;
 
+      const createdRow = data?.[0];
+      if (newClientForm.send_portal_access && newClientForm.email.trim()) {
+        setPortalTarget({
+          id: createdRow?.id || 'new-client',
+          type: 'client',
+          name: newClientForm.full_name.trim() || finalCompanyName,
+          companyName: finalCompanyName,
+          email: newClientForm.email.trim(),
+          phone: newClientForm.phone.trim(),
+          portalAccessSent: false
+        });
+        setIsPortalModalOpen(true);
+      }
+
       setShowAddClientModal(false);
       setNewClientForm({
         company_name: '',
@@ -345,7 +369,8 @@ const ClientManagement = () => {
         service_type: 'Personal Tax Filing & Clearance',
         tier: 'Tier-A Corporate',
         assigned_employee_id: '',
-        address: 'Muscat, Sultanate of Oman'
+        address: 'Muscat, Sultanate of Oman',
+        send_portal_access: true
       });
       fetchClientsAndStats(true);
     } catch (err: any) {
@@ -927,6 +952,51 @@ const ClientManagement = () => {
                       {/* Actions & Dossier */}
                       <td className="px-6 py-5 text-end" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Portal Access Status / Trigger */}
+                          {client.portal_access_sent ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPortalTarget({
+                                  id: client.id,
+                                  type: 'client',
+                                  name: client.full_name || client.company_name,
+                                  companyName: client.company_name,
+                                  email: client.email,
+                                  phone: client.phone,
+                                  portalAccessSent: true
+                                });
+                                setIsPortalModalOpen(true);
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[10px] font-black border border-emerald-200"
+                              title={isAr ? 'بيانات البوابة مفعلة ومُرسلة (انقر للعرض أو إعادة الإرسال)' : 'Portal Access Active & Sent (Click to view/resend)'}
+                            >
+                              <CheckCircle2 size={13} className="text-emerald-600" />
+                              <span className="hidden xl:inline">{isAr ? 'مفعل' : 'Portal Sent'}</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPortalTarget({
+                                  id: client.id,
+                                  type: 'client',
+                                  name: client.full_name || client.company_name,
+                                  companyName: client.company_name,
+                                  email: client.email,
+                                  phone: client.phone,
+                                  portalAccessSent: false
+                                });
+                                setIsPortalModalOpen(true);
+                              }}
+                              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-600 hover:text-white text-amber-800 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[10px] font-black border border-amber-200 active:scale-95"
+                              title={isAr ? 'تفعيل وإرسال بيانات دخول البوابة' : 'Send Portal Access'}
+                            >
+                              <KeyRound size={13} className="text-amber-600" />
+                              <span className="hidden xl:inline">{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
+                            </button>
+                          )}
+
                           {/* 1-Tap WhatsApp */}
                           <button
                             onClick={(e) => handleOpenWhatsApp(client, e)}
@@ -1515,6 +1585,20 @@ const ClientManagement = () => {
                 </div>
               </div>
 
+              {/* Portal Access Toggle */}
+              <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-200">
+                <input
+                  type="checkbox"
+                  id="managerSendPortalCheck"
+                  checked={newClientForm.send_portal_access}
+                  onChange={(e) => setNewClientForm({ ...newClientForm, send_portal_access: e.target.checked })}
+                  className="w-4 h-4 text-emerald-600 accent-emerald-600 rounded cursor-pointer"
+                />
+                <label htmlFor="managerSendPortalCheck" className="text-xs font-black text-emerald-950 cursor-pointer select-none">
+                  {isAr ? '🔑 إنشاء حساب بوابة العميل وإرسال بيانات الدخول فوراً' : '🔑 Create Client Portal Access & Send Credentials Immediately'}
+                </label>
+              </div>
+
               <div className="pt-4 flex gap-3">
                 <button
                   type="button"
@@ -1623,6 +1707,20 @@ const ClientManagement = () => {
         isOpen={showReceiptModal}
         onClose={() => setShowReceiptModal(false)}
         clientData={docClientData}
+      />
+
+      {/* ── Portal Access & Credential Handover Modal ──────────────────────── */}
+      <PortalAccessCredentialModal
+        isOpen={isPortalModalOpen}
+        onClose={() => {
+          setIsPortalModalOpen(false);
+          setPortalTarget(null);
+        }}
+        target={portalTarget}
+        onSuccess={({ targetId }) => {
+          setClients(prev => prev.map(c => c.id === targetId ? { ...c, portal_access_sent: true } : c));
+          fetchClientsAndStats(true);
+        }}
       />
     </div>
   );

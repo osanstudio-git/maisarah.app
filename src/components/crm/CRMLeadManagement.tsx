@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { provisionClientOrMemberAuth, type ProvisionResult } from '../../utils/clientAuthProvisioner';
 import { isDirectEmployeeMode } from '../../utils/workflowConfig';
+import PortalAccessCredentialModal, { type PortalAccessTarget } from './PortalAccessCredentialModal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +39,7 @@ export interface CRMLead {
   created_at: string;
   updated_at?: string;
   assigned_profile?: { full_name: string; email: string } | null;
+  portal_access_sent?: boolean;
 }
 
 export interface QuotationRecord {
@@ -1080,18 +1082,34 @@ export default function CRMLeadManagement() {
                           )}
 
                           {/* STEP 2: PROVISION PORTAL ACCESS / CLUB INVITE ACTION */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenProvisionModal(lead)}
-                            className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-red-50 to-amber-50 hover:from-red-100 hover:to-amber-100 text-brand-dark border border-red-200/80 px-3 py-2 rounded-xl text-xs font-black transition-all shadow-xs"
-                          >
-                            <UserCheck size={14} className="text-[#A11212]" />
-                            <span>
-                              {lead.status === 'accepted' 
-                                ? (isAr ? 'تفعيل بوابة العميل' : 'Provision Client Portal')
-                                : (isAr ? 'دعوة نادي الأعمال (Free Card)' : 'Send Business Club Invite')}
-                            </span>
-                          </button>
+                          {lead.portal_access_sent ? (
+                            <div className="w-full flex items-center justify-between gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-2 rounded-xl text-xs font-black shadow-xs">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                                <span className="truncate">{isAr ? 'تم إرسال بيانات البوابة' : 'Portal Access Sent'}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenProvisionModal(lead)}
+                                className="text-[10px] text-emerald-700 hover:text-emerald-950 font-bold underline cursor-pointer"
+                              >
+                                {isAr ? 'إعادة الإرسال' : 'Resend'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProvisionModal(lead)}
+                              className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-red-50 to-amber-50 hover:from-red-100 hover:to-amber-100 text-brand-dark border border-red-200/80 px-3 py-2 rounded-xl text-xs font-black transition-all shadow-xs"
+                            >
+                              <UserCheck size={14} className="text-[#A11212]" />
+                              <span>
+                                {lead.status === 'accepted' 
+                                  ? (isAr ? 'تفعيل بوابة العميل' : 'Provision Client Portal')
+                                  : (isAr ? 'دعوة نادي الأعمال (Free Card)' : 'Send Business Club Invite')}
+                              </span>
+                            </button>
+                          )}
 
                           {/* Status Shift Selector */}
                           <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
@@ -1193,14 +1211,25 @@ export default function CRMLeadManagement() {
                           </div>
                         </td>
                         <td className="py-4 px-4 text-end space-x-2 space-x-reverse">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenProvisionModal(lead)}
-                            className="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-[#A11212] border border-red-200 px-3 py-1.5 rounded-xl text-xs font-black transition-colors"
-                          >
-                            <UserCheck size={12} />
-                            <span>{isAr ? 'دعوة النادي' : 'Club Invite'}</span>
-                          </button>
+                          {lead.portal_access_sent ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProvisionModal(lead)}
+                              className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-black transition-colors"
+                            >
+                              <CheckCircle2 size={12} className="text-emerald-600" />
+                              <span>{isAr ? 'تم الإرسال (عرض)' : 'Portal Sent'}</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProvisionModal(lead)}
+                              className="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-[#A11212] border border-red-200 px-3 py-1.5 rounded-xl text-xs font-black transition-colors"
+                            >
+                              <UserCheck size={12} />
+                              <span>{lead.status === 'accepted' ? (isAr ? 'تفعيل البوابة' : 'Portal Access') : (isAr ? 'دعوة النادي' : 'Club Invite')}</span>
+                            </button>
+                          )}
 
                           {isQuotedOrAccepted && (
                             <button
@@ -1763,6 +1792,27 @@ export default function CRMLeadManagement() {
           </div>
         </div>
       )}
+
+      {/* ── PORTAL ACCESS CREDENTIAL MODAL ── */}
+      <PortalAccessCredentialModal
+        isOpen={isProvisionModalOpen}
+        onClose={() => {
+          setIsProvisionModalOpen(false);
+          setSelectedLeadForProvision(null);
+        }}
+        target={selectedLeadForProvision ? {
+          id: selectedLeadForProvision.id,
+          type: selectedLeadForProvision.status === 'accepted' ? 'client' : 'lead',
+          name: selectedLeadForProvision.contact_name,
+          companyName: selectedLeadForProvision.company_name,
+          email: selectedLeadForProvision.email || '',
+          phone: selectedLeadForProvision.phone,
+          portalAccessSent: selectedLeadForProvision.portal_access_sent
+        } : null}
+        onSuccess={() => {
+          fetchLeads(true);
+        }}
+      />
 
     </div>
   );

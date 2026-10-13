@@ -6,7 +6,7 @@ import {
   ChevronRight, XCircle, ArrowUpRight, BarChart2, ShieldCheck, Download,
   Trash2, Edit, Award, Sparkles, Building2, UserPlus, FileCheck, Check, ArrowRight,
   TrendingUp, RefreshCw, AlertTriangle, Calendar, Layers, Activity, Loader2,
-  PhoneCall, MessageSquare, Send, DollarSign, X, ExternalLink, Filter, Printer, Plus, CheckCheck, Briefcase
+  PhoneCall, MessageSquare, Send, DollarSign, X, ExternalLink, Filter, Printer, Plus, CheckCheck, Briefcase, KeyRound
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -21,6 +21,7 @@ import BusinessClubAdmin from '../../components/crm/BusinessClubAdmin';
 import CRMB2BPartners from '../../components/crm/CRMB2BPartners';
 import type { B2BPartner } from '../../components/crm/CRMB2BPartners';
 import { addDSREntry } from '../../utils/dsrSync';
+import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 
 // --- Types & Interfaces ---
 interface Lead {
@@ -40,6 +41,7 @@ interface Lead {
   isClubMember?: boolean;
   clubTier?: 'silver' | 'gold' | 'platinum';
   activityHistory?: string[];
+  portal_access_sent?: boolean;
 }
 
 interface Client {
@@ -61,6 +63,9 @@ interface Client {
   contractExpiryDate?: string;
   isClubMember?: boolean;
   clubTier?: 'silver' | 'gold' | 'platinum';
+  portal_access_sent?: boolean;
+  portal_sent_at?: string;
+  portal_user_id?: string;
 }
 
 interface Quotation {
@@ -290,7 +295,14 @@ export default function CRMPortal() {
     contractExpiryDate: row.contract_expiry_date ?? undefined,
     isClubMember: row.is_club_member ?? false,
     clubTier: row.club_tier ?? undefined,
+    portal_access_sent: row.portal_access_sent ?? !!row.portal_user_id,
+    portal_sent_at: row.portal_sent_at ?? undefined,
+    portal_user_id: row.portal_user_id ?? undefined,
   });
+
+  // ── Portal Access Modal State ─────────────────────────────────────────────
+  const [portalTarget, setPortalTarget] = useState<PortalAccessTarget | null>(null);
+  const [isPortalModalOpen, setIsPortalModalOpen] = useState(false);
 
   // ── Map Supabase row → Quotation interface ───────────────────────────────
   const mapQuotation = (row: any): Quotation => ({
@@ -458,6 +470,7 @@ export default function CRMPortal() {
     subType: 'Statutory Financial Audit',
     billingAmount: '750',
     workScopeNotes: '',
+    sendPortalAccess: true,
   });
 
   const openConvertModal = (lead: Lead) => {
@@ -468,6 +481,7 @@ export default function CRMPortal() {
       subType: 'Statutory Financial Audit',
       billingAmount: '750',
       workScopeNotes: lead.notes || '',
+      sendPortalAccess: true,
     });
   };
 
@@ -700,6 +714,7 @@ export default function CRMPortal() {
     services: ['Tax & VAT'] as string[],
     billingAmount: '450',
     manager: MOCK_EMPLOYEES[0].name,
+    sendPortalAccess: true,
   });
 
   // ── Quick Add Lead Modal (Minimal Lead Capture) ─────────────────────────
@@ -1081,9 +1096,23 @@ export default function CRMPortal() {
         ref_table: 'clients',
       }]);
 
-      alert(isAr ? 'تم إضافة العميل المباشر وإشعار رئيس القسم بنجاح!' : 'Direct client onboarded & HOD notified!');
+      if (directClientForm.sendPortalAccess && directClientForm.email) {
+        setPortalTarget({
+          id: newClient ? newClient.id : 'direct-client',
+          type: 'client',
+          name: directClientForm.name,
+          companyName: directClientForm.companyName,
+          email: directClientForm.email,
+          phone: directClientForm.phone,
+          portalAccessSent: false
+        });
+        setIsPortalModalOpen(true);
+      } else {
+        alert(isAr ? 'تم إضافة العميل المباشر وإشعار رئيس القسم بنجاح!' : 'Direct client onboarded & HOD notified!');
+      }
+
       setShowDirectClientModal(false);
-      setDirectClientForm({ name: '', companyName: '', registrationNumber: '', email: '', phone: '', clientType: 'B2B', services: ['Tax & VAT'], billingAmount: '450', manager: MOCK_EMPLOYEES[0].name });
+      setDirectClientForm({ name: '', companyName: '', registrationNumber: '', email: '', phone: '', clientType: 'B2B', services: ['Tax & VAT'], billingAmount: '450', manager: MOCK_EMPLOYEES[0].name, sendPortalAccess: true });
       fetchAll();
     } catch (err: any) {
       alert(err.message || 'Error adding direct client');
@@ -1357,10 +1386,23 @@ export default function CRMPortal() {
         ref_table: 'clients',
       }]);
 
-      alert(isAr
-        ? `تم تحويل الفرصة إلى عميل بنجاح وإرسال مهمة العمل لرئيس القسم!`
-        : `🎉 Lead Converted to Client! Job Task dispatched to HOD workspace!`
-      );
+      if (convertForm.sendPortalAccess && qualifyingLead.email) {
+        setPortalTarget({
+          id: newClientRow.id,
+          type: 'client',
+          name: qualifyingLead.name,
+          companyName: qualifyingLead.companyName,
+          email: qualifyingLead.email,
+          phone: qualifyingLead.phone,
+          portalAccessSent: false
+        });
+        setIsPortalModalOpen(true);
+      } else {
+        alert(isAr
+          ? `تم تحويل الفرصة إلى عميل بنجاح وإرسال مهمة العمل لرئيس القسم!`
+          : `🎉 Lead Converted to Client! Job Task dispatched to HOD workspace!`
+        );
+      }
 
       setLeads(prev => prev.filter(l => l.id !== qualifyingLead.id));
       setQualifyingLead(null);
@@ -1780,6 +1822,7 @@ export default function CRMPortal() {
                     <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">Services Package</th>
                     <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">Account Owner</th>
                     <th className="p-4 text-[10px] font-black uppercase tracking-widest text-end">ARR Value</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-center">{isAr ? 'بوابة العميل' : 'Portal Access'}</th>
                     <th className="p-4 text-[10px] font-black uppercase tracking-widest text-center">Action</th>
                   </tr>
                 </thead>
@@ -1819,6 +1862,53 @@ export default function CRMPortal() {
                       <td className="p-4 text-xs font-black text-gray-950 text-end">
                         {client.yearlyBilling.toLocaleString()} OMR
                         <span className="block text-[8px] text-gray-400 font-bold">Monthly: {client.monthlyBilling} OMR</span>
+                      </td>
+                      <td className="p-4 text-center">
+                        {client.portal_access_sent ? (
+                          <div className="inline-flex items-center gap-1.5 justify-center">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                              <CheckCircle2 size={12} className="text-emerald-600" />
+                              {isAr ? 'مفعل وتم الإرسال' : 'Access Sent'}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setPortalTarget({
+                                  id: client.id,
+                                  type: 'client',
+                                  name: client.name,
+                                  companyName: client.companyName,
+                                  email: client.email,
+                                  phone: client.phone,
+                                  portalAccessSent: true
+                                });
+                                setIsPortalModalOpen(true);
+                              }}
+                              title={isAr ? 'إعادة الإرسال أو عرض البيانات' : 'Resend or View Credentials'}
+                              className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <RefreshCw size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setPortalTarget({
+                                id: client.id,
+                                type: 'client',
+                                name: client.name,
+                                companyName: client.companyName,
+                                email: client.email,
+                                phone: client.phone,
+                                portalAccessSent: false
+                              });
+                              setIsPortalModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-all shadow-2xs cursor-pointer active:scale-95"
+                          >
+                            <KeyRound size={12} className="text-amber-600" />
+                            <span>{isAr ? 'إرسال بيانات الدخول' : 'Send Portal Access'}</span>
+                          </button>
+                        )}
                       </td>
                       <td className="p-4 text-center">
                         <button
@@ -3313,6 +3403,20 @@ export default function CRMPortal() {
                 />
               </div>
 
+              {/* Portal Access Toggle */}
+              <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-200">
+                <input
+                  type="checkbox"
+                  id="convertPortalAccessCheck"
+                  checked={convertForm.sendPortalAccess}
+                  onChange={(e) => setConvertForm(p => ({ ...p, sendPortalAccess: e.target.checked }))}
+                  className="w-4 h-4 text-emerald-600 accent-emerald-600 rounded cursor-pointer"
+                />
+                <label htmlFor="convertPortalAccessCheck" className="text-xs font-black text-emerald-950 cursor-pointer select-none">
+                  {isAr ? '🔑 إنشاء حساب بوابة العميل وإرسال بيانات الدخول الآن' : '🔑 Create Client Portal Access & Send Credentials Now'}
+                </label>
+              </div>
+
               <div className="flex gap-2 pt-2 border-t border-gray-100">
                 <button
                   type="button"
@@ -4617,6 +4721,20 @@ export default function CRMPortal() {
                 />
               </div>
 
+              {/* Portal Access Toggle */}
+              <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-200">
+                <input
+                  type="checkbox"
+                  id="directPortalAccessCheck"
+                  checked={directClientForm.sendPortalAccess}
+                  onChange={(e) => setDirectClientForm(p => ({ ...p, sendPortalAccess: e.target.checked }))}
+                  className="w-4 h-4 text-emerald-600 accent-emerald-600 rounded cursor-pointer"
+                />
+                <label htmlFor="directPortalAccessCheck" className="text-xs font-black text-emerald-950 cursor-pointer select-none">
+                  {isAr ? '🔑 إنشاء حساب بوابة العميل وإرسال بيانات الدخول الآن' : '🔑 Create Client Portal Access & Send Credentials Now'}
+                </label>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
                 <button
                   type="button"
@@ -4795,6 +4913,20 @@ export default function CRMPortal() {
         isOpen={paymentReceiptModalOpen}
         onClose={() => setPaymentReceiptModalOpen(false)}
         clientData={activeDocumentClient}
+      />
+
+      {/* ── PORTAL ACCESS & CREDENTIAL HANDOVER MODAL ── */}
+      <PortalAccessCredentialModal
+        isOpen={isPortalModalOpen}
+        onClose={() => {
+          setIsPortalModalOpen(false);
+          setPortalTarget(null);
+        }}
+        target={portalTarget}
+        onSuccess={({ targetId }) => {
+          setClients(prev => prev.map(c => c.id === targetId ? { ...c, portal_access_sent: true } : c));
+          fetchAll();
+        }}
       />
 
     </div>

@@ -270,7 +270,37 @@ export async function provisionClientOrMemberAuth(params: ProvisionClientParams)
         .eq('id', existingMember.id);
     }
 
-    // ── 3. Dispatch Welcome Email via Resend ──────────────────────────────────
+    // ── 3. Update Clients & Leads Records with Portal Status ─────────────────
+    if (clientId) {
+      try {
+        await supabase
+          .from('clients')
+          .update({
+            portal_access_sent: true,
+            portal_sent_at: new Date().toISOString(),
+            portal_user_id: userId
+          })
+          .eq('id', clientId);
+      } catch (clientSyncErr) {
+        console.warn('clients table portal_access_sent sync notice:', clientSyncErr);
+      }
+    }
+
+    if (leadId) {
+      try {
+        await supabase
+          .from('crm_leads')
+          .update({
+            portal_access_sent: true,
+            portal_sent_at: new Date().toISOString()
+          })
+          .eq('id', leadId);
+      } catch (leadSyncErr) {
+        console.warn('crm_leads table portal_access_sent sync notice:', leadSyncErr);
+      }
+    }
+
+    // ── 4. Dispatch Welcome Email via Resend ──────────────────────────────────
     const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://maisarah.om/login';
     const emailHtml = buildBusinessClubWelcomeEmailHtml({
       fullName,
@@ -288,7 +318,7 @@ export async function provisionClientOrMemberAuth(params: ProvisionClientParams)
       const { data: emailData, error: emailErr } = await supabase.functions.invoke('send-email', {
         body: {
           to: cleanEmail,
-          subject: `🏛️ مرحباً بك في نادي ميسرة للأعمال | Your Maisarah Business Club Card (${membershipNumber})`,
+          subject: `🏛️ مرحباً بك في بوابة ميسرة ونادي الأعمال | Your Maisarah Portal Card (${membershipNumber})`,
           html: emailHtml
         }
       });
