@@ -46,6 +46,7 @@ import FinancialControl from './pages/Manager/FinancialControl';
 import StrategicAnalytics from './pages/Manager/StrategicAnalytics';
 import ExecutiveApprovals from './pages/Manager/ExecutiveApprovals';
 import ExecutiveReports from './pages/Manager/ExecutiveReports';
+import ManagerBusinessClub from './pages/Manager/ManagerBusinessClub';
 
 // Department Head Views
 import DepartmentHeadWorkspace from './pages/DepartmentHead/DepartmentHeadWorkspace';
@@ -122,6 +123,7 @@ function App() {
               <Route path="/manager/operations" element={<ManagerServiceTracker />} />
               <Route path="/manager/finance" element={<FinancialControl />} />
               <Route path="/manager/clients" element={<ClientManagement />} />
+              <Route path="/manager/club" element={<ManagerBusinessClub />} />
               <Route path="/manager/departments" element={<DepartmentPerformance />} />
               <Route path="/manager/hr" element={<EmployeeManagement />} />
               <Route path="/manager/analytics" element={<StrategicAnalytics />} />

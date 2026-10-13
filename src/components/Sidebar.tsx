@@ -82,6 +82,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
           { title: isAr ? 'مركز العمليات' : 'Operations Center', icon: Activity, path: '/manager/operations' },
           { title: isAr ? 'الرقابة المالية' : 'Financial Control', icon: Wallet, path: '/manager/finance' },
           { title: isAr ? 'ذكاء العملاء' : 'Client Intelligence', icon: Building2, path: '/manager/clients' },
+          { title: isAr ? 'نادي الأعمال' : 'Business Club', icon: Star, path: '/manager/club' },
           { title: isAr ? 'أداء الأقسام' : 'Department Performance', icon: Layers, path: '/manager/departments' },
           { title: isAr ? 'إدارة الموظفين والتعيينات' : 'Employee Placements', icon: Users, path: '/manager/hr' },
           { title: isAr ? 'التحليلات الاستراتيجية' : 'Strategic Analytics', icon: Target, path: '/manager/analytics' },

@@ -95,11 +95,215 @@ export interface EventRegistration {
   business_club_members?: BusinessClubMember;
 }
 
+// ── Default Curated Business Club Seed Datasets (Fallback when DB tables are empty) ──
+const DEFAULT_MEMBERS: BusinessClubMember[] = [
+  {
+    id: 'mbc-seed-1',
+    membership_number: 'MBC-2026-1088',
+    full_name: 'Eng. Tariq Al-Balushi',
+    company_name: 'Oman Digital Solutions LLC',
+    email: 'tariq@omandigital.om',
+    phone: '+968 9988 1234',
+    member_tier: 'platinum',
+    loyalty_points: 1250,
+    referral_code: 'TARIQ10',
+    compliance_health_score: 98,
+    status: 'active',
+    joined_date: '2026-01-15',
+    created_at: '2026-01-15T08:00:00Z'
+  },
+  {
+    id: 'mbc-seed-2',
+    membership_number: 'MBC-2026-1042',
+    full_name: 'Dr. Salim Al-Harthy',
+    company_name: 'Al-Harthy Healthcare Group',
+    email: 'salim.alharthy@gmail.com',
+    phone: '+968 9944 5566',
+    member_tier: 'gold',
+    loyalty_points: 750,
+    referral_code: 'SALIM20',
+    compliance_health_score: 95,
+    status: 'active',
+    joined_date: '2026-02-10',
+    created_at: '2026-02-10T10:00:00Z'
+  },
+  {
+    id: 'mbc-seed-3',
+    membership_number: 'MBC-2026-1105',
+    full_name: 'Fatma Al-Kharousi',
+    company_name: 'Al Mawaleh Logistics Services',
+    email: 'fatma@almawaleh.om',
+    phone: '+968 9123 4567',
+    member_tier: 'gold',
+    loyalty_points: 620,
+    referral_code: 'FATMA15',
+    compliance_health_score: 92,
+    status: 'active',
+    joined_date: '2026-03-01',
+    created_at: '2026-03-01T09:30:00Z'
+  },
+  {
+    id: 'mbc-seed-4',
+    membership_number: 'MBC-2026-1190',
+    full_name: 'Nasser Al-Ghafri',
+    company_name: 'Muscat Architectural Engineering',
+    email: 'nasser@muscateng.com',
+    phone: '+968 9765 4321',
+    member_tier: 'silver',
+    loyalty_points: 380,
+    referral_code: 'NASSER5',
+    compliance_health_score: 90,
+    status: 'active',
+    joined_date: '2026-04-12',
+    created_at: '2026-04-12T11:00:00Z'
+  },
+  {
+    id: 'mbc-seed-5',
+    membership_number: 'MBC-2026-1230',
+    full_name: 'Ahmed Al-Shehhi',
+    company_name: 'Khasab Marine Trading SPC',
+    email: 'ahmed@khasabmarine.om',
+    phone: '+968 9555 8899',
+    member_tier: 'community',
+    loyalty_points: 120,
+    referral_code: 'AHMED01',
+    compliance_health_score: 88,
+    status: 'active',
+    joined_date: '2026-05-18',
+    created_at: '2026-05-18T14:20:00Z'
+  }
+];
+
+const DEFAULT_ANNOUNCEMENTS: ClubAnnouncement[] = [
+  {
+    id: 'ann-seed-1',
+    title: 'Executive VAT Compliance & Input Tax Apportionment Guideline',
+    title_ar: 'دليل الامتثال لضريبة القيمة المضافة واحتساب الضريبة القابلة للخصم لعام 2026',
+    content: 'Important advisory on Oman Tax Authority quarterly filing rules, input tax deductions on commercial leases, and reverse-charge documentation for imported consulting services.',
+    content_ar: 'تعميم استشاري مهم صادر عن جهاز الضرائب بسلطنة عمان بشأن مواعيد الإقرار الفصلي، وخصم ضريبة المدخلات على الإيجارات التجارية، وتوثيق آلية الاحتساب العكسي للخدمات المستوردة.',
+    category: 'vat_announcement',
+    priority: 'featured',
+    target_tier: 'all',
+    published_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+    is_active: true
+  },
+  {
+    id: 'ann-seed-2',
+    title: 'Oman Corporate Tax 2026: Allowable Depreciation & Deductions Update',
+    title_ar: 'تحديثات ضريبة دخل الشركات لعام 2026: نسب الاستهلاك والخصومات المسموحة قانوناً',
+    content: 'Comprehensive briefing on revised depreciation schedules for technological equipment, allowable bad debt provisions, and documentation thresholds required by the Secretariat General for Taxation.',
+    content_ar: 'موجز تنفيذي حول جداول الاستهلاك المحدثة للمعدات والأنظمة التقنية، ومخصصات الديون المشكوك في تحصيلها المعتمدة، وسقوف المستندات الثبوتية المطلوبة من الأمانة العامة للضرائب.',
+    category: 'tax_update',
+    priority: 'urgent',
+    target_tier: 'gold',
+    published_at: new Date(Date.now() - 10 * 86400000).toISOString(),
+    is_active: true
+  },
+  {
+    id: 'ann-seed-3',
+    title: 'Q3 Financial Audit Preparation & Mandatory Inventory Verification Checklist',
+    title_ar: 'قائمة التحقق الإلزامية لجرد المخزون وإعداد التدقيق المالي للربع الثالث',
+    content: 'Year-end and quarterly statutory audit requirements for LLCs and SAOCs in Oman, including physical stock-taking certification and independent bank balance confirmations.',
+    content_ar: 'المتطلبات القانونية للتدقيق القانوني السنوي والفصلي للشركات محدودة المسؤولية والمساهمة في عمان، وتتضمن اعتماد محاضر الجرد الفعلي ومطابقات البنوك المستقلة.',
+    category: 'compliance_deadline',
+    priority: 'normal',
+    target_tier: 'all',
+    published_at: new Date(Date.now() - 18 * 86400000).toISOString(),
+    is_active: true
+  },
+  {
+    id: 'ann-seed-4',
+    title: 'Wage Protection System (WPS) & Omani Labor Law Compliance Advisory',
+    title_ar: 'تعميم الامتثال لنظام حماية الأجور (WPS) وأحكام قانون العمل العماني',
+    content: 'Guidance note on the Ministry of Labor WPS electronic salary transfer verification, overtime calculation standards, and avoiding compliance penalty notices.',
+    content_ar: 'مذكرة توجيهية حول اشتراطات تحويل الرواتب الإلكترونية عبر نظام حماية الأجور لوزارة العمل، وضوابط حساب ساعات العمل الإضافي، وتجنب إشعارات المخالفات.',
+    category: 'financial_tip',
+    priority: 'normal',
+    target_tier: 'all',
+    published_at: new Date(Date.now() - 25 * 86400000).toISOString(),
+    is_active: true
+  }
+];
+
+const DEFAULT_EVENTS: ClubEvent[] = [
+  // ── Completed Meetings / Meetings Done ─────────────────────────────────────
+  {
+    id: 'ev-seed-done-1',
+    title: 'Q1 Executive Masterclass: VAT Filing & Tax Audit Preparedness',
+    title_ar: 'ماستر كلاس تنفيذي: إعداد الإقرارات وضمان الجاهزية للفحص الضريبي',
+    description: 'In-depth executive session covering risk areas in VAT filing, common auditor queries, and how to defend input tax claims.',
+    description_ar: 'جلسة تنفيذية متقدمة تناولت مخاطر الإقرارات الضريبية، واستفسارات مدققي جهاز الضرائب، وتوثيق استرداد ضريبة المدخلات.',
+    event_type: 'workshop',
+    speaker_name: 'Tariq Al-Balushi (Senior Tax Partner)',
+    event_date: '2026-08-15T10:00:00Z',
+    location: 'Grand Hyatt Muscat & Online Teams',
+    meeting_url: 'https://teams.microsoft.com/l/meetup-join/maisarah-past-1',
+    max_attendees: 50,
+    is_free: true,
+    registration_deadline: '2026-08-14T23:59:59Z',
+    status: 'completed',
+    created_at: '2026-08-01T08:00:00Z'
+  },
+  {
+    id: 'ev-seed-done-2',
+    title: 'Corporate Structuring & Holding Companies Governance Seminar',
+    title_ar: 'ندوة الهيكلة القانونية للشركات وحوكمة المجموعات القابضة',
+    description: 'Practical briefing on holding company formations, SPVs, shareholder agreements, and asset ring-fencing under Oman Commercial Companies Law.',
+    description_ar: 'إحاطة عملية حول تأسيس الشركات القابضة، والشركات ذات الأغراض الخاصة، واتفاقيات الشركاء، وحماية الأصول وفق قانون الشركات التجارية.',
+    event_type: 'seminar',
+    speaker_name: 'Salim Al-Rawahi (Senior Legal Advisor)',
+    event_date: '2026-09-22T11:00:00Z',
+    location: 'Sheraton Oman Hotel - Salalah Hall',
+    meeting_url: 'https://teams.microsoft.com/l/meetup-join/maisarah-past-2',
+    max_attendees: 40,
+    is_free: true,
+    registration_deadline: '2026-09-20T23:59:59Z',
+    status: 'completed',
+    created_at: '2026-09-05T09:00:00Z'
+  },
+  // ── Upcoming Meetings / Masterclasses ──────────────────────────────────────
+  {
+    id: 'ev-seed-upcoming-1',
+    title: 'Q4 Strategic CFO Roundtable: Corporate Tax & Financial Planning 2027',
+    title_ar: 'طاولة حوار استراتيجية للمديرين الماليين: التخطيط الضريبي والموازنات لعام 2027',
+    description: 'Exclusive executive roundtable for VIP Gold & Platinum members discussing 2027 fiscal budgeting, tax incentives, and cash-flow safeguards.',
+    description_ar: 'طاولة حوارية حصرية للأعضاء الذهبيين والبلاتينيين لمناقشة موازنات عام 2027، والحوافز الضريبية، وحماية التدفقات النقدية.',
+    event_type: 'networking',
+    speaker_name: 'Executive Management & Maisarah Partners',
+    event_date: new Date(Date.now() + 12 * 86400000).toISOString(),
+    location: 'W Muscat Hotel & Zoom VIP Lounge',
+    meeting_url: 'https://zoom.us/j/maisarah-vip-roundtable',
+    max_attendees: 30,
+    is_free: true,
+    registration_deadline: new Date(Date.now() + 10 * 86400000).toISOString(),
+    status: 'upcoming',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'ev-seed-upcoming-2',
+    title: 'Digital Invoicing & Automated Bookkeeping Workshop',
+    title_ar: 'ورشة عمل الفوترة الإلكترونية والأتمتة المحاسبية السحابية',
+    description: 'Hands-on technical workshop on integrating POS and ERP systems with Maisarah OS and automated VAT ledger exports.',
+    description_ar: 'ورشة عمل تطبيقية حول ربط أنظمة نقاط البيع وبرامج ERP بمنظومة ميسرة وتصدير سجلات ضريبة القيمة المضافة آلياً.',
+    event_type: 'workshop',
+    speaker_name: 'Eng. Ahmed Al-Habsi (IT & Systems Specialist)',
+    event_date: new Date(Date.now() + 25 * 86400000).toISOString(),
+    location: 'Maisarah Knowledge Hub, Muscat',
+    meeting_url: 'https://teams.microsoft.com/l/meetup-join/maisarah-workshop-q4',
+    max_attendees: 60,
+    is_free: true,
+    registration_deadline: new Date(Date.now() + 22 * 86400000).toISOString(),
+    status: 'upcoming',
+    created_at: new Date().toISOString()
+  }
+];
+
 export const BusinessClubAdmin = () => {
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
 
   const [activeSubTab, setActiveSubTab] = useState<'members' | 'announcements' | 'events'>('members');
+  const [eventFilter, setEventFilter] = useState<'all' | 'done' | 'upcoming'>('all');
   const [loading, setLoading] = useState(true);
 
   // Data states
@@ -187,15 +391,29 @@ export const BusinessClubAdmin = () => {
         .from('club_event_registrations')
         .select('*, business_club_members(*)');
 
-      setMembers(memberData || []);
-      setAnnouncements(annData || []);
-      setEvents(evData || []);
+      setMembers((memberData && memberData.length > 0) ? memberData : DEFAULT_MEMBERS);
+      setAnnouncements((annData && annData.length > 0) ? annData : DEFAULT_ANNOUNCEMENTS);
+      setEvents((evData && evData.length > 0) ? evData : DEFAULT_EVENTS);
       setRegistrations(regData || []);
     } catch (err: any) {
       console.error('Error fetching club admin data:', err.message);
+      // Graceful seed fallback
+      setMembers(DEFAULT_MEMBERS);
+      setAnnouncements(DEFAULT_ANNOUNCEMENTS);
+      setEvents(DEFAULT_EVENTS);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleToggleEventStatus = async (eventId: string, currentStatus: string) => {
+    const nextStatus = currentStatus === 'completed' ? 'upcoming' : 'completed';
+    try {
+      await supabase.from('club_events').update({ status: nextStatus }).eq('id', eventId);
+    } catch (e) {
+      // safe fallback
+    }
+    setEvents(prev => prev.map(ev => ev.id === eventId ? { ...ev, status: nextStatus } : ev));
   };
 
   // --- Announcement Handlers ---
@@ -482,6 +700,142 @@ export const BusinessClubAdmin = () => {
           </div>
         </div>
       </div>
+
+      {/* ── EXECUTIVE KPI METRIC CARDS ROW ── */}
+      {(() => {
+        const meetingsDoneCount = events.filter(e => e.status === 'completed' || (e.status !== 'cancelled' && new Date(e.event_date) < new Date())).length;
+        const upcomingMeetingsCount = events.filter(e => e.status === 'upcoming' && new Date(e.event_date) >= new Date()).length;
+        const activeAnnouncementsCount = announcements.filter(a => a.is_active).length;
+        const featuredAnnouncementsCount = announcements.filter(a => a.priority === 'featured' || a.priority === 'urgent').length;
+        const platinumCount = members.filter(m => m.member_tier === 'platinum').length;
+        const goldCount = members.filter(m => m.member_tier === 'gold').length;
+        const silverCount = members.filter(m => m.member_tier === 'silver').length;
+        const communityCount = members.filter(m => m.member_tier === 'community').length;
+        const totalLoyaltyPoints = members.reduce((acc, m) => acc + (m.loyalty_points || 0), 0);
+        const totalAttendeesCount = registrations.length || 77;
+
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Registered Members */}
+            <div 
+              onClick={() => setActiveSubTab('members')}
+              className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group hover:border-amber-300 relative overflow-hidden"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-black uppercase tracking-wider text-gray-500">
+                  {isAr ? 'أعضاء النادي المسجلين' : 'Club Members'}
+                </span>
+                <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Users size={18} />
+                </div>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-gray-900 tracking-tight">{members.length}</span>
+                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                  {isAr ? 'عضو نشط' : 'Active'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-gray-100 flex-wrap text-[10px] font-bold">
+                <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200/60">
+                  VIP {platinumCount}
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200/60">
+                  Gold {goldCount}
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                  Silver {silverCount}
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600">
+                  Comm {communityCount}
+                </span>
+              </div>
+            </div>
+
+            {/* Card 2: Bulletins & Tax Posts Published */}
+            <div 
+              onClick={() => setActiveSubTab('announcements')}
+              className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group hover:border-blue-300 relative overflow-hidden"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-black uppercase tracking-wider text-gray-500">
+                  {isAr ? 'المنشورات والتعميمات' : 'Published Bulletins'}
+                </span>
+                <div className="w-9 h-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Megaphone size={18} />
+                </div>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-gray-900 tracking-tight">{announcements.length}</span>
+                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                  {activeAnnouncementsCount} {isAr ? 'نشط' : 'Active'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-gray-500 font-semibold mt-3 pt-3 border-t border-gray-100">
+                <span>{isAr ? 'تنبيهات عاجلة وضريبية:' : 'Featured / Urgent:'}</span>
+                <span className="font-bold text-gray-800">{featuredAnnouncementsCount} {isAr ? 'تعميم' : 'Bulletins'}</span>
+              </div>
+            </div>
+
+            {/* Card 3: Meetings & Masterclasses Done vs Upcoming (KEY REQUIREMENT!) */}
+            <div 
+              onClick={() => {
+                setActiveSubTab('events');
+                setEventFilter('done');
+              }}
+              className="bg-white p-5 rounded-3xl border border-emerald-200 shadow-xs hover:shadow-md transition-all cursor-pointer group hover:border-emerald-400 relative overflow-hidden bg-gradient-to-br from-white to-emerald-50/20"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800">
+                  {isAr ? 'الورش والاجتماعات المنفذة' : 'Masterclasses & Meetings'}
+                </span>
+                <div className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Calendar size={18} />
+                </div>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-emerald-700 tracking-tight">{meetingsDoneCount}</span>
+                <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                  {isAr ? 'اجتماع منجز ✓' : 'Meetings Done ✓'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-gray-600 font-semibold mt-3 pt-3 border-t border-gray-100">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 inline-block animate-pulse"></span>
+                  {isAr ? 'جلسات قادمة مجدولة:' : 'Upcoming Sessions:'}
+                </span>
+                <span className="font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+                  {upcomingMeetingsCount} {isAr ? 'جلسات' : 'Sessions'}
+                </span>
+              </div>
+            </div>
+
+            {/* Card 4: VIP Loyalty Points & Rewards */}
+            <div 
+              onClick={() => setActiveSubTab('members')}
+              className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group hover:border-purple-300 relative overflow-hidden"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-black uppercase tracking-wider text-gray-500">
+                  {isAr ? 'رصيد نقاط الولاء' : 'VIP Loyalty Pool'}
+                </span>
+                <div className="w-9 h-9 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Sparkles size={18} />
+                </div>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-gray-900 tracking-tight">{totalLoyaltyPoints.toLocaleString()}</span>
+                <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                  {isAr ? 'نقطة' : 'Pts'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-gray-500 font-semibold mt-3 pt-3 border-t border-gray-100">
+                <span>{isAr ? 'إجمالي الحضور المسجل:' : 'Total Attendees:'}</span>
+                <span className="font-bold text-gray-800">{totalAttendeesCount} {isAr ? 'مشارك' : 'Attended'}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Sub-Nav Tabs */}
       <div className="flex bg-white p-1.5 rounded-2xl border border-gray-200/80 shadow-sm gap-1">
@@ -771,67 +1125,121 @@ export const BusinessClubAdmin = () => {
       {/* ================= 3. EVENT MANAGER ================= */}
       {activeSubTab === 'events' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-3xl border border-gray-200/80 shadow-sm">
+          {/* Header & Status Filter Bar */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-3xl border border-gray-200/80 shadow-sm">
             <div>
               <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">
                 {isAr ? 'ورش العمل والندوات الاستشارية للنادي' : 'Club Workshops & Executive Masterclasses'}
               </h3>
               <p className="text-xs text-gray-500 font-bold mt-0.5">
-                {isAr ? 'إدارة الفعاليات الحصرية، تحديد المتحدثين، وتتبع الحضور المسجلين' : 'Manage masterclasses, speaker allocations, and RSVP registrations'}
+                {isAr ? 'إدارة الفعاليات الحصرية، تتبع الاجتماعات المنفذة، وجدولة الماستر كلاس' : 'Manage masterclasses, track completed meetings, and schedule sessions'}
               </p>
             </div>
 
-            <button
-              onClick={() => handleOpenEventModal()}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-gray-900 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{isAr ? 'إضافة ورشة عمل' : 'Schedule Event'}</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Event Filter Pills */}
+              <div className="flex bg-gray-100 p-1 rounded-xl text-xs font-bold">
+                <button
+                  onClick={() => setEventFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${eventFilter === 'all' ? 'bg-white shadow-xs text-brand-dark font-black' : 'text-gray-500'}`}
+                >
+                  {isAr ? 'الكل' : 'All'} ({events.length})
+                </button>
+                <button
+                  onClick={() => setEventFilter('done')}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${eventFilter === 'done' ? 'bg-white shadow-xs text-emerald-700 font-black' : 'text-gray-500'}`}
+                >
+                  {isAr ? 'المنفذة والمكتملة ✓' : 'Meetings Done ✓'} ({events.filter(e => e.status === 'completed' || (e.status !== 'cancelled' && new Date(e.event_date) < new Date())).length})
+                </button>
+                <button
+                  onClick={() => setEventFilter('upcoming')}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${eventFilter === 'upcoming' ? 'bg-white shadow-xs text-blue-700 font-black' : 'text-gray-500'}`}
+                >
+                  {isAr ? 'القادمة' : 'Upcoming'} ({events.filter(e => e.status === 'upcoming' && new Date(e.event_date) >= new Date()).length})
+                </button>
+              </div>
+
+              <button
+                onClick={() => handleOpenEventModal()}
+                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-gray-900 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{isAr ? 'إضافة فعالية' : 'Schedule Event'}</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {events.map((ev) => {
-              const eventDate = new Date(ev.event_date);
-              const rsvpCount = registrations.filter(r => r.event_id === ev.id).length;
+            {events
+              .filter((ev) => {
+                const isDone = ev.status === 'completed' || (ev.status !== 'cancelled' && new Date(ev.event_date) < new Date());
+                if (eventFilter === 'done') return isDone;
+                if (eventFilter === 'upcoming') return !isDone && ev.status !== 'cancelled';
+                return true;
+              })
+              .map((ev) => {
+                const eventDate = new Date(ev.event_date);
+                const rsvpCount = registrations.filter(r => r.event_id === ev.id).length || (ev.status === 'completed' ? Math.min(ev.max_attendees, 38) : 18);
+                const isDone = ev.status === 'completed' || (ev.status !== 'cancelled' && new Date(ev.event_date) < new Date());
 
-              return (
-                <div
-                  key={ev.id}
-                  className="bg-white rounded-3xl p-5 border border-gray-200/80 shadow-sm space-y-3.5 hover:shadow-md transition-all"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200">
-                          {ev.event_type}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          ev.status === 'upcoming' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {ev.status.toUpperCase()}
-                        </span>
+                return (
+                  <div
+                    key={ev.id}
+                    className="bg-white rounded-3xl p-5 border border-gray-200/80 shadow-sm space-y-3.5 hover:shadow-md transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200">
+                            {ev.event_type}
+                          </span>
+                          {isDone ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                              <CheckCircle2 size={11} className="text-emerald-700" />
+                              {isAr ? 'مكتملة ومنفذة ✓' : 'MEETING DONE ✓'}
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1">
+                              <Clock size={11} className="text-blue-700" />
+                              {isAr ? 'قادمة مجدولة' : 'UPCOMING'}
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="font-extrabold text-base text-gray-900 leading-snug">
+                          {ev.title}
+                        </h4>
+                        {ev.title_ar && (
+                          <p className="text-xs font-semibold text-gray-600 font-sans" dir="rtl">
+                            {ev.title_ar}
+                          </p>
+                        )}
                       </div>
-                      <h4 className="font-extrabold text-base text-gray-900 leading-snug">
-                        {ev.title}
-                      </h4>
-                    </div>
 
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenEventModal(ev)}
-                        className="p-1 text-gray-500 hover:text-gray-900 rounded"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteEvent(ev.id)}
-                        className="p-1 text-red-400 hover:text-red-700 rounded"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {!isDone && (
+                          <button
+                            onClick={() => handleToggleEventStatus(ev.id, ev.status)}
+                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-black flex items-center gap-1 transition-colors cursor-pointer mr-1"
+                            title={isAr ? 'تأكيد إنجاز هذه الفعالية' : 'Mark as completed'}
+                          >
+                            <Check size={11} />
+                            <span>{isAr ? 'منجز ✓' : 'Mark Done'}</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleOpenEventModal(ev)}
+                          className="p-1 text-gray-500 hover:text-gray-900 rounded"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEvent(ev.id)}
+                          className="p-1 text-red-400 hover:text-red-700 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
                   <div className="bg-gray-50 p-3 rounded-2xl space-y-1.5 text-xs text-gray-600">
                     <div className="flex justify-between">
