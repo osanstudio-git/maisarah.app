@@ -340,7 +340,7 @@ export default function FieldSalesPortal() {
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-24" dir={isAr ? 'rtl' : 'ltr'}>
 
       {/* ── Sales Specialist Header Banner ─────────────────────────────────── */}
-      <div className="max-w-lg mx-auto px-4 pt-3 pb-1">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-3 pb-1">
         <div className="bg-white border border-gray-200/80 rounded-2xl px-4 py-3 shadow-xs flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-dark to-red-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-brand-dark/20">
@@ -370,8 +370,8 @@ export default function FieldSalesPortal() {
         </div>
       </div>
 
-      {/* ── Main Mobile Container ───────────────────────────────────────────── */}
-      <main className="max-w-lg mx-auto px-4 pt-4 space-y-4">
+      {/* ── Main Responsive Container ───────────────────────────────────────── */}
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-2 pb-12 space-y-4">
 
         {/* ── Quick Stat Card ──────────────────────────────────────────────── */}
         <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-brand-dark rounded-3xl p-5 text-white shadow-xl relative overflow-hidden">
@@ -402,6 +402,81 @@ export default function FieldSalesPortal() {
               style={{ width: `${metrics.targetProgress}%` }}
             />
           </div>
+        </div>
+
+        {/* ── Desktop Tab Navigation (Visible on Desktop / Hidden on Mobile) ── */}
+        <div className="hidden lg:flex items-center gap-1.5 p-1.5 bg-white border border-gray-200/80 rounded-2xl shadow-xs">
+          <button
+            onClick={() => setActiveTab('leads')}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'leads'
+                ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <Users size={15} />
+            <span>{isAr ? 'قائمة الفرص' : 'Leads'}</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+              activeTab === 'leads' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
+            }`}>
+              {leads.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('capture')}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'capture'
+                ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <Plus size={15} />
+            <span>{isAr ? 'إضافة سريعة (10 ثوانٍ)' : 'Quick Capture (10s)'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('visits')}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'visits'
+                ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <MapPin size={15} />
+            <span>{isAr ? 'الزيارات الميدانية' : 'Field Visits'}</span>
+            {visits.length > 0 && (
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'visits' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {visits.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('rates')}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'rates'
+                ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <Bookmark size={15} />
+            <span>{isAr ? 'قائمة الأسعار والخدمات' : 'Service Rates'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('targets')}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'targets'
+                ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <Target size={15} />
+            <span>{isAr ? 'الأهداف والعمولة' : 'Targets & Commission'}</span>
+          </button>
         </div>
 
         {/* ── TAB 1: LEADS LIST ────────────────────────────────────────────── */}
@@ -444,8 +519,8 @@ export default function FieldSalesPortal() {
               <span>{isAr ? '+ إضافة فرصة جديدة (10 ثوانٍ)' : '+ Quick Add Lead (10s)'}</span>
             </button>
 
-            {/* Leads Cards */}
-            <div className="space-y-2.5">
+            {/* Leads Cards Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {loading ? (
                 <div className="py-12 flex justify-center"><div className="w-8 h-8 rounded-full border-2 border-brand-dark border-t-transparent animate-spin" /></div>
               ) : filteredLeads.length === 0 ? (
@@ -526,7 +601,7 @@ export default function FieldSalesPortal() {
 
         {/* ── TAB 2: FAST LEAD CAPTURE (10-SECOND FORM) ────────────────────── */}
         {activeTab === 'capture' && (
-          <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-red-50 text-brand-dark rounded-xl font-black">
@@ -770,7 +845,7 @@ export default function FieldSalesPortal() {
             )}
 
             {/* Visits List */}
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {visits.length === 0 ? (
                 <div className="bg-white rounded-3xl p-8 text-center border border-gray-200 text-gray-400 text-xs font-bold">
                   {isAr ? 'لا توجد زيارات مسجلة اليوم' : 'No visits recorded yet today'}
@@ -811,7 +886,7 @@ export default function FieldSalesPortal() {
               />
             </div>
 
-            <div className="space-y-2.5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {SERVICE_RATE_CARD
                 .filter(s => s.nameEn.toLowerCase().includes(rateSearch.toLowerCase()) || s.nameAr.includes(rateSearch))
                 .map(srv => (
@@ -845,7 +920,7 @@ export default function FieldSalesPortal() {
                 <span>{isAr ? 'أداء المبيعات والعمولات' : 'Sales Target & Commission'}</span>
               </h2>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="p-3 bg-slate-50 rounded-2xl text-center">
                   <p className="text-[10px] font-bold text-gray-400 uppercase">{isAr ? 'إجمالي الفرص' : 'Total Leads'}</p>
                   <p className="text-xl font-black text-gray-900 mt-1">{metrics.totalLeadsCount}</p>
