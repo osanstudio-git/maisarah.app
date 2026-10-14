@@ -393,8 +393,7 @@ export default function CRMLeadManagement() {
           .insert([{
             client_id: clientId,
             title: finalTitle,
-            description: finalDetails,
-            budget: Number(finalBudget) || 0,
+            description: `${finalDetails} | Contract Fee: OMR ${Number(finalBudget) || 0}`,
             department_id: finalDept,
             status: 'pending',
             priority: lead.priority || 'medium',

@@ -230,6 +230,10 @@ export async function provisionClientOrMemberAuth(params: ProvisionClientParams)
       const randDigits = Math.floor(1000 + Math.random() * 9000);
       membershipNumber = `MBC-${year}-${randDigits}`;
 
+      const validTiers = ['silver', 'gold', 'platinum'];
+      const rawTier = (memberTier || '').toLowerCase();
+      const safeTier = validTiers.includes(rawTier) ? rawTier : 'silver';
+
       const { error: memberInsertErr } = await supabase
         .from('business_club_members')
         .insert([{
@@ -241,7 +245,7 @@ export async function provisionClientOrMemberAuth(params: ProvisionClientParams)
           company_name: companyName || null,
           email: cleanEmail,
           phone: phone || null,
-          member_tier: memberTier || 'member',
+          member_tier: safeTier,
           loyalty_points: 200, // 200 welcome bonus points
           qr_code_token: `QR-${membershipNumber}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
           compliance_health_score: 85,

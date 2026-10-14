@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useLanguage } from './hooks/useLanguage';
-import { AuthProvider } from './hooks/useAuth';
+import { AuthProvider, useAuth } from './hooks/useAuth';
 
 // Layout & Protection
 import { MainLayout } from './components/MainLayout';
@@ -12,6 +12,19 @@ import Login from './pages/Auth/Login';
 
 // Original generic Dashboard (Fallback/Demo)
 import Dashboard from './components/Dashboard';
+
+const RoleDashboardRedirect = () => {
+  const { role } = useAuth();
+  if (role === 'sales') return <Navigate to="/sales" replace />;
+  if (role === 'manager') return <Navigate to="/manager" replace />;
+  if (role === 'hr') return <Navigate to="/hr/dashboard" replace />;
+  if (role === 'crm') return <Navigate to="/crm/dashboard" replace />;
+  if (role === 'accountant') return <Navigate to="/accountant" replace />;
+  if (role === 'employee') return <Navigate to="/employee" replace />;
+  if (role === 'client') return <Navigate to="/client" replace />;
+  if (role === 'department_head') return <Navigate to="/hod/dashboard" replace />;
+  return <Dashboard />;
+};
 
 const ComingSoon = () => (
   <div className="flex h-full items-center justify-center p-20 text-gray-400 font-bold text-2xl bg-gray-50/50 rounded-3xl m-6 border-2 border-dashed border-gray-200">
@@ -165,8 +178,8 @@ function App() {
               <Route path="/hr/ai" element={<HRWorkspace />} />
             </Route>
 
-            {/* CRM Routes */}
-            <Route element={<ProtectedRoute allowedRoles={['crm', 'manager']} />}>
+            {/* CRM & Sales Routes */}
+            <Route element={<ProtectedRoute allowedRoles={['crm', 'manager', 'sales']} />}>
               <Route path="/crm" element={<CRMPortal />} />
               <Route path="/crm/dashboard" element={<CRMPortal />} />
               <Route path="/crm/b2b" element={<CRMPortal />} />
@@ -195,7 +208,7 @@ function App() {
             </Route>
 
             {/* Generic Fallback Dashboard if needed */}
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard" element={<RoleDashboardRedirect />} />
 
           </Route>
 

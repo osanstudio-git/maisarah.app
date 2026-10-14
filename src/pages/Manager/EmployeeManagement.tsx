@@ -2181,6 +2181,7 @@ const EmployeeManagement = () => {
                   <option value="accountant">{isAr ? '💼 محاسب (صلاحيات المحاسبة والفواتير والإيصالات)' : '💼 Accountant (Accounting, Invoicing & Receipts Portal)'}</option>
                   <option value="hr">{isAr ? '📋 مدير الموارد البشرية (التوظيف وشؤون الموظفين)' : '📋 HR Manager (HR Control & Recruitment)'}</option>
                   <option value="crm">{isAr ? '🤝 علاقات العملاء (عروض الأسعار والعملاء)' : '🤝 CRM Coordinator (Leads & Quotations)'}</option>
+                  <option value="sales">{isAr ? '🎯 مندوب مبيعات ميداني (بوابة المبيعات الميدانية)' : '🎯 Field Sales (Field Sales Portal & Lead Capture)'}</option>
                 </select>
                 <p className="text-[10px] font-bold text-gray-500 mt-1 flex items-center gap-1">
                   💡 {isAr
@@ -2195,10 +2196,11 @@ const EmployeeManagement = () => {
                   </label>
                   <div className="flex flex-wrap gap-2 pt-0.5">
                     {[
+                      { id: 'sales', labelEn: '🎯 Field Sales', labelAr: '🎯 المبيعات الميدانية' },
+                      { id: 'crm', labelEn: '🤝 CRM Portal', labelAr: '🤝 علاقات العملاء' },
                       { id: 'accountant', labelEn: '💼 Accountant Portal', labelAr: '💼 بوابة المحاسب' },
                       { id: 'employee', labelEn: '👤 Staff Workspace', labelAr: '👤 مساحة الموظف' },
                       { id: 'department_head', labelEn: '👑 HOD Leadership', labelAr: '👑 رئيس قسم' },
-                      { id: 'crm', labelEn: '🤝 CRM Portal', labelAr: '🤝 علاقات العملاء' },
                       { id: 'hr', labelEn: '📋 HR Manager', labelAr: '📋 الموارد البشرية' }
                     ].map(sec => {
                       const isPrimary = placementData.accessRole === sec.id;

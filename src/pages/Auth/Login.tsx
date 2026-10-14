@@ -28,6 +28,7 @@ const Login = () => {
       else if (role === 'employee') navigate('/employee');
       else if (role === 'client') navigate('/client');
       else if (role === 'department_head') navigate('/hod/dashboard');
+      else if (role === 'sales') navigate('/sales');
       else navigate('/dashboard');
     } else if (!loading && sessionReady && session && !role) {
       setError('No role assigned to this account. Please contact admin.');

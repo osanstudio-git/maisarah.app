@@ -150,10 +150,7 @@ export default function Transactions() {
           status,
           priority,
           description,
-          budget,
           due_date,
-          started_at,
-          completed_at,
           created_at,
           client_id,
           employee_id,
@@ -180,12 +177,18 @@ export default function Transactions() {
 
       const { data, error } = await query;
       if (!error && data) {
-        const formattedTasks: ServiceTask[] = (data as any[]).map((task: any) => ({
-          ...task,
-          clients: Array.isArray(task.clients)
-            ? (task.clients[0] || null)
-            : (task.clients || null)
-        }));
+        const formattedTasks: ServiceTask[] = (data as any[]).map((task: any) => {
+          const budgetMatch = task.description?.match(/Contract Fee: OMR\s*(\d+(\.\d+)?)/i) || task.description?.match(/Fee: OMR\s*(\d+(\.\d+)?)/i);
+          const parsedBudget = budgetMatch ? Number(budgetMatch[1]) : 750;
+          return {
+            ...task,
+            budget: parsedBudget,
+            status: task.status === 'ongoing' ? 'started' : task.status,
+            clients: Array.isArray(task.clients)
+              ? (task.clients[0] || null)
+              : (task.clients || null)
+          };
+        });
         setTasks(formattedTasks);
       } else if (error) {
         console.warn('Error fetching employee tasks:', error.message);
@@ -223,15 +226,15 @@ export default function Transactions() {
     const nowIso = new Date().toISOString();
 
     // 1. Optimistic UI update
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'started', started_at: nowIso } : t));
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'started' } : t));
 
     try {
-      // Step A: Update task status to started
+      // Step A: Update task status to ongoing in database
       const { error: serviceErr } = await supabase
         .from('services')
         .update({
-          status: 'started',
-          started_at: nowIso
+          status: 'ongoing',
+          updated_at: nowIso
         })
         .eq('id', task.id);
 
@@ -247,7 +250,7 @@ export default function Transactions() {
       if (!existingInvoices || existingInvoices.length === 0) {
         const generatedInvNumber = `INV-${Date.now().toString().slice(-6)}`;
         invoiceNumber = generatedInvNumber;
-        const invoiceBudget = Number(task.budget || 0);
+        const invoiceBudget = Number(task.budget || 750);
 
         const { error: invErr } = await supabase
           .from('invoices')
@@ -259,7 +262,7 @@ export default function Transactions() {
             amount: invoiceBudget,
             tax_amount: 0,
             total_amount: invoiceBudget,
-            status: 'draft',
+            status: 'unpaid',
             due_date: task.due_date || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
             notes: `Auto-generated draft invoice upon work start for task: "${task.title}"`
           }]);

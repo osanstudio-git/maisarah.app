@@ -109,9 +109,21 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
           { title: isAr ? 'التقارير' : 'Reports',                  icon: FileBarChart,   path: '/hr/reports' },
           { title: isAr ? 'مساعد الذكاء الاصطناعي' : 'AI Assistant', icon: Bot,           path: '/hr/ai' },
         ];
+      case 'sales':
+        return [
+          { title: isAr ? 'بوابة المبيعات الميدانية' : 'Field Sales Portal', icon: Target, path: '/sales' },
+          { title: isAr ? 'شركاء وفرق B2B' : 'B2B Corporate Hub', icon: Building2, path: '/crm/b2b' },
+          { title: isAr ? 'خط تأهيل وإدارة الفرص' : 'Lead Pipeline & Intake', icon: Target, path: '/crm/leads' },
+          { title: isAr ? 'إدارة العملاء والفرص' : 'Clients & Leads', icon: Users, path: '/crm/clients' },
+          { title: isAr ? 'استوديو عروض الأسعار' : 'Quotations Studio', icon: FileText, path: '/crm/quotations' },
+          { title: isAr ? 'نادي الأعمال' : 'Business Club', icon: Star, path: '/crm/club' },
+          { title: t('messaging.messages'), icon: MessageCircle, path: '/crm/messages' },
+          { title: t('vault.documents'), icon: Folder, path: '/crm/documents' },
+        ];
       case 'crm':
         return [
           { title: isAr ? 'لوحة قيادة CRM' : 'CRM Dashboard', icon: Home, path: '/crm/dashboard' },
+          { title: isAr ? 'المبيعات الميدانية' : 'Field Sales', icon: Target, path: '/sales' },
           { title: isAr ? 'شركاء وفرق B2B' : 'B2B Corporate Hub', icon: Building2, path: '/crm/b2b' },
           { title: isAr ? 'استوديو عروض الأسعار' : 'Quotations Studio', icon: FileText, path: '/crm/quotations' },
           { title: isAr ? 'إدارة العملاء والفرص' : 'Clients & Leads', icon: Users, path: '/crm/clients' },

@@ -41,6 +41,7 @@ export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     if (role === 'employee') return <Navigate to="/employee" replace />;
     if (role === 'client') return <Navigate to="/client" replace />;
     if (role === 'department_head') return <Navigate to="/hod/dashboard" replace />;
+    if (role === 'sales') return <Navigate to="/sales" replace />;
     
     return <div className="p-8 text-center text-red-600 font-bold">Unauthorized Access</div>;
   }

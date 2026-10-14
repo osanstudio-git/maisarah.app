@@ -128,7 +128,7 @@ export default function InvoiceManagement() {
           .select(`
             id, invoice_number, client_id, service_id, amount, tax_amount, total_amount, status, billing_type, due_date, created_at, notes,
             clients ( id, company_name, cr_number ),
-            services ( id, title, budget ),
+            services ( id, title ),
             profiles:created_by ( full_name )
           `)
           .order('created_at', { ascending: false }),
