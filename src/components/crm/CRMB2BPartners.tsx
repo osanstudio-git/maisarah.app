@@ -72,7 +72,7 @@ const INITIAL_B2B_PARTNERS: B2BPartner[] = [
     email: 'maryam@omanlegal.om',
     location: 'Muscat (Al-Mouj)',
     cr_number: 'CR-2039482',
-    notes: 'Legal partners referring international FDI companies for statutory audit and corporate tax.',
+    notes: 'Legal partners referring international FDI companies for financial audit and corporate tax.',
     created_at: '2026-02-14'
   },
   {

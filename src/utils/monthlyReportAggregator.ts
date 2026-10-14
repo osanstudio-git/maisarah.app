@@ -115,7 +115,7 @@ export function generateDefaultMonthlyReport(
       previousCashBankBalance: 3337.514,
 
       revenueByService: [
-        { serviceName: 'Statutory Audit & Assurance', serviceNameAr: 'التدقيق المالي والمراجعة', revenue: 1327, target: 2500, achievementRate: 53.1 },
+        { serviceName: 'Audit & Assurance', serviceNameAr: 'التدقيق المالي والمراجعة', revenue: 1327, target: 2500, achievementRate: 53.1 },
         { serviceName: 'Accounting & Bookkeeping', serviceNameAr: 'المحاسبة ومسك الدفاتر', revenue: 620, target: 800, achievementRate: 77.5 },
         { serviceName: 'Tax & VAT Services', serviceNameAr: 'الضرائب وضريبة القيمة المضافة', revenue: 540, target: 800, achievementRate: 67.5 },
         { serviceName: 'Feasibility Studies & Consulting', serviceNameAr: 'دراسات الجدوى والاستشارات', revenue: 1330, target: 2500, achievementRate: 53.2 },

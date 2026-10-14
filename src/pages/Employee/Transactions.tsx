@@ -507,8 +507,8 @@ export default function Transactions() {
             </h1>
             <p className="text-sm font-medium text-gray-500 mt-1 max-w-2xl">
               {isAr
-                ? 'استلم المهام الموجهة من رئيس القسم، وابدأ العمل لإنشاء مسودة الفاتورة تلقائياً وسجل الدفعات المستلمة.'
-                : 'Execute assignments from your HOD, auto-generate draft invoices upon start, and log client payments.'}
+                ? 'استلم المهام الموجهة إليك مباشرة، وابدأ العمل لإنجاز المعاملة وسجل DSR والفواتير.'
+                : 'Execute assignments from CRM and management, auto-generate draft invoices upon start, and log client payments.'}
             </p>
           </div>
 

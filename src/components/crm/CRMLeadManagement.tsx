@@ -68,20 +68,20 @@ const formatOMR = (val: number) =>
 
 const SERVICE_OPTIONS = [
   { id: 'vat_filing', en: 'VAT Return Filing & Compliance', ar: 'إقرارات وضريبة القيمة المضافة', dept: 'tax' },
-  { id: 'statutory_audit', en: 'Statutory Financial Audit', ar: 'تدقيق ومراجعة الحسابات القانونية', dept: 'audit' },
+  { id: 'audit', en: 'Financial Audit', ar: 'تدقيق الحسابات والبيانات المالية', dept: 'audit' },
   { id: 'corporate_tax', en: 'Corporate Income Tax Assessment', ar: 'ضريبة الدخل على الشركات', dept: 'tax' },
-  { id: 'bookkeeping', en: 'Monthly Accounting & Bookkeeping', ar: 'مسك الدفاتر والمحاسبة الشهرية', dept: 'accounting' },
+  { id: 'bookkeeping', en: 'Bookkeeping & Monthly Accounts', ar: 'مسك الدفاتر والمحاسبة الشهرية', dept: 'accounting' },
   { id: 'company_formation', en: 'Commercial Registration & CR Formation', ar: 'تأسيس الشركات والسجل التجاري', dept: 'legal' },
   { id: 'business_advisory', en: 'Feasibility Study & Financial Advisory', ar: 'دراسات الجدوى والاستشارات المالية', dept: 'advisory' },
   { id: 'tax_appeal', en: 'Tax Appeals & Dispute Resolution', ar: 'الاعتراضات والنزاعات الضريبية', dept: 'tax' }
 ];
 
 const DEPARTMENTS = [
-  { id: 'audit', en: 'Audit & Assurance', ar: 'التدقيق والمراجعة' },
-  { id: 'tax', en: 'Tax & Zakat', ar: 'الضرائب والزكاة' },
-  { id: 'accounting', en: 'Accounting & Payroll', ar: 'المحاسبة والرواتب' },
-  { id: 'legal', en: 'Corporate Legal', ar: 'الشؤون القانونية' },
-  { id: 'advisory', en: 'Business Advisory', ar: 'الاستشارات المالية' }
+  { id: 'audit', en: 'Maisarah Audit Department', ar: 'قسم تدقيق الحسابات — ميسرة' },
+  { id: 'tax', en: 'Maisarah Tax & VAT Department', ar: 'قسم الضرائب وضريبة القيمة المضافة — ميسرة' },
+  { id: 'accounting', en: 'Maisarah Bookkeeping Department', ar: 'قسم مسك الدفاتر — ميسرة' },
+  { id: 'legal', en: 'Maisarah Corporate Legal Department', ar: 'قسم الشؤون القانونية والشركات — ميسرة' },
+  { id: 'advisory', en: 'Maisarah Business Advisory Department', ar: 'قسم الاستشارات المالية — ميسرة' }
 ];
 
 const SOURCES = [
@@ -127,7 +127,7 @@ export default function CRMLeadManagement() {
     phone: '',
     email: '',
     source: 'direct',
-    interested_service: 'Statutory Financial Audit',
+    interested_service: 'Financial Audit',
     department_id: 'audit',
     estimated_value: '',
     priority: 'medium' as LeadPriority,
@@ -473,7 +473,6 @@ export default function CRMLeadManagement() {
   const handleOpenProvisionModal = (lead: CRMLead) => {
     setSelectedLeadForProvision(lead);
     setProvisionEmail(lead.email || '');
-    setProvisionTier(lead.status === 'accepted' ? 'silver' : 'community');
     setProvisionResult(null);
     setIsProvisionModalOpen(true);
   };
@@ -718,7 +717,7 @@ export default function CRMLeadManagement() {
         phone: '',
         email: '',
         source: 'direct',
-        interested_service: 'Statutory Financial Audit',
+        interested_service: 'Financial Audit',
         department_id: 'audit',
         estimated_value: '',
         priority: 'medium',
@@ -1205,7 +1204,11 @@ export default function CRMLeadManagement() {
                             }`}>
                               {lead.status}
                             </span>
-                            {isConverted && <ShieldCheck size={14} className="text-emerald-600 shrink-0" title="Converted to Client" />}
+                            {isConverted && (
+                              <span title={isAr ? 'تم التحويل إلى عميل' : 'Converted to Client'} className="inline-flex">
+                                <ShieldCheck size={14} className="text-emerald-600 shrink-0" />
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="py-4 px-4 text-end space-x-2 space-x-reverse">

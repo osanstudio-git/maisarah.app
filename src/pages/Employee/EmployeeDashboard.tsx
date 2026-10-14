@@ -121,6 +121,43 @@ const EmployeeDashboard = () => {
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [employeeDepartment, setEmployeeDepartment] = useState<string>('audit');
+
+  useEffect(() => {
+    async function loadDept() {
+      if (!user?.id) return;
+      const metaDept = user?.user_metadata?.department_id;
+      if (metaDept) {
+        setEmployeeDepartment(metaDept);
+        return;
+      }
+      try {
+        const { data } = await supabase.from('profiles').select('department_id').eq('id', user.id).maybeSingle();
+        if (data?.department_id) {
+          setEmployeeDepartment(data.department_id);
+        }
+      } catch (err) {
+        console.warn('Could not fetch employee department:', err);
+      }
+    }
+    loadDept();
+  }, [user?.id]);
+
+  const getDepartmentConfig = (deptId: string) => {
+    switch (deptId) {
+      case 'audit':
+        return { en: 'Maisarah Audit Department', ar: 'قسم تدقيق الحسابات — ميسرة', icon: '🏛️' };
+      case 'bookkeeping':
+      case 'accounting':
+        return { en: 'Maisarah Bookkeeping Department', ar: 'قسم مسك الدفاتر — ميسرة', icon: '📚' };
+      case 'tax':
+        return { en: 'Maisarah Tax & VAT Department', ar: 'قسم الضرائب وضريبة القيمة المضافة — ميسرة', icon: '📑' };
+      case 'advisory':
+        return { en: 'Maisarah Business Advisory Department', ar: 'قسم الاستشارات المالية — ميسرة', icon: '💡' };
+      default:
+        return { en: 'Maisarah Audit Department', ar: 'قسم تدقيق الحسابات — ميسرة', icon: '🏛️' };
+    }
+  };
 
   const MOCK_TRANSACTIONS: Transaction[] = [
     { 
@@ -304,7 +341,13 @@ const EmployeeDashboard = () => {
         <div className={`absolute -bottom-6 ${isAr ? '-left-4' : '-right-4'} w-24 h-24 bg-white/5 rounded-full`} />
         
         <div className={`relative z-10 ${isAr ? 'text-right' : 'text-left'}`}>
-          <p className="text-red-200 text-sm font-bold uppercase tracking-widest mb-2 opacity-80">
+          {/* Department Identification Badge */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white/15 backdrop-blur-md rounded-full text-xs font-black text-amber-300 border border-white/20 mb-3 shadow-inner">
+            <span className="text-sm">{getDepartmentConfig(employeeDepartment).icon}</span>
+            <span>{isAr ? getDepartmentConfig(employeeDepartment).ar : getDepartmentConfig(employeeDepartment).en}</span>
+          </div>
+
+          <p className="text-red-200 text-sm font-bold uppercase tracking-widest mb-1 opacity-80">
             {isAr ? 'مرحباً بعودتك،' : 'Welcome back,'}
           </p>
           <h2 className="text-3xl sm:text-4xl font-black mb-2 tracking-tight">

@@ -82,7 +82,7 @@ const DEPARTMENT_BENCHMARKS: Record<string, {
     revenueMultiplier: 1.28,
     baseClients: ['OSBIC Holding', 'Al Maha Logistics LLC', 'Apex Medical Center', 'Sohar Industrial Group'],
     serviceBreakdown: [
-      { nameEn: 'Statutory Annual Audit', nameAr: 'التدقيق المالي السنوي القانوني', share: 50, avgFee: 2200 },
+      { nameEn: 'Annual Financial Audit', nameAr: 'تدقيق الحسابات السنوي', share: 50, avgFee: 2200 },
       { nameEn: 'Internal Audit & Risk Assessment', nameAr: 'التدقيق الداخلي وإدارة المخاطر', share: 25, avgFee: 1600 },
       { nameEn: 'Financial Statements Review', nameAr: 'مراجعة القوائم والتقارير المالية', share: 15, avgFee: 950 },
       { nameEn: 'Agreed-Upon Procedures (AUP)', nameAr: 'إجراءات التدقيق المتفق عليها', share: 10, avgFee: 750 }

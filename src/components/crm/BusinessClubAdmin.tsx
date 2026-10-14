@@ -27,7 +27,8 @@ import {
   UserCheck,
   Zap,
   Layers,
-  ArrowUpRight
+  ArrowUpRight,
+  Star
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabaseClient';
@@ -203,8 +204,8 @@ const DEFAULT_ANNOUNCEMENTS: ClubAnnouncement[] = [
     id: 'ann-seed-3',
     title: 'Q3 Financial Audit Preparation & Mandatory Inventory Verification Checklist',
     title_ar: 'قائمة التحقق الإلزامية لجرد المخزون وإعداد التدقيق المالي للربع الثالث',
-    content: 'Year-end and quarterly statutory audit requirements for LLCs and SAOCs in Oman, including physical stock-taking certification and independent bank balance confirmations.',
-    content_ar: 'المتطلبات القانونية للتدقيق القانوني السنوي والفصلي للشركات محدودة المسؤولية والمساهمة في عمان، وتتضمن اعتماد محاضر الجرد الفعلي ومطابقات البنوك المستقلة.',
+    content: 'Year-end and quarterly financial audit requirements for LLCs and SAOCs in Oman, including physical stock-taking certification and independent bank balance confirmations.',
+    content_ar: 'المتطلبات لتدقيق الحسابات السنوي والفصلي للشركات محدودة المسؤولية والمساهمة في عمان، وتتضمن اعتماد محاضر الجرد الفعلي ومطابقات البنوك المستقلة.',
     category: 'compliance_deadline',
     priority: 'normal',
     target_tier: 'all',

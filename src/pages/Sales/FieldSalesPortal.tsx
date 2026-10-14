@@ -48,9 +48,9 @@ const SERVICE_RATE_CARD = [
     docs: 'Tax invoices, sales/purchase ledger, bank statements'
   },
   {
-    id: 'statutory_audit',
-    nameEn: 'Annual Statutory Financial Audit',
-    nameAr: 'التدقيق المالي السنوي القانوني المعتمد',
+    id: 'audit',
+    nameEn: 'Annual Financial Audit',
+    nameAr: 'تدقيق الحسابات السنوي المعتمد',
     dept: 'audit',
     priceOMR: '300 - 900',
     turnaround: '7-14 Days',

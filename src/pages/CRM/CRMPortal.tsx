@@ -138,7 +138,7 @@ const INITIAL_CLIENTS: Client[] = [
     created_at: '2025-06-01',
     monthlyBilling: 1200,
     yearlyBilling: 14400,
-    activityHistory: ['Account created.', 'Statutory audit schedule confirmed.', 'Engagement letter signed.'],
+    activityHistory: ['Account created.', 'Audit schedule confirmed.', 'Engagement letter signed.'],
     contractExpiryDate: '2027-06-01',
     isClubMember: true
   },
@@ -379,7 +379,7 @@ export default function CRMPortal() {
 
   const [tips, setTips] = useState([
     { id: 'tip_1', title: 'GCC VAT Filing Guide', content: 'Ensure all input tax credits match custom clearance bills of entry for smooth filing.', date: '2026-08-01', category: 'Tax' },
-    { id: 'tip_2', title: 'Statutory Audit Readiness', content: 'Keep general ledgers reconciled and payroll PASI tax registries up to date before Q4 audit.', date: '2026-08-05', category: 'Audit' },
+    { id: 'tip_2', title: 'Financial Audit Readiness', content: 'Keep general ledgers reconciled and payroll PASI tax registries up to date before Q4 audit.', date: '2026-08-05', category: 'Audit' },
     { id: 'tip_3', title: 'SME Feasibility Checklists', content: 'For bank loan approvals, include a detailed 3-year cash flow projections model and sensitivity matrices.', date: '2026-08-10', category: 'Advisory' }
   ]);
   const [clubSearch, setClubSearch] = useState('');
@@ -460,7 +460,7 @@ export default function CRMPortal() {
   const [convertForm, setConvertForm] = useState({
     manager: '',
     services: ['Audit'] as string[],
-    subType: 'Statutory Financial Audit',
+    subType: 'Financial Audit',
     billingAmount: '750',
     workScopeNotes: '',
     sendPortalAccess: true,
@@ -471,7 +471,7 @@ export default function CRMPortal() {
     setConvertForm({
       manager: staffList[0]?.name || MOCK_EMPLOYEES[0].name,
       services: ['Audit'],
-      subType: 'Statutory Financial Audit',
+      subType: 'Financial Audit',
       billingAmount: '750',
       workScopeNotes: lead.notes || '',
       sendPortalAccess: true,
@@ -3337,7 +3337,7 @@ export default function CRMPortal() {
                     onChange={(e) => setConvertForm(p => ({ ...p, subType: e.target.value }))}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   >
-                    <option value="Statutory Financial Audit">Statutory Financial Audit</option>
+                    <option value="Financial Audit">{isAr ? 'تدقيق الحسابات والبيانات المالية' : 'Financial Audit'}</option>
                     <option value="Internal Audit & Controls Review">Internal Audit & Controls</option>
                     <option value="Tax Audit & Compliance Verification">Tax Audit & Compliance</option>
                     <option value="VAT Return Filing & Submission">VAT Return Filing</option>
@@ -3371,7 +3371,7 @@ export default function CRMPortal() {
                 <textarea
                   rows={3}
                   required
-                  placeholder={isAr ? 'أدخل تفاصيل ومواصفات العمل المطلوبة من رئيس القسم وموظفي التدقيق...' : 'e.g. Conduct statutory financial audit for FY2025 records. Client requires preliminary draft within 3 weeks.'}
+                  placeholder={isAr ? 'أدخل تفاصيل ومواصفات العمل المطلوبة من موظفي التدقيق...' : 'e.g. Conduct financial audit for FY2025 records. Client requires preliminary draft within 3 weeks.'}
                   value={convertForm.workScopeNotes}
                   onChange={(e) => setConvertForm(p => ({ ...p, workScopeNotes: e.target.value }))}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-medium outline-none focus:border-[#A11212]"
