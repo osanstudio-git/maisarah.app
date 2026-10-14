@@ -169,7 +169,7 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   return (
     <header 
       dir={isAr ? 'rtl' : 'ltr'}
-      className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-xs"
+      className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50 shadow-xs"
     >
       <div className="flex items-center gap-4">
         {!isClient && (
@@ -209,7 +209,7 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
             </button>
 
             {isPortalDropdownOpen && (
-              <div className={`absolute mt-2 w-72 bg-white rounded-3xl shadow-2xl border border-gray-100 py-3 z-50 animate-scale-up ${isAr ? 'left-0' : 'right-0'}`}>
+              <div className={`absolute mt-2 w-72 bg-white rounded-3xl shadow-2xl border border-gray-100 py-3 z-[100] animate-scale-up ${isAr ? 'left-0' : 'right-0'}`}>
                 <div className="px-4 pb-2 border-b border-gray-100 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Layers size={14} className="text-brand-dark" />

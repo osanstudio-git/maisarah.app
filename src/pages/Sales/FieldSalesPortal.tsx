@@ -339,9 +339,9 @@ export default function FieldSalesPortal() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-24" dir={isAr ? 'rtl' : 'ltr'}>
 
-      {/* ── Sticky Mobile Top Header ────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-xs">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
+      {/* ── Sales Specialist Header Banner ─────────────────────────────────── */}
+      <div className="max-w-lg mx-auto px-4 pt-3 pb-1">
+        <div className="bg-white border border-gray-200/80 rounded-2xl px-4 py-3 shadow-xs flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-dark to-red-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-brand-dark/20">
               {repName.charAt(0).toUpperCase()}
@@ -358,17 +358,17 @@ export default function FieldSalesPortal() {
           </div>
 
           <div className="flex items-center gap-2">
-            <LanguageSwitcher />
             <button
               onClick={() => fetchSalesData()}
-              className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-600 transition-all active:scale-95"
+              className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 transition-all active:scale-95 flex items-center gap-1.5 text-xs font-bold"
               title={isAr ? 'تحديث البيانات' : 'Refresh'}
             >
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={loading ? 'animate-spin text-brand-dark' : 'text-gray-600'} />
+              <span className="text-[11px] font-semibold">{isAr ? 'تحديث' : 'Refresh'}</span>
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* ── Main Mobile Container ───────────────────────────────────────────── */}
       <main className="max-w-lg mx-auto px-4 pt-4 space-y-4">
@@ -873,7 +873,7 @@ export default function FieldSalesPortal() {
       </main>
 
       {/* ── Mobile Bottom Navigation Bar (App Experience) ─────────────────── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-gray-200 px-3 py-2 shadow-lg">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-gray-200 px-3 py-2 shadow-lg">
         <div className="max-w-lg mx-auto grid grid-cols-5 gap-1">
 
           <button
