@@ -21,7 +21,7 @@ interface EngagementLetterModalProps {
 export default function EngagementLetterModal({ isOpen, onClose, clientData }: EngagementLetterModalProps) {
   if (!isOpen) return null;
 
-  const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'LONG', year: 'numeric' }).toUpperCase();
+  const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase();
   const currentYear = new Date().getFullYear();
   const nextYear = currentYear + 1;
 
@@ -90,7 +90,7 @@ export default function EngagementLetterModal({ isOpen, onClose, clientData }: E
       `}</style>
 
       <div className="bg-slate-950 rounded-3xl w-full max-w-7xl h-[94vh] shadow-2xl flex flex-col overflow-hidden border border-slate-800 animate-in fade-in zoom-in duration-200 text-white">
-        
+
         {/* Header Bar */}
         <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -116,8 +116,8 @@ export default function EngagementLetterModal({ isOpen, onClose, clientData }: E
               <Printer size={15} /> Print / Export PDF
             </button>
 
-            <button 
-              onClick={onClose} 
+            <button
+              onClick={onClose}
               className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors"
             >
               <X size={20} />
@@ -127,7 +127,7 @@ export default function EngagementLetterModal({ isOpen, onClose, clientData }: E
 
         {/* Studio Body */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-          
+
           {/* Left Controls */}
           <div className="w-full md:w-1/3 p-6 overflow-y-auto space-y-5 bg-slate-900 border-r border-slate-800 text-xs">
             <h4 className="text-xs font-black uppercase tracking-widest text-red-400 border-b border-slate-800 pb-2">
@@ -222,9 +222,9 @@ export default function EngagementLetterModal({ isOpen, onClose, clientData }: E
 
           {/* Right Live Document Preview Studio (2-Page A4 Sheet Format) */}
           <div className="w-full md:w-2/3 bg-slate-800 p-4 sm:p-8 overflow-y-auto flex justify-center items-start scrollbar-thin scrollbar-thumb-slate-600">
-            
-            <div 
-              id="printable-engagement-letter" 
+
+            <div
+              id="printable-engagement-letter"
               className="bg-white text-slate-900 shadow-2xl rounded-sm p-8 sm:p-12 w-full max-w-[210mm] min-h-[297mm] text-[12px] font-serif leading-relaxed select-text space-y-6 border border-slate-200"
             >
               {/* PAGE 1 */}
@@ -267,7 +267,7 @@ export default function EngagementLetterModal({ isOpen, onClose, clientData }: E
 
                 {/* Content Sections */}
                 <div className="space-y-4 font-sans text-[11px] text-slate-800">
-                  
+
                   {/* 1. INTRODUCTION */}
                   <div className="space-y-1">
                     <h3 className="font-black text-red-900 uppercase text-xs tracking-wider">1. INTRODUCTION</h3>
@@ -320,7 +320,7 @@ export default function EngagementLetterModal({ isOpen, onClose, clientData }: E
 
               {/* PAGE 2 BREAK */}
               <div className="page-break-before pt-8 space-y-6">
-                
+
                 {/* Header Page 2 */}
                 <div className="flex justify-between items-center border-b-2 border-red-900 pb-3 mb-6">
                   <div className="flex items-center gap-4">
@@ -334,7 +334,7 @@ export default function EngagementLetterModal({ isOpen, onClose, clientData }: E
                 </div>
 
                 <div className="space-y-5 font-sans text-[11px] text-slate-800">
-                  
+
                   {/* 5. REPORTING */}
                   <div className="space-y-1">
                     <h3 className="font-black text-red-900 uppercase text-xs tracking-wider">5. REPORTING</h3>

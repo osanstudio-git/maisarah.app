@@ -47,6 +47,7 @@ import InvoiceManagement from './pages/Accountant/InvoiceManagement';
 import ExpenseTracking from './pages/Accountant/ExpenseTracking';
 import ClientPayments from './pages/Accountant/ClientPayments';
 import DSRRegister from './pages/Accountant/DSRRegister';
+import BankReconciliation from './pages/Accountant/BankReconciliation';
 
 // Manager Views
 import ManagerDashboard from './pages/Manager/ManagerDashboard';
@@ -88,6 +89,10 @@ import { InstallPrompt } from './components/InstallPrompt';
 import { NetworkStatus } from './components/NetworkStatus';
 
 
+// Public Pages
+import BusinessClubLanding from './pages/Public/BusinessClubLanding';
+import ServicesDirectory from './pages/Public/ServicesDirectory';
+
 function App() {
   useLanguage(); // Initialize language listener for document layout dir
 
@@ -97,8 +102,10 @@ function App() {
       <InstallPrompt />
       <Router>
         <Routes>
-          {/* Public Route */}
+          {/* Public Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/business-club" element={<BusinessClubLanding />} />
+          <Route path="/services" element={<ServicesDirectory />} />
 
           {/* Default Redirect based on session happens in ProtectedRoute, but we can set a root fallback */}
           <Route path="/" element={<Navigate to="/login" replace />} />
@@ -123,6 +130,7 @@ function App() {
             <Route element={<ProtectedRoute allowedRoles={['accountant', 'manager']} />}>
               <Route path="/accountant" element={<AccountantDashboard />} />
               <Route path="/accountant/dsr" element={<DSRRegister />} />
+              <Route path="/accountant/reconciliation" element={<BankReconciliation />} />
               <Route path="/accountant/invoices" element={<InvoiceManagement />} />
               <Route path="/accountant/expenses" element={<ExpenseTracking />} />
               <Route path="/accountant/clients" element={<ClientPayments />} />

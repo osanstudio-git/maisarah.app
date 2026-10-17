@@ -21,6 +21,10 @@ export interface DSREntry {
   receipt_number?: string;
   payment_reference?: string;
   verified_by_accountant?: boolean;
+  reconciled?: boolean;
+  reconciled_at?: string;
+  bank_reference?: string;
+  bank_name?: string;
   created_at?: string;
 }
 

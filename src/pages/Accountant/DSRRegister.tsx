@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../hooks/useAuth';
+import { Link } from 'react-router-dom';
 import {
   FileSpreadsheet, Plus, Search, Filter, Download, CheckCircle2,
   AlertCircle, Clock, Edit2, Trash2, Check, X, ShieldCheck, Printer,
   Building2, DollarSign, Wallet, ArrowUpRight, TrendingUp, RefreshCw,
-  FileText, Receipt, CheckSquare, Eye, Sparkles
+  FileText, Receipt, CheckSquare, Eye, Sparkles, Calendar, Landmark
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -26,6 +27,13 @@ export default function DSRRegister() {
   const [invoiceFilter, setInvoiceFilter] = useState('all');
   const [verificationFilter, setVerificationFilter] = useState('all');
   const [serviceFilter, setServiceFilter] = useState('all');
+
+  // Date Filter State
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month' | 'this_quarter' | 'this_year' | 'custom'>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [dateFieldTarget, setDateFieldTarget] = useState<'date' | 'payment_date'>('date');
+
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
   // Inline edit state for note & gov fee
@@ -148,8 +156,65 @@ export default function DSRRegister() {
     return Array.from(set);
   }, [entries]);
 
+  // Date calculation helper for presets
+  const getDateRangeForPreset = useCallback((preset: string) => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const toYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    if (preset === 'today') {
+      const todayStr = toYMD(now);
+      return { start: todayStr, end: todayStr };
+    }
+    if (preset === 'yesterday') {
+      const y = new Date(now);
+      y.setDate(y.getDate() - 1);
+      const yStr = toYMD(y);
+      return { start: yStr, end: yStr };
+    }
+    if (preset === 'this_week') {
+      const start = new Date(now);
+      start.setDate(now.getDate() - 6);
+      return { start: toYMD(start), end: toYMD(now) };
+    }
+    if (preset === 'this_month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      return { start: toYMD(start), end: toYMD(end) };
+    }
+    if (preset === 'last_month') {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { start: toYMD(start), end: toYMD(end) };
+    }
+    if (preset === 'this_quarter') {
+      const currentQuarter = Math.floor(now.getMonth() / 3);
+      const start = new Date(now.getFullYear(), currentQuarter * 3, 1);
+      const end = new Date(now.getFullYear(), (currentQuarter + 1) * 3, 0);
+      return { start: toYMD(start), end: toYMD(end) };
+    }
+    if (preset === 'this_year') {
+      const start = new Date(now.getFullYear(), 0, 1);
+      const end = new Date(now.getFullYear(), 11, 31);
+      return { start: toYMD(start), end: toYMD(end) };
+    }
+    return { start: '', end: '' };
+  }, []);
+
   // Filtered entries
   const filteredEntries = useMemo(() => {
+    let start = '';
+    let end = '';
+
+    if (datePreset === 'custom') {
+      start = customStartDate;
+      end = customEndDate;
+    } else if (datePreset !== 'all') {
+      const range = getDateRangeForPreset(datePreset);
+      start = range.start;
+      end = range.end;
+    }
+
     return entries.filter(e => {
       const matchSearch =
         e.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -170,9 +235,34 @@ export default function DSRRegister() {
         (verificationFilter === 'unverified' && !e.verified_by_accountant);
       const matchSvc = serviceFilter === 'all' || e.service === serviceFilter;
 
-      return matchSearch && matchEmp && matchStatus && matchInvoice && matchVerification && matchSvc;
+      // Date check
+      let matchDate = true;
+      if (datePreset !== 'all') {
+        const targetDate = dateFieldTarget === 'payment_date' ? (e.payment_date || '') : (e.date || '');
+        if (!targetDate) {
+          matchDate = false;
+        } else {
+          if (start && targetDate < start) matchDate = false;
+          if (end && targetDate > end) matchDate = false;
+        }
+      }
+
+      return matchSearch && matchEmp && matchStatus && matchInvoice && matchVerification && matchSvc && matchDate;
     });
-  }, [entries, searchTerm, employeeFilter, statusFilter, invoiceFilter, verificationFilter, serviceFilter]);
+  }, [
+    entries,
+    searchTerm,
+    employeeFilter,
+    statusFilter,
+    invoiceFilter,
+    verificationFilter,
+    serviceFilter,
+    datePreset,
+    customStartDate,
+    customEndDate,
+    dateFieldTarget,
+    getDateRangeForPreset
+  ]);
 
   // Financial KPIs
   const kpis = useMemo(() => {
@@ -415,6 +505,13 @@ export default function DSRRegister() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to="/accountant/reconciliation"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-950 to-slate-900 hover:from-black hover:to-red-950 text-white rounded-xl text-sm font-bold border border-white/20 shadow-md transition-all active:scale-95"
+          >
+            <Landmark size={16} className="text-amber-400" />
+            {isAr ? 'المطابقة البنكية الآلية' : 'Bank Reconciliation'}
+          </Link>
           <button
             onClick={exportToExcel}
             className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-semibold backdrop-blur-md border border-white/15 transition-all shadow-sm"
@@ -533,6 +630,71 @@ export default function DSRRegister() {
           />
         </div>
 
+        {/* Date Filter Preset */}
+        <div className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100/70 border border-gray-200 rounded-xl px-3 py-2 text-sm transition-all">
+          <Calendar size={15} className="text-red-800 shrink-0" />
+          <select
+            value={datePreset}
+            onChange={e => setDatePreset(e.target.value as any)}
+            className="bg-transparent text-sm font-semibold text-gray-700 outline-none cursor-pointer"
+          >
+            <option value="all">{isAr ? 'كافة التواريخ' : 'All Dates'}</option>
+            <option value="today">{isAr ? 'اليوم (Today)' : 'Today'}</option>
+            <option value="yesterday">{isAr ? 'أمس (Yesterday)' : 'Yesterday'}</option>
+            <option value="this_week">{isAr ? 'هذا الأسبوع (This Week)' : 'This Week'}</option>
+            <option value="this_month">{isAr ? 'هذا الشهر (This Month)' : 'This Month'}</option>
+            <option value="last_month">{isAr ? 'الشهر السابق (Last Month)' : 'Last Month'}</option>
+            <option value="this_quarter">{isAr ? 'الربع الحالي (VAT Q)' : 'This Quarter (VAT)'}</option>
+            <option value="this_year">{isAr ? 'العام الحالي (This Year)' : 'This Year'}</option>
+            <option value="custom">{isAr ? 'نطاق مخصص... (Custom)' : 'Custom Range...'}</option>
+          </select>
+        </div>
+
+        {/* Custom Date Pickers */}
+        {datePreset === 'custom' && (
+          <div className="flex items-center gap-1.5 bg-rose-50/60 border border-rose-200 rounded-xl px-2.5 py-1 text-xs animate-fade-in">
+            <span className="text-[11px] font-bold text-gray-500">{isAr ? 'من:' : 'From:'}</span>
+            <input
+              type="date"
+              value={customStartDate}
+              onChange={e => setCustomStartDate(e.target.value)}
+              className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:border-red-700"
+            />
+            <span className="text-gray-400 text-xs font-bold">→</span>
+            <span className="text-[11px] font-bold text-gray-500">{isAr ? 'إلى:' : 'To:'}</span>
+            <input
+              type="date"
+              value={customEndDate}
+              onChange={e => setCustomEndDate(e.target.value)}
+              className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:border-red-700"
+            />
+          </div>
+        )}
+
+        {/* Date Field Target Toggle (Service Date vs Payment Date) */}
+        {datePreset !== 'all' && (
+          <div className="flex items-center bg-gray-100 rounded-xl p-0.5 text-[11px] font-bold">
+            <button
+              type="button"
+              onClick={() => setDateFieldTarget('date')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                dateFieldTarget === 'date' ? 'bg-white text-red-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              {isAr ? 'تاريخ الخدمة' : 'Service Date'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDateFieldTarget('payment_date')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                dateFieldTarget === 'payment_date' ? 'bg-white text-red-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              {isAr ? 'تاريخ التحصيل' : 'Payment Date'}
+            </button>
+          </div>
+        )}
+
         {/* Employee Filter */}
         <select
           value={employeeFilter}
@@ -599,8 +761,12 @@ export default function DSRRegister() {
             setInvoiceFilter('all');
             setVerificationFilter('all');
             setServiceFilter('all');
+            setDatePreset('all');
+            setCustomStartDate('');
+            setCustomEndDate('');
+            setDateFieldTarget('date');
           }}
-          className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition"
+          className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition cursor-pointer"
           title={isAr ? 'إعادة ضبط الفلاتر' : 'Reset Filters'}
         >
           <RefreshCw size={16} />
@@ -726,28 +892,51 @@ export default function DSRRegister() {
                     {/* Accountant Verification Status */}
                     <td className="px-3 py-2.5 text-center border-e border-gray-200 whitespace-nowrap">
                       {e.verified_by_accountant ? (
-                        <button
-                          onClick={() => handleQuickUnverify(e)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300 font-bold text-[10px] transition"
-                          title={isAr ? 'معتمد ومقفل (انقر لإلغاء القفل)' : 'Verified & Locked (Click to unlock)'}
-                        >
-                          <ShieldCheck size={12} className="text-emerald-600" />
-                          {isAr ? 'معتمد ومقفل' : 'Verified'}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleQuickVerify(e)}
-                          disabled={isVerifying}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] transition shadow-xs hover:shadow"
-                          title={isAr ? 'اعتماد ومطابقة القيد الآن' : 'Verify and lock this DSR record now'}
-                        >
-                          {isVerifying ? (
-                            <RefreshCw size={11} className="animate-spin" />
-                          ) : (
-                            <Clock size={11} className="text-amber-700" />
+                        <div className="flex flex-col items-center gap-1">
+                          <button
+                            onClick={() => handleQuickUnverify(e)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300 font-bold text-[10px] transition"
+                            title={isAr ? 'معتمد ومقفل (انقر لإلغاء القفل)' : 'Verified & Locked (Click to unlock)'}
+                          >
+                            <ShieldCheck size={12} className="text-emerald-600" />
+                            {isAr ? 'معتمد ومقفل' : 'Verified'}
+                          </button>
+                          {e.reconciled && (
+                            <Link
+                              to="/accountant/reconciliation"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[9px] font-bold transition"
+                              title={e.bank_reference ? `Bank: ${e.bank_name || 'Bank'} | Ref: ${e.bank_reference}` : 'Reconciled with Bank Statement'}
+                            >
+                              <Landmark size={9} />
+                              {isAr ? 'مطابق بنكياً' : 'Bank Matched'}
+                            </Link>
                           )}
-                          {isAr ? 'اعتماد وقفل' : 'Verify & Lock'}
-                        </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1">
+                          <button
+                            onClick={() => handleQuickVerify(e)}
+                            disabled={isVerifying}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] transition shadow-xs hover:shadow"
+                            title={isAr ? 'اعتماد ومطابقة القيد الآن' : 'Verify and lock this DSR record now'}
+                          >
+                            {isVerifying ? (
+                              <RefreshCw size={11} className="animate-spin" />
+                            ) : (
+                              <Clock size={11} className="text-amber-700" />
+                            )}
+                            {isAr ? 'اعتماد وقفل' : 'Verify & Lock'}
+                          </button>
+                          {e.reconciled && (
+                            <Link
+                              to="/accountant/reconciliation"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-[9px] font-bold"
+                            >
+                              <Landmark size={9} />
+                              {isAr ? 'مطابق بنكياً' : 'Bank Matched'}
+                            </Link>
+                          )}
+                        </div>
                       )}
                     </td>
 

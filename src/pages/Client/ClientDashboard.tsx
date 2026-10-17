@@ -26,6 +26,7 @@ import { DigitalClubCard, type ClubMemberData } from '../../components/client/Di
 import { ClubFeed } from '../../components/client/ClubFeed';
 import { ClientServicesList } from '../../components/client/ClientServicesList';
 import { ClientBillingList } from '../../components/client/ClientBillingList';
+import { ServicesCatalogGrid } from '../../components/services/ServicesCatalogGrid';
 
 export type ClientNavTab = 'home' | 'services' | 'billing' | 'club_card';
 
@@ -35,6 +36,7 @@ export const ClientDashboard = () => {
   const { user, signOut } = useAuth();
 
   const [activeTab, setActiveTab] = useState<ClientNavTab>('home');
+  const [servicesSubTab, setServicesSubTab] = useState<'active' | 'catalog'>('active');
   const [memberProfile, setMemberProfile] = useState<ClubMemberData | null>(null);
   const [clientType, setClientType] = useState<'client' | 'club_member'>('club_member');
   const [clientId, setClientId] = useState<string | null>(null);
@@ -132,7 +134,9 @@ export const ClientDashboard = () => {
     ...(isFullClient ? [
       { id: 'services', labelEn: 'Services', labelAr: 'خدماتي', icon: Briefcase },
       { id: 'billing', labelEn: 'Billing', labelAr: 'الفواتير والمالية', icon: CreditCard },
-    ] : []),
+    ] : [
+      { id: 'services', labelEn: 'Services Catalog', labelAr: 'دليل الخدمات', icon: Briefcase },
+    ]),
     { id: 'club_card', labelEn: 'Club Card', labelAr: 'بطاقة النادي', icon: Sparkles },
   ] as const;
 
@@ -322,21 +326,72 @@ export const ClientDashboard = () => {
               </div>
             )}
 
-            {/* ================= 📋 SERVICES TAB (Clients Only) ================= */}
-            {activeTab === 'services' && isFullClient && (
-              <div className="space-y-4 animate-in fade-in duration-300">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-black text-gray-900 tracking-tight">
-                      {isAr ? 'الخدمات والعمليات الجارية' : 'Active Services & Tasks'}
-                    </h3>
-                    <p className="text-xs text-gray-500 font-medium mt-0.5">
-                      {isAr ? 'متابعة لحظية لحالة إقراراتك ومعاملاتك المحاسبية' : 'Real-time progress on your VAT, audit, and tax deliverables'}
-                    </p>
-                  </div>
-                </div>
+            {/* ================= 📋 SERVICES TAB ================= */}
+            {activeTab === 'services' && (
+              <div className="space-y-5 animate-in fade-in duration-300">
+                {isFullClient ? (
+                  <>
+                    {/* Client Sub-Navigation Toggle */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-gray-200">
+                      <div>
+                        <h3 className="text-xl font-black text-gray-900 tracking-tight">
+                          {isAr ? 'الخدمات والعمليات' : 'Services & Engagements'}
+                        </h3>
+                        <p className="text-xs text-gray-500 font-medium mt-0.5">
+                          {isAr ? 'متابعة العمليات الجارية وطلب خدمات جديدة من دليل ميسرة' : 'Track active tasks and discover corporate solutions'}
+                        </p>
+                      </div>
 
-                <ClientServicesList clientId={clientId || undefined} userId={user?.id} />
+                      <div className="inline-flex p-1 bg-gray-100 rounded-2xl border border-gray-200/80 self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setServicesSubTab('active')}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                            servicesSubTab === 'active'
+                              ? 'bg-brand-dark text-white shadow-xs'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          {isAr ? 'المهام الجارية' : 'Active Tasks'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setServicesSubTab('catalog')}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                            servicesSubTab === 'catalog'
+                              ? 'bg-brand-dark text-white shadow-xs'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          {isAr ? 'دليل الخدمات والأسعار' : 'Services Catalog'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {servicesSubTab === 'active' ? (
+                      <ClientServicesList clientId={clientId || undefined} userId={user?.id} />
+                    ) : (
+                      <ServicesCatalogGrid />
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="p-4 bg-gradient-to-r from-red-50 to-amber-50 border border-red-200 rounded-3xl flex items-center justify-between gap-4">
+                      <div>
+                        <h4 className="font-black text-sm text-brand-dark">
+                          {isAr ? 'دليل الخدمات والاستشارات للشركات' : 'Corporate Services & Advisory Catalog'}
+                        </h4>
+                        <p className="text-xs text-gray-600 mt-0.5">
+                          {isAr
+                            ? 'بصفتك عضواً في نادي الأعمال، يمكنك استكشاف الخدمات وطلب استشارة فورية أو بدء التعاقد.'
+                            : 'As a Business Club member, explore services and initiate engagement directly on WhatsApp.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <ServicesCatalogGrid />
+                  </>
+                )}
               </div>
             )}
 

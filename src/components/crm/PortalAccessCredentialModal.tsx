@@ -146,6 +146,21 @@ Temporary Password: ${tempPass}
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const previewUrl = typeof window !== 'undefined' ? `${window.location.origin}/business-club?ref=${target.id}` : `https://maisarah.om/business-club?ref=${target.id}`;
+
+  const handleSharePreviewLink = () => {
+    const rawPhone = target.phone || '';
+    const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+    const targetPhone = cleanPhone.startsWith('968') ? cleanPhone : cleanPhone ? `968${cleanPhone}` : '';
+    const msg = isAr
+      ? `🏛️ مرحباً ${target.name}،\nندعوك لتصفح نادي أعمال ميسرة والاطلاع على أحدث تعاميم الضرائب والندوات التنفيذية عبر الرابط المخصص لك:\n${previewUrl}`
+      : `🏛️ Hello ${target.name},\nYou are invited to preview the Maisarah Business Club — direct access to Oman tax circulars, VAT updates, and executive masterclasses:\n${previewUrl}`;
+    const waUrl = targetPhone
+      ? `https://wa.me/${targetPhone}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank');
+  };
+
   const handleShareWhatsApp = () => {
     const rawPhone = target.phone || '';
     const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
@@ -267,6 +282,28 @@ Temporary Password: ${tempPass}
                 {isAr ? 'إرسال بريد الترحيب وبيانات الدخول فوراً عبر Resend' : 'Send Welcome Email with credentials immediately via Resend'}
               </label>
             </div>
+
+            {/* Quick 1-Click WhatsApp Business Club Invite for Leads */}
+            {target.type === 'lead' && (
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between gap-2">
+                <div className="text-xs">
+                  <span className="font-bold text-emerald-950 block">
+                    {isAr ? 'دعوة نادي الأعمال عبر الواتساب' : '1-Click WhatsApp Club Invite'}
+                  </span>
+                  <span className="text-[10px] text-emerald-700">
+                    {isAr ? 'إرسال رابط تصفح النادي المخصص للعميل فوراً' : 'Send instant invite link (/business-club?ref=...)'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSharePreviewLink}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
+                >
+                  <MessageCircle size={14} />
+                  <span>{isAr ? 'إرسال الرابط' : 'Send Link'}</span>
+                </button>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex gap-3 pt-3 border-t border-gray-100">

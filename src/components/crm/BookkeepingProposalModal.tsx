@@ -17,7 +17,7 @@ interface BookkeepingProposalModalProps {
 export default function BookkeepingProposalModal({ isOpen, onClose, clientData }: BookkeepingProposalModalProps) {
   if (!isOpen) return null;
 
-  const currentMonthYear = new Date().toLocaleDateString('en-US', { month: 'LONG', year: 'NUMERIC' }).toUpperCase();
+  const currentMonthYear = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase();
   const [proposalClientName, setProposalClientName] = useState(clientData?.companyName || clientData?.clientName || 'AWAN COMPANY');
   const [monthlyRate, setMonthlyRate] = useState<number>(clientData?.monthlyFee || clientData?.totalAmount || 100);
   const [proposalDate, setProposalDate] = useState(currentMonthYear);

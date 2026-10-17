@@ -31,7 +31,8 @@ import {
   Bell,
   CreditCard,
   Send,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Landmark
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
@@ -70,6 +71,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
         return [
           { title: isAr ? 'لوحة تحكم المحاسب' : 'Accountant Dashboard', icon: Home, path: '/accountant' },
           { title: isAr ? 'سجل الخدمات اليومي (DSR)' : 'DSR Daily Register', icon: FileSpreadsheet, path: '/accountant/dsr' },
+          { title: isAr ? 'المطابقة البنكية الذكية' : 'Bank Reconciliation', icon: Landmark, path: '/accountant/reconciliation' },
           { title: isAr ? 'إدارة الفواتير والتحصيل' : 'Invoice Management', icon: FileText, path: '/accountant/invoices' },
           { title: isAr ? 'مدفوعات ودفعات العملاء' : 'Client Payments', icon: CreditCard, path: '/accountant/clients' },
           { title: isAr ? 'تتبع وتوثيق المصروفات' : 'Expense Tracking', icon: Wallet, path: '/accountant/expenses' },
