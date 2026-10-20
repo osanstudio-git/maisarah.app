@@ -53,7 +53,7 @@ export default function BookkeepingProposalModal({ isOpen, onClose, clientData }
       `}</style>
 
       <div className="bg-slate-950 rounded-3xl w-full max-w-7xl h-[94vh] shadow-2xl flex flex-col overflow-hidden border border-slate-800 animate-in fade-in zoom-in duration-200 text-white">
-        
+
         {/* Header Bar */}
         <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -79,8 +79,8 @@ export default function BookkeepingProposalModal({ isOpen, onClose, clientData }
               <Printer size={15} /> Print / Export Proposal Deck (8 Pages)
             </button>
 
-            <button 
-              onClick={onClose} 
+            <button
+              onClick={onClose}
               className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors"
             >
               <X size={20} />
@@ -90,7 +90,7 @@ export default function BookkeepingProposalModal({ isOpen, onClose, clientData }
 
         {/* Studio Body */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-          
+
           {/* Left Controls */}
           <div className="w-full md:w-1/3 p-6 overflow-y-auto space-y-5 bg-slate-900 border-r border-slate-800 text-xs">
             <h4 className="text-xs font-black uppercase tracking-widest text-red-400 border-b border-slate-800 pb-2">
@@ -144,13 +144,13 @@ export default function BookkeepingProposalModal({ isOpen, onClose, clientData }
 
           {/* Right Live Document Preview Studio (8-Page Maroon Slides Container) */}
           <div className="w-full md:w-2/3 bg-slate-900 p-4 sm:p-8 overflow-y-auto flex justify-center items-start scrollbar-thin scrollbar-thumb-slate-700">
-            
+
             <div id="printable-bookkeeping-proposal" className="w-full max-w-[210mm] space-y-8 select-text">
-              
+
               {/* PAGE 1: COVER SLIDE */}
               <div className="proposal-page bg-gradient-to-br from-[#800E0E] via-[#A11212] to-[#5C0A0A] text-white p-10 min-h-[297mm] rounded-sm shadow-2xl flex flex-col justify-between relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/10 via-transparent to-transparent pointer-events-none" />
-                
+
                 {/* Header Logo */}
                 <div className="flex justify-center items-center pt-8">
                   <div className="text-center space-y-1">
@@ -350,7 +350,7 @@ export default function BookkeepingProposalModal({ isOpen, onClose, clientData }
               {/* PAGE 6: WORK PROCESS & COMMERCIAL TERMS */}
               <div className="proposal-page bg-gradient-to-br from-[#800E0E] via-[#A11212] to-[#600B0B] text-white p-10 min-h-[297mm] rounded-sm shadow-2xl flex flex-col justify-between relative">
                 <div className="space-y-8">
-                  
+
                   {/* WORK PROCESS */}
                   <div className="space-y-4">
                     <h2 className="text-3xl font-black uppercase tracking-wider border-b border-white/20 pb-3">
@@ -400,7 +400,7 @@ export default function BookkeepingProposalModal({ isOpen, onClose, clientData }
 
               {/* PAGE 8: CONTACT US */}
               <div className="proposal-page bg-gradient-to-br from-[#800E0E] via-[#A11212] to-[#5C0A0A] text-white p-10 min-h-[297mm] rounded-sm shadow-2xl flex flex-col justify-between relative">
-                
+
                 <div className="flex justify-end pt-4">
                   <img src="/logo.png" alt="Maisarah Logo" className="h-14 object-contain filter brightness-0 invert" />
                 </div>

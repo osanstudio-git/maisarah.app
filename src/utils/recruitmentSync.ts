@@ -289,56 +289,49 @@ export async function upsertRecruitToDatabase(candidate: RecruitCandidate): Prom
 
   const sanitized = sanitizeRecruitForDb(candidate);
 
-  // 2. Background DB Sync
-  const backgroundSync = async () => {
-    // 2a. Try direct table upsert onConflict: email
-    try {
-      const { data, error } = await supabase
+  // 2. Direct DB Sync to Supabase hr_recruits
+  try {
+    const { data, error } = await supabase
+      .from('hr_recruits')
+      .upsert(sanitized, { onConflict: 'email' })
+      .select()
+      .maybeSingle();
+
+    if (!error && data) {
+      upsertLocalRecruit(data);
+      return data;
+    }
+    if (error) {
+      console.warn('[recruitSync] Direct email upsert notice, trying id:', error.message);
+      const { data: dataId, error: errorId } = await supabase
         .from('hr_recruits')
-        .upsert(sanitized, { onConflict: 'email' })
+        .upsert(sanitized, { onConflict: 'id' })
         .select()
         .maybeSingle();
 
-      if (!error && data) {
-        upsertLocalRecruit(data);
-        return;
+      if (!errorId && dataId) {
+        upsertLocalRecruit(dataId);
+        return dataId;
       }
-      if (error) {
-        console.warn('[recruitSync] Direct email upsert notice, trying id:', error.message);
-        const { data: dataId, error: errorId } = await supabase
-          .from('hr_recruits')
-          .upsert(sanitized, { onConflict: 'id' })
-          .select()
-          .maybeSingle();
-
-        if (!errorId && dataId) {
-          upsertLocalRecruit(dataId);
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn('[recruitSync] Direct upsert exception:', e);
     }
+  } catch (e) {
+    console.warn('[recruitSync] Direct upsert exception:', e);
+  }
 
-    // 2b. Edge function fallback (handles RLS-restricted environments)
-    try {
-      const edgeRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
-        action: 'upsert_recruit',
-        recruit: sanitized
-      }, 8000);
+  // 3. Fallback to edge function if direct table upsert failed
+  try {
+    const edgeRes = await invokeEdgeFunctionWithTimeout('manage-auth', {
+      action: 'upsert_recruit',
+      recruit: sanitized
+    }, 5000);
 
-      if (!edgeRes.error && edgeRes.data?.success && edgeRes.data?.data) {
-        upsertLocalRecruit(edgeRes.data.data);
-      } else if (edgeRes.error) {
-        console.warn('[recruitSync] Edge function upsert failed:', edgeRes.error);
-      }
-    } catch (edgeE) {
-      console.warn('[recruitSync] Edge function exception:', edgeE);
+    if (!edgeRes.error && edgeRes.data?.success && edgeRes.data?.data) {
+      upsertLocalRecruit(edgeRes.data.data);
+      return edgeRes.data.data;
     }
-  };
-
-  // Run background sync safely
-  backgroundSync().catch(e => console.warn('[recruitSync] Background sync notice:', e));
+  } catch (edgeE) {
+    console.warn('[recruitSync] Edge function fallback notice:', edgeE);
+  }
 
   return candidate;
 }

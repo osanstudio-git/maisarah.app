@@ -982,11 +982,31 @@ export default function HREmployees() {
         // 1. Direct DB Save to hr_recruits in Supabase
         await upsertRecruitToDatabase(recruitPayload);
 
-        // 2. Fire cross-component and cross-portal sync events immediately
-        window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
-        window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
+        // 2. Direct DB Save to hr_employees in Supabase (pending placement)
+        try {
+          await supabase.from('hr_employees').upsert({
+            id: recruitId,
+            full_name: cleanName,
+            email: cleanEmail,
+            phone: formData.phone || '',
+            company_phone: formData.companyPhone || '',
+            role: formData.role || 'Pending Assignment',
+            dept: formData.dept || 'Pending Department',
+            status: 'pending_placement',
+            accessrole: 'employee',
+            employee_type: formData.type || 'Experienced',
+            basic_salary: Number(formData.basicSalary || 0),
+            joined_date: formData.joinedDate || new Date().toISOString().split('T')[0],
+            immediate_supervisor: 'To Be Assigned by Executive Manager',
+            nationality: formData.nationality || 'Omani',
+            gender: formData.gender || 'Male',
+            marital_status: formData.maritalStatus || 'Single'
+          }, { onConflict: 'id' });
+        } catch (dbErr) {
+          console.warn('Pending employee direct save notice:', dbErr);
+        }
 
-        // 3. Add to local state
+        // 3. Add to local state & persist to local storage
         const pendingEmp: any = {
           id: recruitId,
           name: cleanName,
@@ -1023,6 +1043,15 @@ export default function HREmployees() {
         };
         const updatedEmpList = [pendingEmp, ...employees.filter(e => e.email?.toLowerCase() !== pendingEmp.email && e.id !== recruitId)];
         setEmployees(updatedEmpList);
+        try {
+          localStorage.setItem('hr_employee_records', JSON.stringify(updatedEmpList));
+        } catch (lsErr) {
+          console.warn('Failed to save to hr_employee_records:', lsErr);
+        }
+
+        // 4. Fire cross-component and cross-portal sync events immediately
+        window.dispatchEvent(new CustomEvent('maisarah_recruits_updated'));
+        window.dispatchEvent(new CustomEvent('maisarah_employees_updated'));
 
         // Show success and close modal
         setNotification({
@@ -1369,7 +1398,7 @@ export default function HREmployees() {
                 accommodation_status: formData.accommodationStatus || 'Lives with family',
                 role: formData.role,
                 dept: formData.dept,
-                accessRole: accessRole
+                accessrole: accessRole
               }, { onConflict: 'id' });
             } catch (e) { console.warn('HR employees bg sync:', e); }
           })();

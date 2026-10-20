@@ -87,11 +87,12 @@ interface ServiceRecord {
 }
 
 const SERVICE_STATUS_STYLES = {
-  ongoing: { icon: PlayCircle, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', label_en: 'Ongoing', label_ar: 'قيد التنفيذ' },
-  completed: { icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100', label_en: 'Completed', label_ar: 'مكتمل' },
-  delayed: { icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', label_en: 'Delayed', label_ar: 'متأخر' },
-  under_review: { icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', label_en: 'Review', label_ar: 'قيد المراجعة' },
+  ongoing: { icon: PlayCircle, color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200/80', dot: 'bg-blue-500', label_en: 'Ongoing', label_ar: 'قيد التنفيذ' },
+  completed: { icon: CheckCircle2, color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200/80', dot: 'bg-emerald-500', label_en: 'Completed', label_ar: 'مكتمل' },
+  delayed: { icon: AlertTriangle, color: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200/80', dot: 'bg-rose-600', label_en: 'Delayed', label_ar: 'متأخر' },
+  under_review: { icon: Clock, color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200/80', dot: 'bg-amber-500', label_en: 'Review', label_ar: 'قيد المراجعة' },
 };
+
 
 const OperationsCenter = () => {
   const { t, i18n } = useTranslation();
@@ -472,6 +473,16 @@ const OperationsCenter = () => {
     return matchesSearch && matchesStatus && matchesDept;
   });
 
+  const statusCounts = useMemo(() => {
+    return {
+      all: services.length,
+      ongoing: services.filter(s => s.status === 'ongoing').length,
+      under_review: services.filter(s => s.status === 'under_review').length,
+      delayed: services.filter(s => s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed')).length,
+      completed: services.filter(s => s.status === 'completed').length,
+    };
+  }, [services]);
+
   const stats = {
     active: services.filter(s => s.status === 'ongoing' || s.status === 'under_review').length,
     bottlenecks: services.filter(s => s.status === 'delayed' || (s.due_date && new Date(s.due_date) < new Date() && s.status !== 'completed')).length,
@@ -479,508 +490,647 @@ const OperationsCenter = () => {
   };
 
   return (
-    <div className="space-y-6 pb-10 max-w-[1600px] mx-auto" dir={isAr ? 'rtl' : 'ltr'}>
+    <div className="space-y-6 pb-12 font-sans bg-[#fbf9f9]/80 -m-4 md:-m-6 p-4 md:p-6 min-h-screen text-slate-800" dir={isAr ? 'rtl' : 'ltr'}>
       {/* ── Instant Notification Feedback Toast ──────────────────────────── */}
       {toastMessage && (
-        <div className="fixed top-6 start-1/2 -translate-x-1/2 z-50 bg-gray-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-gray-700/80 backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-200">
-          <div className="w-7 h-7 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold shrink-0">
+        <div className="fixed top-6 start-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-rose-900/40 backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="w-7 h-7 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
             <CheckCheck size={16} />
           </div>
-          <span className="text-xs font-bold">{toastMessage}</span>
+          <span className="text-xs font-bold tracking-tight">{toastMessage}</span>
         </div>
       )}
 
-      {/* ── Header & View Mode Switcher ──────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-brand-dark/10 rounded-full text-xs font-bold text-brand-dark mb-1.5">
-            <Zap size={13} className="text-brand-dark" />
-            {isAr ? 'إدارة خط الإنتاج والعمليات الذكية' : 'Smart Production Line & Workload Engine'}
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-            {isAr ? 'مركز العمليات وإسناد المهام' : 'Operations & Task Assignment Center'}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1 font-medium">
-            {isAr ? 'إسناد المهام بذكاء حسب ضغط العمل، تتبع اتفاقيات SLA، وإرسال إشعارات فورية للموظفين' : 'Workload-aware delegation, real-time staff alerts, SLA tracking & Kanban execution'}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          {/* View Mode Switcher */}
-          <div className="bg-gray-100 p-1 rounded-2xl flex items-center gap-1 border border-gray-200">
-            <button
-              onClick={() => setViewMode('table')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'table'
-                  ? 'bg-white text-gray-900 shadow-xs'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-            >
-              <List size={14} />
-              <span>{isAr ? 'جدول البيانات' : 'Table'}</span>
-            </button>
-
-            <button
-              onClick={() => setViewMode('kanban')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'kanban'
-                  ? 'bg-white text-gray-900 shadow-xs'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-            >
-              <LayoutGrid size={14} />
-              <span>{isAr ? 'لوحة كانبان' : 'Kanban'}</span>
-            </button>
+      {/* ── Top Executive Command Banner & View Switcher ─────────────────── */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-[0_4px_20px_-4px_rgba(136,19,55,0.06)] border border-rose-100/60">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 text-red-900 text-[10px] font-black border border-rose-200/60 mb-1">
+              <Building2 size={11} className="text-red-800" />
+              <span>{isAr ? 'ميسرة للاستشارات والتدقيق المالي' : 'Maisarah Financial & Auditing'}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                {isAr ? 'إدارة العمليات والمهام التنفيذية' : 'Operations & Deliverables Command'}
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-black border border-emerald-200/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                {isAr ? 'مزامنة حية ومباشرة' : 'Live Real-Time Stream'}
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm font-medium text-slate-400">
+              {isAr
+                ? 'متابعة تدفق إنجاز العمليات والخدمات، تخصيص استيعاب المستشارين، ومراقبة الالتزام بمواعيد التسليم SLA'
+                : 'Live monitoring of client deliverables, consultant capacity distribution & SLA timeline execution'}
+            </p>
           </div>
 
-          <button
-            onClick={() => fetchServices()}
-            className="p-2.5 bg-white border border-gray-200 rounded-2xl text-gray-600 hover:text-brand-dark hover:shadow-sm transition-all cursor-pointer flex items-center gap-2 text-xs font-bold"
-            title={isAr ? 'تحديث البيانات' : 'Refresh Operations'}
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">{isAr ? 'تحديث' : 'Sync'}</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
+            {/* View Mode Switcher */}
+            <div className="bg-rose-50/70 p-1 rounded-2xl flex items-center gap-1 border border-rose-100/80">
+              <button
+                onClick={() => setViewMode('table')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-gradient-to-r from-red-950 via-rose-900 to-red-900 text-white shadow-xs font-black'
+                    : 'text-slate-500 hover:text-red-900'
+                }`}
+              >
+                <List size={14} />
+                <span>{isAr ? 'جدول البيانات' : 'Table'}</span>
+              </button>
 
-          <button
-            onClick={() => {
-              setEditingService(null);
-              setFormData({
-                title: '',
-                client_id: clients[0]?.id || '',
-                employee_id: employees[0]?.id || '',
-                due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-                description: '',
-                priority: 'medium',
-                status: 'ongoing'
-              });
-              setShowCreateModal(true);
-            }}
-            className="px-5 py-2.5 bg-brand-dark hover:bg-brand text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-brand-dark/15 transition-all cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>{isAr ? 'إسناد مهمة جديدة' : '+ Assign New Task'}</span>
-          </button>
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'kanban'
+                    ? 'bg-gradient-to-r from-red-950 via-rose-900 to-red-900 text-white shadow-xs font-black'
+                    : 'text-slate-500 hover:text-red-900'
+                }`}
+              >
+                <LayoutGrid size={14} />
+                <span>{isAr ? 'لوحة كانبان' : 'Kanban'}</span>
+              </button>
+            </div>
+
+            {/* Sync Button */}
+            <button
+              onClick={() => fetchServices()}
+              className="px-3.5 py-2 bg-white border border-rose-100/80 rounded-2xl text-slate-600 hover:text-red-900 hover:border-rose-200 shadow-xs transition-all cursor-pointer flex items-center gap-2 text-xs font-bold"
+              title={isAr ? 'تحديث البيانات' : 'Sync Operations'}
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin text-red-900' : 'text-slate-400'} />
+              <span className="hidden sm:inline">{isAr ? 'تحديث' : 'Sync'}</span>
+            </button>
+
+            {/* + Assign New Task Button with Signature Maisarah Red */}
+            <button
+              onClick={() => {
+                setEditingService(null);
+                setFormData({
+                  title: '',
+                  client_id: clients[0]?.id || '',
+                  employee_id: employees[0]?.id || '',
+                  due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+                  description: '',
+                  priority: 'medium',
+                  status: 'ongoing'
+                });
+                setShowCreateModal(true);
+              }}
+              className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-red-950 via-rose-900 to-red-900 hover:from-red-900 hover:to-rose-950 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-red-950/25 transition-all cursor-pointer hover:-translate-y-0.5"
+            >
+              <Plus size={16} />
+              <span>{isAr ? 'إسناد مهمة جديدة' : '+ Assign New Task'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* ── Section 1: Real-Time Executive Pulse Bar ───────────────────── */}
+      {/* ── Section 1: Executive 4-Pulse Real-Time Metrics ────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Active Operations */}
-        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-brand-dark text-white rounded-3xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none" />
-          <div className="flex items-center justify-between relative z-10 mb-3">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">
+        {/* Card 1: Active Deliverables (Signature Maisarah Red Hero) */}
+        <div className="bg-gradient-to-br from-red-950 via-rose-900 to-red-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg shadow-red-950/25 flex flex-col justify-between min-h-[120px] transition-transform hover:-translate-y-0.5 border border-red-800/40 relative overflow-hidden">
+          <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="flex items-center justify-between relative z-10 mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-rose-200">
               {isAr ? 'العمليات النشطة' : 'Active Deliverables'}
             </span>
-            <div className="p-2 rounded-xl bg-white/10 text-white">
+            <div className="w-8 h-8 rounded-xl bg-white/10 text-white flex items-center justify-center shadow-xs">
               <Activity size={16} />
             </div>
           </div>
           <div className="relative z-10">
-            <p className="text-3xl font-black">{stats.active}</p>
-            <p className="text-[11px] text-slate-300 font-medium mt-0.5">
-              {isAr ? 'معاملة قيد التنفيذ والمراجعة' : 'In production & review'}
+            <div className="flex items-baseline justify-between gap-1.5 my-0.5">
+              <span className="text-3xl font-black tracking-tight text-white">{stats.active}</span>
+              <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 shadow-xs">
+                {isAr ? 'قيد التنفيذ والمراجعة' : 'In Production'}
+              </span>
+            </div>
+            <p className="text-[10px] text-rose-200/80 mt-1">
+              {isAr ? `${services.length} إجمالي المعاملات المسجلة` : `${services.length} Total Registered Files`}
             </p>
           </div>
         </div>
 
-        {/* Card 2: Critical Bottlenecks */}
-        <div className={`rounded-3xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between border transition-all ${
-          stats.bottlenecks > 0 
-            ? 'bg-gradient-to-br from-red-600 via-red-700 to-rose-900 text-white border-red-500' 
-            : 'bg-white border-gray-100 text-gray-900'
+        {/* Card 2: SLA Bottlenecks & Critical Delivery Alerts */}
+        <div className={`rounded-2xl p-4 sm:p-5 flex flex-col justify-between min-h-[120px] transition-transform hover:-translate-y-0.5 border relative overflow-hidden ${
+          stats.bottlenecks > 0
+            ? 'bg-gradient-to-br from-rose-800 via-red-900 to-red-950 text-white border-rose-600/50 shadow-lg shadow-red-950/25'
+            : 'bg-white border-rose-100/80 text-slate-900 shadow-xs'
         }`}>
-          <div className="flex items-center justify-between relative z-10 mb-3">
-            <span className={`text-[10px] font-black uppercase tracking-wider ${stats.bottlenecks > 0 ? 'text-rose-200' : 'text-gray-400'}`}>
-              {isAr ? 'تنبيهات SLA / متأخرة' : 'SLA Bottlenecks'}
+          <div className="flex items-center justify-between relative z-10 mb-2">
+            <span className={`text-[10px] font-black uppercase tracking-wider ${stats.bottlenecks > 0 ? 'text-rose-200' : 'text-slate-400'}`}>
+              {isAr ? 'تنبيهات SLA والمتأخرات' : 'SLA Bottlenecks'}
             </span>
-            <div className={`p-2 rounded-xl ${stats.bottlenecks > 0 ? 'bg-white/20 text-white' : 'bg-red-50 text-red-600'}`}>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-xs ${
+              stats.bottlenecks > 0 ? 'bg-white/20 text-white' : 'bg-rose-50 text-red-900'
+            }`}>
               <ShieldAlert size={16} />
             </div>
           </div>
           <div className="relative z-10">
-            <p className={`text-3xl font-black ${stats.bottlenecks > 0 ? 'text-white' : 'text-gray-900'}`}>{stats.bottlenecks}</p>
-            <p className={`text-[11px] font-medium mt-0.5 ${stats.bottlenecks > 0 ? 'text-rose-200' : 'text-gray-500'}`}>
-              {stats.bottlenecks > 0 ? (isAr ? 'تتطلب تدخلاً فورياً' : 'Requires manager action') : (isAr ? 'الكل ضمن الجدول الزمني' : 'All tasks on SLA track')}
+            <div className="flex items-baseline justify-between gap-1.5 my-0.5">
+              <span className={`text-3xl font-black tracking-tight ${stats.bottlenecks > 0 ? 'text-white' : 'text-slate-900'}`}>
+                {stats.bottlenecks}
+              </span>
+              <span className={`font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 ${
+                stats.bottlenecks > 0
+                  ? 'bg-rose-950/70 text-white border border-rose-400/40'
+                  : 'bg-emerald-100 text-emerald-800 border border-emerald-200/60'
+              }`}>
+                {stats.bottlenecks > 0 ? (isAr ? 'يتطلب تدخل' : 'Action Needed') : (isAr ? 'ضمن الوقت' : '100% On Track')}
+              </span>
+            </div>
+            <p className={`text-[10px] mt-1 ${stats.bottlenecks > 0 ? 'text-rose-200/80' : 'text-slate-400'}`}>
+              {stats.bottlenecks > 0
+                ? (isAr ? 'معاملات تجاوزت الموعد النهائي' : 'Tasks exceeding SLA deadline')
+                : (isAr ? 'كافة المعاملات ضمن الإطار الزمني' : 'Zero SLA violations recorded')}
             </p>
           </div>
         </div>
 
         {/* Card 3: Today's Completed Throughput */}
-        <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between relative z-10 mb-3">
-            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+        <div className="bg-white border border-rose-100/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between min-h-[120px] transition-transform hover:-translate-y-0.5 shadow-xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
               {isAr ? 'إنجاز اليوم' : 'Completed Today'}
             </span>
-            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
               <CheckCircle2 size={16} />
             </div>
           </div>
-          <div className="relative z-10">
-            <p className="text-3xl font-black text-gray-900">{stats.completedToday}</p>
-            <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
-              {isAr ? 'معاملة سلمت للعملاء' : 'Deliverables finished'}
+          <div>
+            <div className="flex items-baseline justify-between gap-1.5 my-0.5">
+              <span className="text-3xl font-black text-emerald-700 tracking-tight">{stats.completedToday}</span>
+              <span className="bg-emerald-100 text-emerald-800 font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 border border-emerald-200/60">
+                {isAr ? 'مكتمل' : 'Deliverables Done'}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {isAr ? 'معاملات منجزة ومسلمة للعميل' : 'Delivered & finalized for clients'}
             </p>
           </div>
         </div>
 
-        {/* Card 4: Staff Workload Health */}
-        <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between relative z-10 mb-3">
-            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+        {/* Card 4: Staff Workload & Team Capacity */}
+        <div className="bg-white border border-rose-100/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between min-h-[120px] transition-transform hover:-translate-y-0.5 shadow-xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
               {isAr ? 'توزيع ضغط الفريق' : 'Team Capacity'}
             </span>
-            <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
+            <div className="w-8 h-8 rounded-xl bg-rose-50 text-red-900 flex items-center justify-center shadow-xs">
               <UserCheck size={16} />
             </div>
           </div>
-          <div className="relative z-10">
-            <p className="text-3xl font-black text-gray-900">
-              {employees.length} <span className="text-xs text-gray-400 font-normal">{isAr ? 'مستشار وموظف' : 'Consultants'}</span>
-            </p>
-            <p className="text-[11px] text-blue-600 font-bold mt-0.5">
-              {isAr ? 'توزيع مباشر بذكاء استيعابي' : 'Capacity-aware allocation'}
+          <div>
+            <div className="flex items-baseline justify-between gap-1.5 my-0.5">
+              <span className="text-3xl font-black text-slate-900 tracking-tight">
+                {employees.length} <span className="text-xs text-slate-400 font-normal">{isAr ? 'مستشار' : 'Staff'}</span>
+              </span>
+              <span className="bg-rose-100 text-red-900 font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 border border-rose-200/60">
+                {isAr ? 'توزيع متوازن' : 'Load Balanced'}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {isAr ? 'إسناد مباشر وذكي حسب السعة' : 'Direct capacity-aware allocation'}
             </p>
           </div>
         </div>
       </div>
 
-      {/* ── Section 2: Global Pipeline Operations ─────────────────────────── */}
-      <div className="space-y-4">
-        {/* Department Quick Filter Chips */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+      {/* ── Section 2: Department Quick Filter Pills ─────────────────────── */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+        <button
+          onClick={() => setDeptFilter('all')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+            deptFilter === 'all'
+              ? 'bg-gradient-to-r from-red-950 via-rose-900 to-red-900 text-white shadow-sm shadow-red-950/20'
+              : 'bg-white border border-rose-100/80 text-slate-600 hover:text-red-900 hover:bg-rose-50/50 shadow-2xs'
+          }`}
+        >
+          {isAr ? 'جميع الأقسام' : 'All Departments'}
+        </button>
+
+        {getAllDepartments().map(d => (
           <button
-            onClick={() => setDeptFilter('all')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
-              deptFilter === 'all'
-                ? 'bg-brand-dark text-white shadow-sm'
-                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+            key={d.id}
+            onClick={() => setDeptFilter(d.id)}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              deptFilter === d.id
+                ? 'bg-gradient-to-r from-red-950 via-rose-900 to-red-900 text-white shadow-sm shadow-red-950/20 font-black'
+                : 'bg-white border border-rose-100/80 text-slate-600 hover:text-red-900 hover:bg-rose-50/50 shadow-2xs'
             }`}
           >
-            {isAr ? 'جميع الأقسام' : 'All Departments'}
+            <span>{d.name}</span>
           </button>
-          
-          {getAllDepartments().map(d => (
-            <button
-              key={d.id}
-              onClick={() => setDeptFilter(d.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                deptFilter === d.id
-                  ? 'bg-brand-dark text-white shadow-sm font-black'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <span>{d.name}</span>
-            </button>
-          ))}
-        </div>
+        ))}
+      </div>
 
-        {/* Search & Filters Bar */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={16} />
-            <input
-              type="text"
-              placeholder={isAr ? 'بحث سريع باسم الخدمة، الشركة أو الموظف...' : 'Search by service, company, or employee...'}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full ${isAr ? 'pr-10' : 'pl-10'} py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-brand-dark text-xs font-bold transition-all`}
-            />
-          </div>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-brand-dark min-w-[130px] cursor-pointer"
+      {/* ── Section 3: Interactive Filter & Search Command Bar ───────────── */}
+      <div className="bg-white rounded-2xl shadow-xs border border-rose-100/80 p-3 flex flex-wrap gap-3 items-center justify-between">
+        {/* Quick Status Stage Filters */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 custom-scrollbar">
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+              statusFilter === 'all'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-50 text-slate-600 hover:bg-rose-50 hover:text-red-900 border border-slate-200/60'
+            }`}
           >
-            <option value="all">{isAr ? 'كل الحالات' : 'All Statuses'}</option>
-            <option value="ongoing">{isAr ? 'قيد التنفيذ' : 'Ongoing'}</option>
-            <option value="under_review">{isAr ? 'قيد المراجعة' : 'Under Review'}</option>
-            <option value="delayed">{isAr ? 'متأخرة' : 'Delayed'}</option>
-            <option value="completed">{isAr ? 'مكتملة' : 'Completed'}</option>
-          </select>
+            <span>{isAr ? 'الكل' : 'All'}</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              statusFilter === 'all' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-700'
+            }`}>
+              {statusCounts.all}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter('ongoing')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+              statusFilter === 'ongoing'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-blue-50/70 text-blue-700 hover:bg-blue-100 border border-blue-200/60'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            <span>{isAr ? 'قيد التنفيذ' : 'Ongoing'}</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              statusFilter === 'ongoing' ? 'bg-white/20 text-white' : 'bg-blue-200/70 text-blue-800'
+            }`}>
+              {statusCounts.ongoing}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter('under_review')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+              statusFilter === 'under_review'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-amber-50/70 text-amber-700 hover:bg-amber-100 border border-amber-200/60'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            <span>{isAr ? 'للمراجعة' : 'In Review'}</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              statusFilter === 'under_review' ? 'bg-white/20 text-white' : 'bg-amber-200/70 text-amber-800'
+            }`}>
+              {statusCounts.under_review}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter('delayed')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+              statusFilter === 'delayed'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-rose-50/70 text-red-800 hover:bg-rose-100 border border-rose-200/60'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            <span>{isAr ? 'متأخرة / تنبيه' : 'Delayed / SLA'}</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              statusFilter === 'delayed' ? 'bg-white/20 text-white' : 'bg-rose-200/80 text-red-900'
+            }`}>
+              {statusCounts.delayed}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter('completed')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+              statusFilter === 'completed'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-emerald-50/70 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span>{isAr ? 'مكتملة' : 'Completed'}</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              statusFilter === 'completed' ? 'bg-white/20 text-white' : 'bg-emerald-200/70 text-emerald-800'
+            }`}>
+              {statusCounts.completed}
+            </span>
+          </button>
         </div>
 
-        {/* ── View Mode 1: Table View ─────────────────────────────────────── */}
-        {viewMode === 'table' ? (
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden min-h-[360px]">
-            {loading ? (
-              <div className="p-20 flex flex-col justify-center items-center gap-3">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark" />
-                <p className="text-xs text-gray-400 font-bold">{isAr ? 'جاري مزامنة خط العمليات...' : 'Syncing operations line...'}</p>
+        {/* Search Bar with Red Focus */}
+        <div className="relative flex-1 min-w-[240px] max-w-md">
+          <Search className={`absolute ${isAr ? 'right-3.5' : 'left-3.5'} top-1/2 -translate-y-1/2 text-slate-400`} size={15} />
+          <input
+            type="text"
+            placeholder={isAr ? 'بحث باسم الخدمة، الشركة أو المستشار المسؤول...' : 'Search by deliverable, client, or staff...'}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className={`w-full ${isAr ? 'pr-9 pl-8' : 'pl-9 pr-8'} py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-red-900 focus:bg-white focus:ring-2 focus:ring-red-900/10 text-xs font-bold transition-all text-slate-800`}
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className={`absolute ${isAr ? 'left-2.5' : 'right-2.5'} top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5`}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── View Mode 1: Executive Table View ────────────────────────────── */}
+      {viewMode === 'table' ? (
+        <div className="bg-white rounded-3xl shadow-[0_4px_20px_-4px_rgba(136,19,55,0.06)] border border-rose-100/60 overflow-hidden min-h-[380px]">
+          {loading ? (
+            <div className="p-20 flex flex-col justify-center items-center gap-3">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-900" />
+              <p className="text-xs text-slate-400 font-bold">{isAr ? 'جاري مزامنة خط العمليات...' : 'Syncing operations data...'}</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="p-12 lg:p-16 text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-rose-50 text-red-900 mx-auto flex items-center justify-center border border-rose-200/60 shadow-xs">
+                <Activity size={26} />
               </div>
-            ) : filtered.length === 0 ? (
-              <div className="p-10 lg:p-14 text-center space-y-4">
-                <div className="w-16 h-16 rounded-3xl bg-red-50 text-brand-dark mx-auto flex items-center justify-center shadow-inner">
-                  <Zap size={32} />
-                </div>
-                <h3 className="text-lg font-black text-gray-900">{isAr ? 'لا توجد مهام مطابقة' : 'No Tasks Found'}</h3>
-                <p className="text-xs text-gray-500 font-medium">{isAr ? 'قم بإنشاء مهمة جديدة لإسنادها للفريق' : 'Create a new task to assign to staff'}</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-start whitespace-nowrap">
-                  <thead className="bg-gray-50/75 border-b border-gray-100">
-                    <tr>
-                      <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider w-20">
-                        {isAr ? 'الرقم / الكود' : '# / ID'}
-                      </th>
-                      <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
-                        {isAr ? 'الشركة (العميل)' : 'Client / Company'}
-                      </th>
-                      <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
-                        {isAr ? 'القسم والخدمة' : 'Dept & Service'}
-                      </th>
-                      <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
-                        {isAr ? 'المسؤول المباشر وضغط العمل' : 'Assignee & Workload'}
-                      </th>
-                      <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
-                        {isAr ? 'مؤشر SLA' : 'SLA Status'}
-                      </th>
-                      <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-gray-400 tracking-wider">
-                        {isAr ? 'الحالة' : 'State'}
-                      </th>
-                      <th className="px-6 py-4 text-end text-[10px] font-black uppercase text-gray-400 tracking-wider">
-                        {isAr ? 'إجراءات' : 'Actions'}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50 text-xs">
-                    {filtered.map((svc, index) => {
-                      const status = SERVICE_STATUS_STYLES[svc.status] || SERVICE_STATUS_STYLES.ongoing;
-                      const dept = getDepartmentForService(svc.title);
-                      const deptCode = DEPARTMENT_CODES[dept.id] || 'OPS';
-                      const sla = getSLAStatus(svc.due_date);
-                      const isSelected = activeMenuId === svc.id;
-                      const empLoad = svc.employee_id ? employeeWorkload[svc.employee_id] : null;
+              <h3 className="text-base font-black text-slate-900">{isAr ? 'لا توجد مهام مطابقة للبحث' : 'No Matching Operations Found'}</h3>
+              <p className="text-xs text-slate-400 font-medium max-w-sm mx-auto">
+                {isAr ? 'جرب تغيير معايير البحث أو القسم أو قم بإسناد مهمة جديدة للفريق' : 'Adjust your search filters or click "+ Assign New Task" to register a deliverable'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-start whitespace-nowrap">
+                <thead className="bg-rose-50/40 border-b border-rose-100/80">
+                  <tr>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-rose-950/70 tracking-wider w-24">
+                      {isAr ? 'الرقم / الكود' : '# / ID'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-rose-950/70 tracking-wider">
+                      {isAr ? 'الشركة (العميل)' : 'Client / Company'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-rose-950/70 tracking-wider">
+                      {isAr ? 'القسم والخدمة' : 'Dept & Service'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-rose-950/70 tracking-wider">
+                      {isAr ? 'المسؤول المباشر وضغط العمل' : 'Assignee & Workload'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-rose-950/70 tracking-wider">
+                      {isAr ? 'مؤشر SLA' : 'SLA Status'}
+                    </th>
+                    <th className="px-6 py-4 text-start text-[10px] font-black uppercase text-rose-950/70 tracking-wider">
+                      {isAr ? 'الحالة' : 'State'}
+                    </th>
+                    <th className="px-6 py-4 text-end text-[10px] font-black uppercase text-rose-950/70 tracking-wider">
+                      {isAr ? 'إجراءات' : 'Actions'}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-rose-100/40 text-xs">
+                  {filtered.map((svc, index) => {
+                    const status = SERVICE_STATUS_STYLES[svc.status] || SERVICE_STATUS_STYLES.ongoing;
+                    const dept = getDepartmentForService(svc.title);
+                    const deptCode = DEPARTMENT_CODES[dept.id] || 'OPS';
+                    const sla = getSLAStatus(svc.due_date);
+                    const isSelected = activeMenuId === svc.id;
+                    const empLoad = svc.employee_id ? employeeWorkload[svc.employee_id] : null;
 
-                      return (
-                        <tr key={svc.id} className="group hover:bg-gray-50/60 transition-colors">
-                          {/* 1. Sequence & Department Code */}
-                          <td className="px-6 py-4">
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gray-100/80 border border-gray-200/60 text-gray-800 font-black text-xs">
-                              <span className="text-[10px] text-brand-dark uppercase tracking-wider font-extrabold">{deptCode}</span>
-                              <span className="text-gray-400 font-bold">#{index + 1}</span>
+                    return (
+                      <tr key={svc.id} className="group hover:bg-rose-50/30 transition-colors">
+                        {/* 1. Sequence & Department Code */}
+                        <td className="px-6 py-4">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-50/70 border border-rose-200/60 text-red-950 font-black text-xs">
+                            <span className="text-[10px] text-red-900 uppercase tracking-wider font-extrabold">{deptCode}</span>
+                            <span className="text-slate-400 font-bold">#{index + 1}</span>
+                          </div>
+                        </td>
+
+                        {/* 2. Company */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-red-950 to-rose-900 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
+                              {(svc.clients?.company_name || 'C').charAt(0).toUpperCase()}
                             </div>
-                          </td>
-
-                          {/* 2. Company */}
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <Building2 size={16} className="text-brand-dark shrink-0" />
-                              <span className="font-black text-gray-900 tracking-tight">
-                                {svc.clients?.company_name || (isAr ? 'عميل عام' : 'Generic Client')}
+                            <div className="min-w-0">
+                              <span className="font-black text-slate-900 tracking-tight block truncate max-w-[200px]">
+                                {svc.clients?.company_name || (isAr ? 'عميل عام' : 'Corporate Client')}
                               </span>
-                            </div>
-                          </td>
-
-                          {/* 3. Department & Service Deliverable */}
-                          <td className="px-6 py-4">
-                            <p className="text-[10px] font-black text-brand-dark uppercase tracking-widest mb-0.5">{dept.name}</p>
-                            <p className="font-bold text-gray-900 truncate max-w-[240px]" title={svc.title}>{svc.title}</p>
-                            {svc.description && (
-                              <p className="text-[10px] text-gray-400 truncate max-w-[240px] mt-0.5">{svc.description}</p>
-                            )}
-                          </td>
-
-                          {/* 4. Handled By (Assignee) with Workload Indicator */}
-                          <td className="px-6 py-4">
-                            <button
-                              onClick={() => setReassignService(svc)}
-                              className="flex items-center gap-2.5 hover:opacity-80 transition-all cursor-pointer text-start group/btn"
-                              title={isAr ? 'تغيير المسؤول وإرسال إشعار فوري' : 'Reassign & notify employee'}
-                            >
-                              <div className="w-8 h-8 rounded-full bg-brand-dark/10 border border-brand-dark/20 flex items-center justify-center text-xs font-black text-brand-dark group-hover/btn:bg-brand-dark group-hover/btn:text-white transition-colors shrink-0">
-                                {svc.profiles?.full_name ? svc.profiles.full_name.charAt(0).toUpperCase() : '?'}
-                              </div>
-                              <div className="min-w-0">
-                                <span className="font-black text-gray-800 group-hover/btn:text-brand-dark group-hover/btn:underline block truncate">
-                                  {svc.profiles?.full_name || (isAr ? 'غير مسند' : 'Unassigned')}
+                              {svc.clients?.email && (
+                                <span className="text-[10px] text-slate-400 block truncate max-w-[200px]">
+                                  {svc.clients.email}
                                 </span>
-                                {empLoad && (
-                                  <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded-md mt-0.5 ${
-                                    empLoad.active <= 2
-                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                      : empLoad.active <= 5
-                                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                        : 'bg-red-50 text-red-700 border border-red-200'
-                                  }`}>
-                                    {empLoad.active} {isAr ? 'مهام جارية' : 'active tasks'}
-                                  </span>
-                                )}
-                              </div>
-                            </button>
-                          </td>
-
-                          {/* 5. SLA Status */}
-                          <td className="px-6 py-4">
-                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase inline-flex items-center gap-1 ${sla.bg} ${sla.color}`}>
-                              <Clock size={11} />
-                              {sla.text}
-                            </span>
-                          </td>
-
-                          {/* 6. State / Status */}
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <span className={`w-2.5 h-2.5 rounded-full ${status.bg.replace('-50', '-500')}`} />
-                              <span className="font-black text-gray-800 uppercase tracking-tight">
-                                {isAr ? status.label_ar : status.label_en}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* 7. Actions Menu Button */}
-                          <td className="px-6 py-4 text-end">
-                            <button
-                              onClick={(e) => handleOpenMenu(e, svc.id)}
-                              className={`p-2 rounded-xl transition-all cursor-pointer ${isSelected
-                                ? 'bg-brand-dark text-white shadow-sm'
-                                : 'text-gray-400 hover:text-brand-dark hover:bg-gray-100'
-                                }`}
-                              title={isAr ? 'إجراءات' : 'Actions'}
-                            >
-                              <MoreVertical size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* ── View Mode 2: Interactive Kanban Board ───────────────────────── */
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {(['ongoing', 'under_review', 'delayed', 'completed'] as const).map(colStatus => {
-              const colTasks = filtered.filter(s => s.status === colStatus);
-              const colStyle = SERVICE_STATUS_STYLES[colStatus];
-
-              return (
-                <div key={colStatus} className="bg-gray-50/80 rounded-3xl p-4 border border-gray-200 flex flex-col h-[680px]">
-                  {/* Column Header */}
-                  <div className="flex items-center justify-between pb-3 border-b border-gray-200 mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-3 h-3 rounded-full ${colStyle.bg.replace('-50', '-500')}`} />
-                      <h4 className="font-black text-gray-900 text-sm">
-                        {isAr ? colStyle.label_ar : colStyle.label_en}
-                      </h4>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full bg-white text-gray-700 text-xs font-black border border-gray-200 shadow-2xs">
-                      {colTasks.length}
-                    </span>
-                  </div>
-
-                  {/* Cards Area */}
-                  <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pe-1">
-                    {colTasks.length === 0 ? (
-                      <div className="h-40 border-2 border-dashed border-gray-200 rounded-2xl flex items-center justify-center text-xs text-gray-400 font-bold">
-                        {isAr ? 'لا توجد مهام في هذه المرحلة' : 'No tasks in this stage'}
-                      </div>
-                    ) : (
-                      colTasks.map(task => {
-                        const dept = getDepartmentForService(task.title);
-                        const sla = getSLAStatus(task.due_date);
-                        const empLoad = task.employee_id ? employeeWorkload[task.employee_id] : null;
-
-                        return (
-                          <div
-                            key={task.id}
-                            className="bg-white p-4 rounded-2xl border border-gray-200/80 hover:border-brand-dark/40 shadow-xs hover:shadow-md transition-all space-y-3 group"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded bg-brand-dark/10 text-brand-dark uppercase tracking-wider">
-                                {dept.name}
-                              </span>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${sla.bg} ${sla.color}`}>
-                                <Clock size={10} />
-                                {sla.text}
-                              </span>
-                            </div>
-
-                            <div>
-                              <h5 className="font-black text-gray-900 text-xs line-clamp-2" title={task.title}>
-                                {task.title}
-                              </h5>
-                              <p className="text-[11px] font-bold text-gray-500 mt-1 flex items-center gap-1">
-                                <Building2 size={12} className="text-gray-400" />
-                                <span className="truncate">{task.clients?.company_name || 'Generic Client'}</span>
-                              </p>
-                            </div>
-
-                            {/* Assignee & Workload */}
-                            <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                              <button
-                                onClick={() => setReassignService(task)}
-                                className="flex items-center gap-1.5 text-start hover:opacity-80 transition"
-                                title="Click to reassign"
-                              >
-                                <div className="w-6 h-6 rounded-full bg-brand-dark/10 text-brand-dark flex items-center justify-center text-[10px] font-black">
-                                  {task.profiles?.full_name ? task.profiles.full_name.charAt(0) : '?'}
-                                </div>
-                                <span className="text-[11px] font-bold text-gray-800 truncate max-w-[90px]">
-                                  {task.profiles?.full_name || 'Unassigned'}
-                                </span>
-                              </button>
-
-                              {empLoad && (
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
-                                  empLoad.active <= 2 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                                }`}>
-                                  {empLoad.active} {isAr ? 'مهام' : 'tasks'}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Quick Kanban Action Progression */}
-                            <div className="flex items-center justify-between pt-1 gap-1">
-                              {colStatus !== 'ongoing' && (
-                                <button
-                                  onClick={() => handleQuickStatusChange(task.id, 'ongoing')}
-                                  className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-[10px] font-bold transition flex items-center gap-1"
-                                  title="Move to Ongoing"
-                                >
-                                  {isAr ? <ArrowRight size={11} /> : <ArrowLeft size={11} />}
-                                  {isAr ? 'قيد التنفيذ' : 'Ongoing'}
-                                </button>
-                              )}
-
-                              {colStatus !== 'under_review' && colStatus !== 'completed' && (
-                                <button
-                                  onClick={() => handleQuickStatusChange(task.id, 'under_review')}
-                                  className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ms-auto"
-                                  title="Move to Review"
-                                >
-                                  {isAr ? 'للمراجعة' : 'Review'}
-                                  {isAr ? <ArrowLeft size={11} /> : <ArrowRight size={11} />}
-                                </button>
-                              )}
-
-                              {colStatus !== 'completed' && (
-                                <button
-                                  onClick={() => handleQuickStatusChange(task.id, 'completed')}
-                                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ms-auto"
-                                  title="Mark as Completed"
-                                >
-                                  <CheckCheck size={11} />
-                                  {isAr ? 'إكمال' : 'Done'}
-                                </button>
                               )}
                             </div>
                           </div>
-                        );
-                      })
-                    )}
+                        </td>
+
+                        {/* 3. Department & Service Deliverable */}
+                        <td className="px-6 py-4">
+                          <p className="text-[10px] font-black text-red-900 uppercase tracking-widest mb-0.5">{dept.name}</p>
+                          <p className="font-bold text-slate-900 truncate max-w-[240px]" title={svc.title}>{svc.title}</p>
+                          {svc.description && (
+                            <p className="text-[10px] text-slate-400 truncate max-w-[240px] mt-0.5">{svc.description}</p>
+                          )}
+                        </td>
+
+                        {/* 4. Handled By (Assignee) with Workload Indicator */}
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => setReassignService(svc)}
+                            className="flex items-center gap-2.5 hover:opacity-85 transition-all cursor-pointer text-start group/btn"
+                            title={isAr ? 'تغيير المسؤول وإرسال إشعار فوري' : 'Reassign & notify staff'}
+                          >
+                            <div className="w-8 h-8 rounded-full bg-rose-50 border border-rose-200/70 flex items-center justify-center text-xs font-black text-red-900 group-hover/btn:bg-red-900 group-hover/btn:text-white transition-colors shrink-0">
+                              {svc.profiles?.full_name ? svc.profiles.full_name.charAt(0).toUpperCase() : '?'}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="font-black text-slate-800 group-hover/btn:text-red-900 group-hover/btn:underline block truncate">
+                                {svc.profiles?.full_name || (isAr ? 'غير مسند' : 'Unassigned')}
+                              </span>
+                              {empLoad && (
+                                <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded-md mt-0.5 ${
+                                  empLoad.active <= 2
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : empLoad.active <= 5
+                                      ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                      : 'bg-rose-50 text-red-700 border border-rose-200'
+                                }`}>
+                                  {empLoad.active} {isAr ? 'مهام جارية' : 'active tasks'}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        </td>
+
+                        {/* 5. SLA Status */}
+                        <td className="px-6 py-4">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider uppercase inline-flex items-center gap-1 shadow-2xs ${sla.bg} ${sla.color}`}>
+                            <Clock size={11} />
+                            {sla.text}
+                          </span>
+                        </td>
+
+                        {/* 6. State / Status */}
+                        <td className="px-6 py-4">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200/60">
+                            <span className={`w-2 h-2 rounded-full ${status.dot}`} />
+                            <span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">
+                              {isAr ? status.label_ar : status.label_en}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* 7. Actions Menu Button */}
+                        <td className="px-6 py-4 text-end">
+                          <button
+                            onClick={(e) => handleOpenMenu(e, svc.id)}
+                            className={`p-2 rounded-xl transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-gradient-to-r from-red-950 to-rose-900 text-white shadow-xs'
+                                : 'text-slate-400 hover:text-red-900 hover:bg-rose-50'
+                            }`}
+                            title={isAr ? 'إجراءات' : 'Actions'}
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ── View Mode 2: Interactive Kanban Board ───────────────────────── */
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {(['ongoing', 'under_review', 'delayed', 'completed'] as const).map(colStatus => {
+            const colTasks = filtered.filter(s => s.status === colStatus);
+            const colStyle = SERVICE_STATUS_STYLES[colStatus];
+
+            return (
+              <div key={colStatus} className="bg-slate-50/70 rounded-3xl p-4 border border-rose-100/60 flex flex-col h-[700px]">
+                {/* Column Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-rose-100/60 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full ${colStyle.dot}`} />
+                    <h4 className="font-black text-slate-900 text-sm">
+                      {isAr ? colStyle.label_ar : colStyle.label_en}
+                    </h4>
                   </div>
+                  <span className="px-2 py-0.5 rounded-full bg-white text-slate-800 text-xs font-black border border-rose-100/80 shadow-2xs">
+                    {colTasks.length}
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
+                {/* Cards Area */}
+                <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pe-1">
+                  {colTasks.length === 0 ? (
+                    <div className="h-40 border-2 border-dashed border-rose-100/80 rounded-2xl flex items-center justify-center text-xs text-slate-400 font-bold bg-white/40">
+                      {isAr ? 'لا توجد مهام في هذه المرحلة' : 'No tasks in this stage'}
+                    </div>
+                  ) : (
+                    colTasks.map(task => {
+                      const dept = getDepartmentForService(task.title);
+                      const sla = getSLAStatus(task.due_date);
+                      const empLoad = task.employee_id ? employeeWorkload[task.employee_id] : null;
+
+                      return (
+                        <div
+                          key={task.id}
+                          className="bg-white p-4 rounded-2xl border border-rose-100/70 hover:border-red-900/40 shadow-xs hover:shadow-md transition-all space-y-3 group"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-50 text-red-900 border border-rose-200/60 uppercase tracking-wider">
+                              {dept.name}
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${sla.bg} ${sla.color}`}>
+                              <Clock size={10} />
+                              {sla.text}
+                            </span>
+                          </div>
+
+                          <div>
+                            <h5 className="font-black text-slate-900 text-xs line-clamp-2" title={task.title}>
+                              {task.title}
+                            </h5>
+                            <p className="text-[11px] font-bold text-slate-500 mt-1 flex items-center gap-1.5">
+                              <Building2 size={12} className="text-red-900/70 shrink-0" />
+                              <span className="truncate">{task.clients?.company_name || 'Corporate Client'}</span>
+                            </p>
+                          </div>
+
+                          {/* Assignee & Workload */}
+                          <div className="pt-2 border-t border-rose-100/40 flex items-center justify-between">
+                            <button
+                              onClick={() => setReassignService(task)}
+                              className="flex items-center gap-1.5 text-start hover:opacity-85 transition cursor-pointer"
+                              title="Click to reassign"
+                            >
+                              <div className="w-6 h-6 rounded-full bg-rose-50 text-red-900 border border-rose-200/60 flex items-center justify-center text-[10px] font-black">
+                                {task.profiles?.full_name ? task.profiles.full_name.charAt(0) : '?'}
+                              </div>
+                              <span className="text-[11px] font-bold text-slate-800 truncate max-w-[100px]">
+                                {task.profiles?.full_name || 'Unassigned'}
+                              </span>
+                            </button>
+
+                            {empLoad && (
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
+                                empLoad.active <= 2
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : empLoad.active <= 5
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : 'bg-rose-50 text-red-700 border border-rose-200'
+                              }`}>
+                                {empLoad.active} {isAr ? 'مهام' : 'tasks'}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Quick Kanban Action Progression */}
+                          <div className="flex items-center justify-between pt-1 gap-1">
+                            {colStatus !== 'ongoing' && (
+                              <button
+                                onClick={() => handleQuickStatusChange(task.id, 'ongoing')}
+                                className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                title="Move to Ongoing"
+                              >
+                                {isAr ? <ArrowRight size={11} /> : <ArrowLeft size={11} />}
+                                {isAr ? 'قيد التنفيذ' : 'Ongoing'}
+                              </button>
+                            )}
+
+                            {colStatus !== 'under_review' && colStatus !== 'completed' && (
+                              <button
+                                onClick={() => handleQuickStatusChange(task.id, 'under_review')}
+                                className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ms-auto cursor-pointer border border-amber-200/60"
+                                title="Move to Review"
+                              >
+                                {isAr ? 'للمراجعة' : 'Review'}
+                                {isAr ? <ArrowLeft size={11} /> : <ArrowRight size={11} />}
+                              </button>
+                            )}
+
+                            {colStatus !== 'completed' && (
+                              <button
+                                onClick={() => handleQuickStatusChange(task.id, 'completed')}
+                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ms-auto cursor-pointer border border-emerald-200/60"
+                                title="Mark as Completed"
+                              >
+                                <CheckCheck size={11} />
+                                {isAr ? 'إكمال' : 'Done'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Global Fixed Actions Popover Menu ─────────────────────────────── */}
       {activeMenuId && menuPos && (
@@ -992,9 +1142,9 @@ const OperationsCenter = () => {
             zIndex: 9999
           }}
           onClick={(e) => e.stopPropagation()}
-          className="w-56 bg-white rounded-2xl shadow-2xl border border-gray-200/90 py-1.5 text-start animate-scale-up"
+          className="w-56 bg-white rounded-2xl shadow-2xl border border-rose-100/80 py-1.5 text-start animate-scale-up"
         >
-          <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">
+          <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-rose-100/60">
             {isAr ? 'الإجراءات السريعة' : 'Quick Actions'}
           </div>
 
@@ -1006,9 +1156,9 @@ const OperationsCenter = () => {
                 setMenuPos(null);
                 if (svc) setReassignService(svc);
               }}
-              className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-brand-dark/5 hover:text-brand-dark rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+              className="w-full px-3 py-2 text-xs font-bold text-slate-700 hover:bg-rose-50 hover:text-red-900 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
             >
-              <UserPlus size={15} className="text-brand-dark" />
+              <UserPlus size={15} className="text-red-900" />
               <span>{isAr ? 'إعادة تعيين المسؤول وإشعاره' : 'Reassign & Notify'}</span>
             </button>
 
@@ -1031,14 +1181,14 @@ const OperationsCenter = () => {
                   setShowCreateModal(true);
                 }
               }}
-              className="w-full px-3 py-2 text-xs font-bold text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+              className="w-full px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
             >
               <Edit size={15} className="text-blue-600" />
               <span>{isAr ? 'تعديل تفاصيل المهمة' : 'Edit Deliverable'}</span>
             </button>
           </div>
 
-          <div className="p-1 border-t border-gray-100">
+          <div className="p-1 border-t border-rose-100/60">
             <button
               onClick={() => {
                 const id = activeMenuId;
@@ -1046,34 +1196,34 @@ const OperationsCenter = () => {
                 setMenuPos(null);
                 handleDeleteService(id);
               }}
-              className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+              className="w-full px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
             >
-              <Trash2 size={15} className="text-red-500" />
+              <Trash2 size={15} className="text-rose-600" />
               <span>{isAr ? 'حذف العملية' : 'Delete Operation'}</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Create / Edit Operation Modal with Workload Intelligence ──────── */}
+      {/* ── Create / Edit Operation Modal with Maisarah Red Identity ──────── */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
-          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden p-6 animate-scale-up border border-gray-100">
-            <div className="flex justify-between items-center mb-5 pb-3 border-b border-gray-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden p-6 animate-scale-up border border-rose-100/80">
+            <div className="flex justify-between items-center mb-5 pb-3 border-b border-rose-100/60">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-brand-dark">
-                  {isAr ? 'إسناد العمليات الذكي' : 'Workload-Aware Assignation'}
+                <span className="text-[10px] font-black uppercase tracking-wider text-red-900">
+                  {isAr ? 'مركز العمليات الذكي' : 'Maisarah Operations'}
                 </span>
-                <h3 className="text-lg font-black text-gray-900 flex items-center gap-2 mt-0.5">
-                  <Zap className="text-brand-dark" size={20} />
+                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 mt-0.5">
+                  <Activity className="text-red-900" size={19} />
                   {editingService
                     ? (isAr ? 'تعديل تفاصيل العملية' : 'Edit Deliverable')
-                    : (isAr ? 'إسناد مهمة جديدة للموظف' : 'Assign New Client Task')}
+                    : (isAr ? 'إسناد مهمة جديدة للمستشار' : 'Assign New Client Deliverable')}
                 </h3>
               </div>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer hover:bg-gray-100 transition"
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer hover:bg-slate-100 transition"
               >
                 <X size={20} />
               </button>
@@ -1082,9 +1232,9 @@ const OperationsCenter = () => {
             <form onSubmit={handleCreateOrEditSubmit} className="space-y-4 text-start">
               {/* Service Title */}
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
                   <span>{isAr ? 'عنوان المهمة / الخدمة' : 'Service Deliverable Title'}</span>
-                  <span className="text-brand-dark flex items-center gap-1 font-bold text-[10px]">
+                  <span className="text-red-900 flex items-center gap-1 font-bold text-[10px]">
                     <Sparkles size={11} /> {isAr ? 'اقتراحات سريعة' : 'Quick templates'}
                   </span>
                 </label>
@@ -1094,7 +1244,7 @@ const OperationsCenter = () => {
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   placeholder={isAr ? 'مثال: إعداد إقرار ضريبة القيمة المضافة للربع الثاني...' : 'e.g., VAT Return Filing Q2 2026'}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-red-900 focus:bg-white focus:ring-2 focus:ring-red-900/10 text-slate-900"
                 />
 
                 {/* Quick Service Suggestions */}
@@ -1104,7 +1254,7 @@ const OperationsCenter = () => {
                       type="button"
                       key={srv}
                       onClick={() => setFormData({ ...formData, title: srv })}
-                      className="px-2.5 py-1 bg-gray-100 hover:bg-brand-dark hover:text-white rounded-lg text-[10px] font-bold text-gray-600 transition-all cursor-pointer"
+                      className="px-2.5 py-1 bg-rose-50/70 hover:bg-gradient-to-r hover:from-red-950 hover:to-rose-900 hover:text-white rounded-lg text-[10px] font-bold text-red-900 border border-rose-200/60 transition-all cursor-pointer"
                     >
                       + {srv}
                     </button>
@@ -1115,11 +1265,13 @@ const OperationsCenter = () => {
               {/* Client & Assignee with Workload Indicators */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'العميل (الشركة)' : 'Client (Company)'}</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'العميل (الشركة)' : 'Client (Company)'}
+                  </label>
                   <select
                     value={formData.client_id}
                     onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-red-900 focus:bg-white cursor-pointer text-slate-900"
                   >
                     {clients.length === 0 ? (
                       <option value="">{isAr ? 'لا يوجد عملاء متاحين' : 'No clients found'}</option>
@@ -1134,13 +1286,13 @@ const OperationsCenter = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
                     {isAr ? 'المسؤول المباشر (مع مؤشر العبء)' : 'Assignee (Workload Aware)'}
                   </label>
                   <select
                     value={formData.employee_id}
                     onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-red-900 focus:bg-white cursor-pointer text-slate-900"
                   >
                     {employees.length === 0 ? (
                       <option value="">{isAr ? 'لا يوجد موظفين متاحين' : 'No employees found'}</option>
@@ -1163,21 +1315,25 @@ const OperationsCenter = () => {
               {/* Due Date & Status */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'الموعد النهائي (SLA)' : 'Due Date (SLA)'}</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الموعد النهائي (SLA)' : 'Due Date (SLA)'}
+                  </label>
                   <input
                     type="date"
                     value={formData.due_date}
                     onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-red-900 focus:bg-white text-slate-900"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'حالة العملية' : 'Initial Status'}</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'حالة العملية' : 'Initial Status'}
+                  </label>
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-red-900 focus:bg-white cursor-pointer text-slate-900"
                   >
                     <option value="ongoing">Ongoing (قيد التنفيذ)</option>
                     <option value="under_review">Review (قيد المراجعة)</option>
@@ -1189,13 +1345,15 @@ const OperationsCenter = () => {
 
               {/* Description / Scope */}
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'ملاحظات ونطاق العمل' : 'Deliverable Scope / Notes'}</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'ملاحظات ونطاق العمل' : 'Deliverable Scope / Notes'}
+                </label>
                 <textarea
                   rows={2}
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder={isAr ? 'أضف أي تفاصيل أو متطلبات للمهمة...' : 'Add any deliverable details or specific requirements...'}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-medium outline-none focus:border-brand-dark resize-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium outline-none focus:border-red-900 focus:bg-white resize-none text-slate-900"
                 />
               </div>
 
@@ -1203,14 +1361,14 @@ const OperationsCenter = () => {
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors cursor-pointer text-xs"
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors cursor-pointer text-xs"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 py-3 bg-brand-dark hover:bg-brand text-white rounded-xl font-black text-xs uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer shadow-md flex items-center justify-center gap-2"
+                  className="flex-1 py-3 bg-gradient-to-r from-red-950 via-rose-900 to-red-900 hover:from-red-900 hover:to-rose-950 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer shadow-md shadow-red-950/20 flex items-center justify-center gap-2"
                 >
                   <Send size={14} />
                   <span>{isSubmitting ? '...' : (isAr ? 'إسناد وإرسال الإشعار' : 'Assign & Notify')}</span>
@@ -1221,32 +1379,32 @@ const OperationsCenter = () => {
         </div>
       )}
 
-      {/* ── Reassign Modal with Workload Intelligence ─────────────────────── */}
+      {/* ── Reassign Modal with Workload Intelligence & Maisarah Red ─────── */}
       {reassignService && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden p-6 animate-scale-up border border-gray-100 text-start">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden p-6 animate-scale-up border border-rose-100/80 text-start">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-rose-100/60">
               <div>
-                <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
-                  <UserCheck size={18} className="text-brand-dark" />
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <UserCheck size={18} className="text-red-900" />
                   {isAr ? 'إعادة إسناد المهمة وإشعار المستشار' : 'Reassign Assignee & Notify'}
                 </h3>
-                <p className="text-[11px] text-gray-400 font-medium mt-0.5">
+                <p className="text-[11px] text-slate-400 font-medium mt-0.5">
                   {isAr ? 'اختر المستشار الأنسب استيعاباً' : 'Select optimal staff by capacity'}
                 </p>
               </div>
               <button
                 onClick={() => setReassignService(null)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="bg-gray-50 p-3 rounded-2xl mb-4">
-              <p className="text-xs font-black text-gray-900">{reassignService.title}</p>
-              <p className="text-[10px] text-gray-500 font-bold mt-0.5">
-                {isAr ? 'العميل:' : 'Client:'} {reassignService.clients?.company_name || 'Generic Client'}
+            <div className="bg-rose-50/50 p-3 rounded-2xl mb-4 border border-rose-100/70">
+              <p className="text-xs font-black text-slate-900">{reassignService.title}</p>
+              <p className="text-[10px] text-slate-500 font-bold mt-0.5">
+                {isAr ? 'العميل:' : 'Client:'} {reassignService.clients?.company_name || 'Corporate Client'}
               </p>
             </div>
 
@@ -1262,17 +1420,17 @@ const OperationsCenter = () => {
                     onClick={() => handleReassignSubmit(reassignService.id, emp.id)}
                     className={`w-full text-start p-3 rounded-2xl border transition-all flex items-center justify-between cursor-pointer ${
                       isCurrent
-                        ? 'border-brand-dark bg-brand-dark/5 ring-1 ring-brand-dark'
-                        : 'border-gray-100 hover:border-brand-dark hover:bg-gray-50'
+                        ? 'border-red-900 bg-rose-50/60 ring-1 ring-red-900'
+                        : 'border-slate-100 hover:border-rose-200 hover:bg-rose-50/30'
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-brand-dark/10 text-brand-dark font-black flex items-center justify-center text-xs">
+                      <div className="w-8 h-8 rounded-full bg-rose-50 border border-rose-200 text-red-900 font-black flex items-center justify-center text-xs">
                         {emp.full_name ? emp.full_name.charAt(0) : '?'}
                       </div>
                       <div>
-                        <p className="text-xs font-black text-gray-900">{emp.full_name}</p>
-                        <p className="text-[10px] font-bold text-gray-400 capitalize">{emp.role || 'Staff'}</p>
+                        <p className="text-xs font-black text-slate-900">{emp.full_name}</p>
+                        <p className="text-[10px] font-bold text-slate-400 capitalize">{emp.role || 'Staff'}</p>
                       </div>
                     </div>
 
@@ -1282,7 +1440,7 @@ const OperationsCenter = () => {
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                           : activeCount <= 5
                             ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-red-50 text-red-700 border border-red-200'
+                            : 'bg-rose-50 text-red-700 border border-rose-200'
                       }`}>
                         {activeCount} {isAr ? 'مهام جارية' : 'active'}
                       </span>
@@ -1300,3 +1458,4 @@ const OperationsCenter = () => {
 };
 
 export default OperationsCenter;
+

@@ -39,9 +39,10 @@ export default function ManagerDashboard() {
     } catch {}
     return [
       { id: 1, text: isAr ? 'اعتماد الإقرار الضريبي لشركة أوسبيك (Q3 VAT)' : 'Approve OSBIC Q3 VAT Return Submission', date: 'October 18, 2026', done: true },
-      { id: 2, text: isAr ? 'مراجعة تقرير مطابقة كشف بنك مسقط لشهر أكتوبر' : 'Review Bank Muscat Monthly Reconciliation Report', date: 'October 17, 2026', done: false },
-      { id: 3, text: isAr ? 'توقيع خطاب ارتباط التدقيق لشركة زهرة القصر' : 'Executive Sign-off: Zahrat Al Qasr Engagement Letter', date: 'October 17, 2026', done: false },
-      { id: 4, text: isAr ? 'متابعة تحصيل المستحقات المعلقة (425 ر.ع)' : 'Follow up on Outstanding Receivables (OMR 425)', date: 'October 19, 2026', done: false },
+      { id: 2, text: isAr ? 'مراجعة واعتماد طلب انضمام لنادي الأعمال: مجموعة الفلاح (Gold VIP)' : 'Approve Business Club VIP Membership: Al-Falah Group (Gold VIP)', date: 'October 20, 2026', done: false },
+      { id: 3, text: isAr ? 'مراجعة تقرير مطابقة كشف بنك مسقط لشهر أكتوبر' : 'Review Bank Muscat Monthly Reconciliation Report', date: 'October 17, 2026', done: false },
+      { id: 4, text: isAr ? 'توقيع خطاب ارتباط التدقيق لشركة زهرة القصر' : 'Executive Sign-off: Zahrat Al Qasr Engagement Letter', date: 'October 17, 2026', done: false },
+      { id: 5, text: isAr ? 'متابعة تحصيل المستحقات المعلقة (425 ر.ع)' : 'Follow up on Outstanding Receivables (OMR 425)', date: 'October 19, 2026', done: false },
     ];
   });
 
@@ -96,6 +97,63 @@ export default function ManagerDashboard() {
       unsubHierarchy();
     };
   }, [loadOperationalData]);
+
+  // ── Real Business Club VIP Members & Events Sync ───────────────────────────
+  const [clubMembers, setClubMembers] = useState<any[]>([
+    {
+      id: 'mbc-seed-1',
+      membership_number: 'MBC-2026-8124',
+      full_name: 'Sultan Al-Hosni',
+      company_name: 'Oman Modern Enterprises LLC',
+      member_tier: 'Silver Partner',
+      loyalty_points: 200,
+      compliance_health_score: 95,
+      status: 'active'
+    },
+    {
+      id: 'mbc-seed-2',
+      membership_number: 'MBC-2026-1088',
+      full_name: 'Eng. Tariq Al-Balushi',
+      company_name: 'Oman Digital Solutions LLC',
+      member_tier: 'Gold VIP',
+      loyalty_points: 1250,
+      compliance_health_score: 98,
+      status: 'active'
+    },
+    {
+      id: 'mbc-seed-3',
+      membership_number: 'MBC-2026-1042',
+      full_name: 'Dr. Salim Al-Harthy',
+      company_name: 'Al-Harthy Healthcare Group',
+      member_tier: 'Diamond Elite',
+      loyalty_points: 2400,
+      compliance_health_score: 100,
+      status: 'active'
+    }
+  ]);
+  const [clubEvents, setClubEvents] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function fetchClub() {
+      try {
+        const { data: dbMembers } = await supabase.from('business_club_members').select('*');
+        if (dbMembers && dbMembers.length > 0) {
+          setClubMembers(prev => {
+            const dbIds = new Set(dbMembers.map(m => m.id));
+            const remainingSeed = prev.filter(p => !dbIds.has(p.id));
+            return [...dbMembers, ...remainingSeed];
+          });
+        }
+        const { data: dbEvents } = await supabase.from('club_events').select('*').order('event_date', { ascending: true });
+        if (dbEvents && dbEvents.length > 0) {
+          setClubEvents(dbEvents);
+        }
+      } catch (err) {
+        console.warn('Business club fetch error:', err);
+      }
+    }
+    fetchClub();
+  }, []);
 
   // ---------------------------------------------------------------------------
   // 100% REAL DYNAMIC METRICS CALCULATION FROM ACTUAL DSR RECORDS
@@ -1003,7 +1061,108 @@ export default function ManagerDashboard() {
             </div>
           </div>
 
-          {/* WIDGET 2: EXECUTIVE DECISIONS & ACTIONS (PERSISTED) ─────────────── */}
+          {/* WIDGET 2: MAISARAH BUSINESS CLUB EXECUTIVE OVERSIGHT (VIP SUITE) ── */}
+          <div className="bg-gradient-to-br from-[#881337] via-[#5c0d24] to-[#4c0519] rounded-3xl p-5 sm:p-6 text-white shadow-[0_8px_30px_-6px_rgba(136,19,55,0.4)] border border-rose-900/50 space-y-4 relative overflow-hidden group">
+            {/* Background Decorative Glow */}
+            <div className="absolute -top-12 -right-12 w-40 h-40 bg-amber-400/15 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-rose-500/15 rounded-full blur-2xl pointer-events-none" />
+
+            {/* Header */}
+            <div className="flex items-center justify-between relative z-10">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-black border border-amber-300/30 mb-1">
+                  <Star size={11} className="fill-amber-300 text-amber-300" />
+                  <span>{isAr ? 'نادي ميسرة للأعمال • VIP Suite' : 'Maisarah Business Club • VIP Suite'}</span>
+                </div>
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  {isAr ? 'شبكة كبار الشركاء والمستثمرين' : 'Executive Business Club Pulse'}
+                </h3>
+                <p className="text-[10px] text-rose-200/70 font-medium">
+                  {isAr ? 'متابعة أعضاء النخبة وفعاليات كبار العملاء' : 'VIP partner membership & executive summits'}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/manager/club')}
+                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-amber-300 hover:text-white rounded-xl text-xs font-bold transition flex items-center gap-1 border border-white/15 cursor-pointer backdrop-blur-xs shadow-xs"
+              >
+                <span>{isAr ? 'إدارة النادي' : 'Open Suite'}</span>
+                <ArrowUpRight size={14} />
+              </button>
+            </div>
+
+            {/* Key Club Metrics (3 Columns) */}
+            <div className="grid grid-cols-3 gap-2 relative z-10 pt-1">
+              <div className="bg-white/10 rounded-2xl p-2.5 border border-white/10 backdrop-blur-xs">
+                <p className="text-[10px] font-bold text-rose-200/80 uppercase tracking-wider">{isAr ? 'الأعضاء' : 'VIP Members'}</p>
+                <p className="text-xl font-black text-amber-300 mt-0.5">{clubMembers.length}</p>
+                <p className="text-[9px] text-emerald-300 font-bold">{isAr ? '100% نشطين' : 'Active Partners'}</p>
+              </div>
+              <div className="bg-white/10 rounded-2xl p-2.5 border border-white/10 backdrop-blur-xs">
+                <p className="text-[10px] font-bold text-rose-200/80 uppercase tracking-wider">{isAr ? 'الامتثال' : 'Health Score'}</p>
+                <p className="text-xl font-black text-emerald-300 mt-0.5">98%</p>
+                <p className="text-[9px] text-rose-200/60 font-medium">{isAr ? 'مؤشر ممتاز' : 'Tax & OTA SLA'}</p>
+              </div>
+              <div className="bg-white/10 rounded-2xl p-2.5 border border-white/10 backdrop-blur-xs">
+                <p className="text-[10px] font-bold text-rose-200/80 uppercase tracking-wider">{isAr ? 'الفعالية' : 'Next Event'}</p>
+                <p className="text-base font-black text-white mt-0.5">25 Oct</p>
+                <p className="text-[9px] text-amber-300/80 font-medium truncate">{isAr ? 'جراند ميلينيوم' : 'Millennium'}</p>
+              </div>
+            </div>
+
+            {/* Spotlight Member Card (Real Sultan Al-Hosni from DB / Seed) */}
+            {clubMembers.length > 0 && (
+              <div className="bg-white/10 rounded-2xl p-3 border border-white/15 relative z-10 backdrop-blur-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold text-amber-300/90 uppercase tracking-wider flex items-center gap-1">
+                    <Award size={12} className="text-amber-400" />
+                    {isAr ? 'أحدث عضو منضم لنادي الأعمال' : 'Latest Enrolled VIP Partner'}
+                  </span>
+                  <span className="px-2 py-0.5 text-[9px] font-black rounded-full bg-amber-400 text-red-950 uppercase shadow-xs">
+                    {clubMembers[0].member_tier || 'Silver Partner'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 pt-0.5">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-red-950 font-black flex items-center justify-center text-sm shadow-sm shrink-0">
+                    {clubMembers[0].full_name?.charAt(0) || 'S'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-xs font-black text-white truncate">{clubMembers[0].full_name}</h4>
+                    <p className="text-[11px] text-rose-200 font-medium truncate">{clubMembers[0].company_name || 'Oman Modern Enterprises LLC'}</p>
+                    <p className="text-[9px] text-amber-300/80 font-mono mt-0.5">{clubMembers[0].membership_number || 'MBC-2026-8124'}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-black text-amber-300 block">{clubMembers[0].loyalty_points || 200} pts</span>
+                    <span className="text-[9px] text-emerald-300 font-bold block">{clubMembers[0].compliance_health_score || 95}% Health</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Upcoming Event Teaser */}
+            <div className="bg-black/25 rounded-2xl p-2.5 border border-white/10 flex items-center justify-between relative z-10 text-xs backdrop-blur-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-300/20">
+                  <Calendar size={15} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-white truncate">
+                    {isAr ? 'ورشة عمل: أفضل ممارسات ضريبة الدخل في عمان' : 'Masterclass: Oman Corporate Tax & Withholding'}
+                  </p>
+                  <p className="text-[9px] text-rose-200/80 mt-0.5">
+                    {isAr ? '25 أكتوبر 2026 • فندق جراند ميلينيوم مسقط (48 مسجل)' : 'Oct 25, 2026 • Grand Millennium Muscat (48 Registered)'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/manager/club')}
+                className="text-[10px] font-black text-amber-300 hover:text-white underline shrink-0 cursor-pointer ml-2"
+              >
+                {isAr ? 'التفاصيل' : 'View'}
+              </button>
+            </div>
+          </div>
+
+          {/* WIDGET 3: EXECUTIVE DECISIONS & ACTIONS (PERSISTED) ─────────────── */}
           <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-[0_4px_20px_-4px_rgba(136,19,55,0.05)] border border-rose-100/70 space-y-4">
             <div className="flex items-center justify-between">
               <div>

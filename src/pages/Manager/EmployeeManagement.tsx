@@ -8,6 +8,7 @@ import {
   saveLocalRecruits,
   updateRecruitStatus,
   deleteLocalRecruit,
+  isRecruitDeleted,
   invokeEdgeFunctionWithTimeout,
   DEFAULT_OFFERED_RECRUITS
 } from '../../utils/recruitmentSync';
@@ -243,44 +244,123 @@ const EmployeeManagement = () => {
   const fetchPlacements = useCallback(async () => {
     setLoadingPlacements(true);
     try {
-      const [dbRecruits, { data: profiles }] = await Promise.all([
+      const [dbRecruits, hrEmployeesRes] = await Promise.all([
         syncRecruitsFromSupabase(),
-        supabase.from('profiles').select('id, email, role')
+        supabase.from('hr_employees').select('*')
       ]);
-
-      const activeProfileEmails = new Set(
-        (profiles || [])
-          .filter(p => p.role && p.role !== 'client')
-          .map(p => (p.email || '').trim().toLowerCase())
-          .filter(Boolean)
-      );
-      const activeProfileIds = new Set((profiles || []).filter(p => p.role && p.role !== 'client').map(p => p.id));
 
       const localRecruits = getLocalRecruits();
       const mergedMap = new Map<string, any>();
+
+      // 1. Add local recruits from maisarah_hr_recruits_v1
       localRecruits.forEach(r => {
-        const k = (r.id || r.email || '').toLowerCase().trim();
+        const k = (r.email || r.id || '').toLowerCase().trim();
         if (k) mergedMap.set(k, r);
       });
+
+      // 2. Add DB recruits from hr_recruits
       if (Array.isArray(dbRecruits)) {
         dbRecruits.forEach(r => {
-          const k = (r.id || r.email || '').toLowerCase().trim();
-          if (k) mergedMap.set(k, r);
+          const k = (r.email || r.id || '').toLowerCase().trim();
+          if (k) {
+            const existing = mergedMap.get(k) || {};
+            mergedMap.set(k, { ...existing, ...r });
+          }
         });
       }
 
-      const recruits: any[] = Array.from(mergedMap.values());
+      // 3. Pool pending employees from Supabase hr_employees
+      const hrEmps = hrEmployeesRes.data || [];
+      hrEmps.forEach((h: any) => {
+        const isPending =
+          h.status === 'pending_placement' ||
+          (h.dept && h.dept.toLowerCase().includes('pending')) ||
+          (h.role && h.role.toLowerCase().includes('pending')) ||
+          !h.department_id;
 
-      const filtered = recruits.filter((c: any) => {
-        // Must NOT be placed
-        if (c.placement_status === 'placed') return false;
+        if (isPending) {
+          const k = (h.email || h.id || '').toLowerCase().trim();
+          if (k) {
+            const existing = mergedMap.get(k) || {};
+            mergedMap.set(k, {
+              id: h.id || existing.id,
+              name: h.full_name || existing.name || 'New Staff Candidate',
+              email: h.email || existing.email,
+              phone: h.phone || h.company_phone || existing.phone || '',
+              role: (h.role && !h.role.toLowerCase().includes('pending')) ? h.role : (existing.role || 'Pending Assignment'),
+              dept: (h.dept && !h.dept.toLowerCase().includes('pending')) ? h.dept : (existing.dept || 'Pending Department'),
+              employment_type: h.employee_type || existing.employment_type || 'Experienced',
+              placement_status: 'pending_placement',
+              stage: 'offered',
+              basic_salary: Number(h.basic_salary || existing.basic_salary || 0),
+              civil_id: h.civil_id || existing.civil_id || '',
+              passport_no: h.passport_no || existing.passport_no || '',
+              residency_no: h.residency_no || existing.residency_no || '',
+              nationality: h.nationality || existing.nationality || 'Omani',
+              gender: h.gender || existing.gender || 'Male',
+              marital_status: h.marital_status || existing.marital_status || 'Single'
+            });
+          }
+        }
+      });
 
-        const cEmail = (c.email || '').trim().toLowerCase();
-        const cId = c.id;
+      // 4. Pool pending employees from local storage hr_employee_records
+      try {
+        const hrLocalRaw = localStorage.getItem('hr_employee_records');
+        if (hrLocalRaw) {
+          const hrLocalList = JSON.parse(hrLocalRaw);
+          if (Array.isArray(hrLocalList)) {
+            hrLocalList.forEach((e: any) => {
+              const isPending =
+                e.status === 'pending_placement' ||
+                (e.dept && e.dept.toLowerCase().includes('pending')) ||
+                (e.role && e.role.toLowerCase().includes('pending'));
 
-        // If candidate already exists as an active staff profile in profiles, they have already been placed
-        if (cEmail && activeProfileEmails.has(cEmail)) return false;
-        if (cId && activeProfileIds.has(cId)) return false;
+              if (isPending) {
+                const k = (e.email || e.id || '').toLowerCase().trim();
+                if (k) {
+                  const existing = mergedMap.get(k) || {};
+                  mergedMap.set(k, {
+                    id: e.id || existing.id,
+                    name: e.name || existing.name || 'New Staff Candidate',
+                    email: e.email || existing.email,
+                    phone: e.phone || e.companyPhone || existing.phone || '',
+                    role: (e.role && !e.role.toLowerCase().includes('pending')) ? e.role : (existing.role || 'Pending Assignment'),
+                    dept: (e.dept && !e.dept.toLowerCase().includes('pending')) ? e.dept : (existing.dept || 'Pending Department'),
+                    employment_type: e.type || existing.employment_type || 'Experienced',
+                    placement_status: 'pending_placement',
+                    stage: 'offered',
+                    basic_salary: Number(e.basicSalary || existing.basic_salary || 0),
+                    civil_id: e.civilId || existing.civil_id || '',
+                    passport_no: e.passportNo || existing.passport_no || '',
+                    residency_no: e.residencyNo || existing.residency_no || '',
+                    nationality: e.nationality || existing.nationality || 'Omani',
+                    gender: e.gender || existing.gender || 'Male',
+                    marital_status: e.maritalStatus || existing.marital_status || 'Single'
+                  });
+                }
+              }
+            });
+          }
+        }
+      } catch (lsErr) {
+        console.warn('Notice loading local hr_employee_records:', lsErr);
+      }
+
+      const allRecruits: any[] = Array.from(mergedMap.values());
+
+      const filtered = allRecruits.filter((c: any) => {
+        // Exclude deleted candidates
+        if (isRecruitDeleted(c.id, c.email, c.name)) return false;
+
+        // Exclude if already placed with valid department and role
+        const isPlaced =
+          c.placement_status === 'placed' &&
+          c.status !== 'pending_placement' &&
+          c.dept && !c.dept.toLowerCase().includes('pending') &&
+          c.role && !c.role.toLowerCase().includes('pending');
+
+        if (isPlaced) return false;
 
         return true;
       });
@@ -290,6 +370,7 @@ const EmployeeManagement = () => {
       console.error('Error fetching pending placements:', err);
       const local = getLocalRecruits();
       setPendingPlacements(local.filter((c: any) =>
+        !isRecruitDeleted(c.id, c.email, c.name) &&
         (c.stage === 'offered' || c.placement_status === 'pending_placement') &&
         c.placement_status !== 'placed'
       ));
@@ -898,14 +979,23 @@ const EmployeeManagement = () => {
       }
 
       // 1b. Upsert into hr_employees so employee appears in roster immediately
+      let targetEmpId = (activePlacement.id && typeof activePlacement.id === 'string' && activePlacement.id.includes('-')) ? activePlacement.id : userId;
+      try {
+        const { data: existingEmp } = await supabase.from('hr_employees').select('id').eq('email', cleanEmail).maybeSingle();
+        if (existingEmp?.id) {
+          targetEmpId = existingEmp.id;
+        }
+      } catch {}
+
       const { error: hrErr } = await supabase.from('hr_employees').upsert({
-        id: userId,
+        id: targetEmpId,
         full_name: activePlacement.name,
         email: cleanEmail,
         phone: activePlacement.phone || '',
         dept: targetDeptName,
         department_id: targetDeptKey,
         role: finalRole,
+        accessrole: effectiveRole,
         secondary_roles: fullSecondaryRoles,
         status: 'active',
         basic_salary: Number(activePlacement.basic_salary || 0),
@@ -916,10 +1006,56 @@ const EmployeeManagement = () => {
         passport_no: activePlacement.passport_no || '',
         residency_no: activePlacement.residency_no || '',
         nationality: activePlacement.nationality || 'Omani'
-      }, { onConflict: 'email' });
+      }, { onConflict: 'id' });
 
       if (hrErr) {
         console.warn('hr_employees upsert notice:', hrErr.message || hrErr);
+      }
+
+      // 1c. Sync local storage caches immediately across HR & Manager portals
+      try {
+        const hrLocalRaw = localStorage.getItem('hr_employee_records');
+        if (hrLocalRaw) {
+          const hrList = JSON.parse(hrLocalRaw);
+          const updated = hrList.map((e: any) => {
+            if (e.email?.toLowerCase() === cleanEmail || e.id === activePlacement.id || e.id === targetEmpId) {
+              return {
+                ...e,
+                id: targetEmpId,
+                status: 'active',
+                role: finalRole,
+                dept: targetDeptName,
+                immediateSupervisor: finalSupervisor,
+                joinedDate: placementData.startDate || e.joinedDate
+              };
+            }
+            return e;
+          });
+          localStorage.setItem('hr_employee_records', JSON.stringify(updated));
+        }
+      } catch (lsErr) {
+        console.warn('Local hr_employee_records update notice:', lsErr);
+      }
+
+      try {
+        const recRaw = localStorage.getItem('maisarah_hr_recruits_v1');
+        if (recRaw) {
+          const recList = JSON.parse(recRaw);
+          const updatedRecs = recList.map((r: any) => {
+            if (r.email?.toLowerCase() === cleanEmail || r.id === activePlacement.id) {
+              return {
+                ...r,
+                placement_status: 'placed',
+                role: finalRole,
+                dept: targetDeptName
+              };
+            }
+            return r;
+          });
+          localStorage.setItem('maisarah_hr_recruits_v1', JSON.stringify(updatedRecs));
+        }
+      } catch (rErr) {
+        console.warn('Local recruits update notice:', rErr);
       }
 
       // ═══════════════════════════════════════════════════════════════
