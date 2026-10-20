@@ -272,11 +272,13 @@ const EmployeeManagement = () => {
       // 3. Pool pending employees from Supabase hr_employees
       const hrEmps = hrEmployeesRes.data || [];
       hrEmps.forEach((h: any) => {
+        // Active staff members can NEVER be pending placement
+        if (h.status === 'active') return;
+
         const isPending =
           h.status === 'pending_placement' ||
           (h.dept && h.dept.toLowerCase().includes('pending')) ||
-          (h.role && h.role.toLowerCase().includes('pending')) ||
-          !h.department_id;
+          (h.role && h.role.toLowerCase().includes('pending'));
 
         if (isPending) {
           const k = (h.email || h.id || '').toLowerCase().trim();
@@ -311,6 +313,9 @@ const EmployeeManagement = () => {
           const hrLocalList = JSON.parse(hrLocalRaw);
           if (Array.isArray(hrLocalList)) {
             hrLocalList.forEach((e: any) => {
+              // Active staff members can NEVER be pending placement
+              if (e.status === 'active') return;
+
               const isPending =
                 e.status === 'pending_placement' ||
                 (e.dept && e.dept.toLowerCase().includes('pending')) ||
@@ -352,6 +357,9 @@ const EmployeeManagement = () => {
       const filtered = allRecruits.filter((c: any) => {
         // Exclude deleted candidates
         if (isRecruitDeleted(c.id, c.email, c.name)) return false;
+
+        // Active staff members can NEVER be pending placement
+        if (c.status === 'active') return false;
 
         // Exclude if already placed with valid department and role
         const isPlaced =
