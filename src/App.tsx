@@ -9,6 +9,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 
 // Auth
 import Login from './pages/Auth/Login';
+import ResetPassword from './pages/Auth/ResetPassword';
 
 // Original generic Dashboard (Fallback/Demo)
 import Dashboard from './components/Dashboard';
@@ -104,6 +105,7 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/business-club" element={<BusinessClubLanding />} />
           <Route path="/services" element={<ServicesDirectory />} />
 

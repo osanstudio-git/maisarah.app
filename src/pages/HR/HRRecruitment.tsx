@@ -24,7 +24,9 @@ export interface Candidate {
   stage: 'cv_received' | 'shortlisted' | 'interview_scheduled' | 'interview_done' | 'offered' | 'on_hold' | 'rejected';
   score: number;
   email: string;
+  personal_email?: string;
   phone: string;
+  id_type?: 'civil_id' | 'passport';
   civil_id?: string;
   passport_no?: string;
   residency_no?: string;
@@ -92,7 +94,10 @@ export default function HRRecruitment() {
     name: '',
     email: '',
     phone: '',
+    id_type: 'civil_id' as 'civil_id' | 'passport',
     civil_id: '',
+    passport_no: '',
+    dob: '',
     nationality: 'Omani',
     gender: 'Male',
     marital_status: 'Single',
@@ -191,11 +196,11 @@ export default function HRRecruitment() {
   // Unified Registration Submit (Strictly NO email sent)
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newHire.name.trim() || !newHire.email.trim()) {
+    if (!newHire.name.trim()) {
       setNotification({
         show: true,
         title: isAr ? 'بيانات ناقصة' : 'Missing Information',
-        message: isAr ? 'يرجى إدخال اسم الموظف والبريد الإلكتروني.' : 'Full name and email are required.',
+        message: isAr ? 'يرجى إدخال اسم الموظف / المرشح.' : 'Full name is required.',
         type: 'error'
       });
       return;
@@ -245,8 +250,12 @@ export default function HRRecruitment() {
         id: newId,
         name: cleanName,
         email: cleanEmail,
+        personal_email: cleanEmail,
         phone: newHire.phone || '',
-        civil_id: newHire.civil_id || '',
+        id_type: newHire.id_type,
+        civil_id: newHire.id_type === 'civil_id' ? newHire.civil_id.trim() : '',
+        passport_no: newHire.id_type === 'passport' ? newHire.passport_no.trim() : '',
+        dob: newHire.dob || '',
         nationality: newHire.nationality || 'Omani',
         gender: newHire.gender || 'Male',
         marital_status: newHire.marital_status || 'Single',
@@ -278,7 +287,10 @@ export default function HRRecruitment() {
         name: '',
         email: '',
         phone: '',
+        id_type: 'civil_id',
         civil_id: '',
+        passport_no: '',
+        dob: '',
         nationality: 'Omani',
         gender: 'Male',
         marital_status: 'Single',
@@ -609,13 +621,42 @@ export default function HRRecruitment() {
                           {c.placement_status === 'placed' ? (isAr ? 'تم التسكين' : 'Placed') : (isAr ? 'بانتظار المدير' : 'Awaiting Placement')}
                         </span>
                       </div>
-                      <p className="text-xs font-bold text-gray-500 mb-2">
-                        {c.role} • <span className="text-[#A11212]">{c.dept}</span> • {c.employment_type || 'Experienced'}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="text-xs font-bold text-gray-500">
+                          {c.role} • <span className="text-[#A11212]">{c.dept}</span> • {c.employment_type || 'Experienced'}
+                        </span>
+                        {c.nationality && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-100 text-slate-700">
+                            {c.nationality}
+                          </span>
+                        )}
+                        {c.gender && (
+                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-slate-50 text-slate-500">
+                            {c.gender === 'Female' ? '👩 Female' : '👨 Male'}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400 font-semibold">
-                        <span className="flex items-center gap-1"><Mail size={13} /> {c.email}</span>
+                        {c.email ? (
+                          <span className="flex items-center gap-1"><Mail size={13} /> {c.email}</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-amber-600"><Mail size={13} /> {isAr ? 'لم يحدد إيميل بعد' : 'No email yet'}</span>
+                        )}
                         {c.phone && <span className="flex items-center gap-1"><Phone size={13} /> {c.phone}</span>}
-                        {c.civil_id && <span className="flex items-center gap-1"><ShieldCheck size={13} /> ID: {c.civil_id}</span>}
+                        {c.civil_id ? (
+                          <span className="flex items-center gap-1 text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md font-mono text-[11px]">
+                            <ShieldCheck size={13} className="text-emerald-600" /> 🇴🇲 Civil ID: {c.civil_id}
+                          </span>
+                        ) : c.passport_no ? (
+                          <span className="flex items-center gap-1 text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md font-mono text-[11px]">
+                            <ShieldCheck size={13} className="text-blue-600" /> 🌐 Passport: {c.passport_no}
+                          </span>
+                        ) : null}
+                        {c.dob && (
+                          <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                            <Calendar size={12} /> {c.dob}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -711,61 +752,206 @@ export default function HRRecruitment() {
               {/* Personal Information */}
               <div>
                 <h4 className="text-xs font-black uppercase tracking-wider text-[#A11212] mb-3">
-                  {isAr ? '1. البيانات الشخصية' : '1. Personal Information'}
+                  {isAr ? '1. البيانات الشخصية وبيانات الهوية' : '1. Personal Information & Identification'}
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] font-black text-gray-600 uppercase mb-1.5">
-                      {isAr ? 'الاسم الكامل *' : 'Full Name *'}
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newHire.name}
-                      onChange={e => setNewHire({ ...newHire, name: e.target.value })}
-                      placeholder={isAr ? 'مثال: أحمد الحارثي' : 'e.g. Ahmed Al-Harthy'}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
-                    />
+                
+                <div className="space-y-4">
+                  {/* Row 1: Full Name & Personal Email (Optional) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 uppercase mb-1.5">
+                        {isAr ? 'الاسم الكامل *' : 'Full Name *'}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newHire.name}
+                        onChange={e => setNewHire({ ...newHire, name: e.target.value })}
+                        placeholder={isAr ? 'مثال: أحمد الحارثي' : 'e.g. Ahmed Al-Harthy'}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-[11px] font-black text-gray-700 uppercase">
+                          {isAr ? 'البريد الشخصي (اختياري)' : 'Personal Email (Optional)'}
+                        </label>
+                        <span className="text-[9px] font-bold text-gray-400">
+                          {isAr ? 'البريد الرسمي يحدده المدير' : 'Corporate email assigned by Manager'}
+                        </span>
+                      </div>
+                      <input
+                        type="email"
+                        value={newHire.email}
+                        onChange={e => setNewHire({ ...newHire, email: e.target.value })}
+                        placeholder="personal.email@gmail.com"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-black text-gray-600 uppercase mb-1.5">
-                      {isAr ? 'البريد الإلكتروني *' : 'Corporate Email *'}
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={newHire.email}
-                      onChange={e => setNewHire({ ...newHire, email: e.target.value })}
-                      placeholder="employee@maisarah.om"
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
-                    />
+                  {/* Row 2: Phone & Date of Birth */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 uppercase mb-1.5">
+                        {isAr ? 'رقم الهاتف' : 'Phone Number'}
+                      </label>
+                      <input
+                        type="tel"
+                        value={newHire.phone}
+                        onChange={e => setNewHire({ ...newHire, phone: e.target.value })}
+                        placeholder="+968 9123 4567"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 uppercase mb-1.5">
+                        {isAr ? 'تاريخ الميلاد' : 'Date of Birth'}
+                      </label>
+                      <input
+                        type="date"
+                        value={newHire.dob}
+                        onChange={e => setNewHire({ ...newHire, dob: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-black text-gray-600 uppercase mb-1.5">
-                      {isAr ? 'رقم الهاتف' : 'Phone Number'}
-                    </label>
-                    <input
-                      type="tel"
-                      value={newHire.phone}
-                      onChange={e => setNewHire({ ...newHire, phone: e.target.value })}
-                      placeholder="+968 9123 4567"
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
-                    />
+                  {/* Row 3: Nationality & Gender */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 uppercase mb-1.5">
+                        {isAr ? 'الجنسية' : 'Nationality'}
+                      </label>
+                      <select
+                        value={newHire.nationality}
+                        onChange={e => {
+                          const nat = e.target.value;
+                          const autoDocType = nat === 'Omani' ? 'civil_id' : 'passport';
+                          setNewHire({
+                            ...newHire,
+                            nationality: nat,
+                            id_type: autoDocType
+                          });
+                        }}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212] cursor-pointer"
+                      >
+                        <option value="Omani">{isAr ? '🇴🇲 عُماني (Omani)' : '🇴🇲 Omani'}</option>
+                        <option value="Egyptian">{isAr ? '🇪🇬 مصري (Egyptian)' : '🇪🇬 Egyptian'}</option>
+                        <option value="Indian">{isAr ? '🇮🇳 هندي (Indian)' : '🇮🇳 Indian'}</option>
+                        <option value="Pakistani">{isAr ? '🇵🇰 باكستاني (Pakistani)' : '🇵🇰 Pakistani'}</option>
+                        <option value="Jordanian">{isAr ? '🇯🇴 أردني (Jordanian)' : '🇯🇴 Jordanian'}</option>
+                        <option value="Filipino">{isAr ? '🇵🇭 فلبيني (Filipino)' : '🇵🇭 Filipino'}</option>
+                        <option value="Lebanese">{isAr ? '🇱🇧 لبناني (Lebanese)' : '🇱🇧 Lebanese'}</option>
+                        <option value="Syrian">{isAr ? '🇸🇾 سوري (Syrian)' : '🇸🇾 Syrian'}</option>
+                        <option value="Sudanese">{isAr ? '🇸🇩 سوداني (Sudanese)' : '🇸🇩 Sudanese'}</option>
+                        <option value="Yemeni">{isAr ? '🇾🇪 يمني (Yemeni)' : '🇾🇪 Yemeni'}</option>
+                        <option value="Moroccan">{isAr ? '🇲🇦 مغربي (Moroccan)' : '🇲🇦 Moroccan'}</option>
+                        <option value="Tunisian">{isAr ? '🇹🇳 تونسي (Tunisian)' : '🇹🇳 Tunisian'}</option>
+                        <option value="British">{isAr ? '🇬🇧 بريطاني (British)' : '🇬🇧 British'}</option>
+                        <option value="American">{isAr ? '🇺🇸 أمريكي (American)' : '🇺🇸 American'}</option>
+                        <option value="Other">{isAr ? '🌐 جنسية أخرى (Other)' : '🌐 Other Nationality'}</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 uppercase mb-1.5">
+                        {isAr ? 'الجنس' : 'Gender'}
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setNewHire({ ...newHire, gender: 'Male' })}
+                          className={`py-2 px-3 rounded-xl text-xs font-black border transition-all ${
+                            newHire.gender === 'Male'
+                              ? 'bg-[#A11212]/10 border-[#A11212] text-[#A11212]'
+                              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          {isAr ? '👨 ذكر (Male)' : '👨 Male'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewHire({ ...newHire, gender: 'Female' })}
+                          className={`py-2 px-3 rounded-xl text-xs font-black border transition-all ${
+                            newHire.gender === 'Female'
+                              ? 'bg-[#A11212]/10 border-[#A11212] text-[#A11212]'
+                              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          {isAr ? '👩 أنثى (Female)' : '👩 Female'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-black text-gray-600 uppercase mb-1.5">
-                      {isAr ? 'الرقم المدني / الجواز' : 'Civil ID / Passport'}
-                    </label>
-                    <input
-                      type="text"
-                      value={newHire.civil_id}
-                      onChange={e => setNewHire({ ...newHire, civil_id: e.target.value })}
-                      placeholder="12345678"
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
-                    />
+                  {/* Row 4: Identification Document Selector (Civil ID vs Passport) */}
+                  <div className="bg-gray-50/90 p-4 rounded-2xl border border-gray-200/80 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-black text-gray-800 uppercase tracking-wide">
+                        {isAr ? 'نوع وثيقة إثبات الهوية' : 'Identification Document Type'}
+                      </label>
+                      <span className="text-[10px] font-bold text-gray-400">
+                        {newHire.nationality === 'Omani' ? (isAr ? 'المواطنون: بطاقة مدنية' : 'Omanis: Civil ID') : (isAr ? 'الوافدون: جواز سفر' : 'Expats: Passport')}
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewHire({ ...newHire, id_type: 'civil_id' })}
+                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
+                          newHire.id_type === 'civil_id'
+                            ? 'bg-white border-[#A11212] text-[#A11212] shadow-sm'
+                            : 'bg-transparent border-gray-200 text-gray-500 hover:bg-gray-100'
+                        }`}
+                      >
+                        <span>🇴🇲</span>
+                        <span>{isAr ? 'بطاقة مدنية (Civil ID)' : 'Civil ID Card'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewHire({ ...newHire, id_type: 'passport' })}
+                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
+                          newHire.id_type === 'passport'
+                            ? 'bg-white border-[#A11212] text-[#A11212] shadow-sm'
+                            : 'bg-transparent border-gray-200 text-gray-500 hover:bg-gray-100'
+                        }`}
+                      >
+                        <span>🌐</span>
+                        <span>{isAr ? 'جواز سفر (Passport)' : 'Passport'}</span>
+                      </button>
+                    </div>
+
+                    {newHire.id_type === 'civil_id' ? (
+                      <div className="animate-scale-up pt-1">
+                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">
+                          {isAr ? 'رقم البطاقة المدنية' : 'Civil ID Number'}
+                        </label>
+                        <input
+                          type="text"
+                          value={newHire.civil_id}
+                          onChange={e => setNewHire({ ...newHire, civil_id: e.target.value })}
+                          placeholder="12345678"
+                          className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                        />
+                      </div>
+                    ) : (
+                      <div className="animate-scale-up pt-1">
+                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">
+                          {isAr ? 'رقم جواز السفر' : 'Passport Number'}
+                        </label>
+                        <input
+                          type="text"
+                          value={newHire.passport_no}
+                          onChange={e => setNewHire({ ...newHire, passport_no: e.target.value })}
+                          placeholder="e.g. A12345678 / OM987654"
+                          className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -937,20 +1123,36 @@ export default function HRRecruitment() {
             <div className="p-6 space-y-5 max-h-[500px] overflow-y-auto">
               <div className="grid grid-cols-2 gap-3 text-xs bg-gray-50 p-4 rounded-2xl border border-gray-100">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'البريد' : 'Email'}</p>
-                  <p className="font-bold text-gray-900">{selectedCandidate.email}</p>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'البريد الشخصي' : 'Personal Email'}</p>
+                  <p className="font-bold text-gray-900">{selectedCandidate.email || selectedCandidate.personal_email || (isAr ? 'غير محدد' : 'N/A')}</p>
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'الهاتف' : 'Phone'}</p>
                   <p className="font-bold text-gray-900">{selectedCandidate.phone || 'N/A'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'المرحلة' : 'Stage'}</p>
-                  <p className="font-bold text-[#A11212] uppercase">{selectedCandidate.stage}</p>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'الجنسية والنوع' : 'Nationality & Gender'}</p>
+                  <p className="font-bold text-gray-900">
+                    {selectedCandidate.nationality || 'Omani'} • {selectedCandidate.gender || 'Male'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'وثيقة الهوية' : 'Identification Doc'}</p>
+                  <p className="font-bold text-slate-900 font-mono">
+                    {selectedCandidate.civil_id
+                      ? `🇴🇲 Civil ID: ${selectedCandidate.civil_id}`
+                      : selectedCandidate.passport_no
+                        ? `🌐 Passport: ${selectedCandidate.passport_no}`
+                        : (isAr ? 'لم تسجل بعد' : 'Not recorded')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'تاريخ الميلاد' : 'Date of Birth'}</p>
+                  <p className="font-bold text-gray-900">{selectedCandidate.dob || (isAr ? 'غير مسجل' : 'N/A')}</p>
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'حالة التسكين' : 'Placement Status'}</p>
-                  <p className="font-bold text-emerald-700">{selectedCandidate.placement_status || 'Pending'}</p>
+                  <p className="font-bold text-emerald-700">{selectedCandidate.placement_status === 'placed' ? (isAr ? 'تم التسكين' : 'Placed') : (isAr ? 'بانتظار اعتماد المدير' : 'Pending Placement')}</p>
                 </div>
               </div>
 

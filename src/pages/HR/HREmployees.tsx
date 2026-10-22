@@ -920,8 +920,8 @@ export default function HREmployees() {
     e.preventDefault();
     if (isSubmitting) return;
 
-    if (!formData.name?.trim() || !formData.email?.trim()) {
-      setFormError(isAr ? 'يرجى إدخال الاسم الكامل والبريد الإلكتروني المؤسسي' : 'Please provide full name and corporate email');
+    if (!formData.name?.trim()) {
+      setFormError(isAr ? 'يرجى إدخال الاسم الكامل للموظف' : 'Please provide full name of the employee');
       return;
     }
 
@@ -2165,13 +2165,17 @@ export default function HREmployees() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
-                    {isAr ? 'البريد الإلكتروني المؤسسي *' : 'Corporate Email *'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                      {isAr ? 'البريد الشخصي (اختياري)' : 'Personal Email (Optional)'}
+                    </label>
+                    <span className="text-[9px] font-bold text-gray-400">
+                      {isAr ? 'البريد المؤسسي يحدده المدير' : 'Corporate email set by Manager'}
+                    </span>
+                  </div>
                   <input
                     type="email"
-                    required
-                    placeholder="name@maisarah.om"
+                    placeholder="candidate@gmail.com"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"

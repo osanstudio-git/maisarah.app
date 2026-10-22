@@ -110,7 +110,8 @@ const EmployeeManagement = () => {
     startDate: '',
     accessRole: 'accountant',
     secondaryRoles: ['employee', 'accountant'],
-    isHOD: false
+    isHOD: false,
+    officialEmail: ''
   });
   const [placementError, setPlacementError] = useState<string | null>(null);
   const [credentialsModal, setCredentialsModal] = useState<{
@@ -891,6 +892,24 @@ const EmployeeManagement = () => {
       derivedAccessRole = 'crm';
     }
 
+    const cleanFirst = (placement.name || 'employee')
+      .toLowerCase()
+      .trim()
+      .split(' ')[0]
+      .replace(/[^a-z0-9]/g, '');
+    const cleanLast = (placement.name || '')
+      .toLowerCase()
+      .trim()
+      .split(' ')
+      .slice(1)
+      .join('')
+      .replace(/[^a-z0-9]/g, '');
+    const deptPrefix = (defaultDept || 'staff').replace(/_/g, '');
+    const existingIsCorporate = (placement.email || '').toLowerCase().includes('@maisarah');
+    const autoSuggestedEmail = existingIsCorporate
+      ? placement.email.toLowerCase().trim()
+      : (cleanLast ? `${cleanFirst}.${cleanLast}@maisarah.net` : `${cleanFirst}.${deptPrefix}@maisarah.net`);
+
     setPlacementData({
       role: suggestedRole,
       customRole: '',
@@ -901,7 +920,8 @@ const EmployeeManagement = () => {
       startDate: new Date().toISOString().split('T')[0],
       accessRole: derivedAccessRole,
       secondaryRoles: Array.from(new Set(['employee', derivedAccessRole])),
-      isHOD: derivedAccessRole === 'department_head'
+      isHOD: derivedAccessRole === 'department_head',
+      officialEmail: autoSuggestedEmail
     });
     setPlacementError(null);
   };
@@ -935,13 +955,18 @@ const EmployeeManagement = () => {
       : (placementData.supervisor === 'custom' ? (placementData.customSupervisor || 'General Manager') : placementData.supervisor);
 
     const userId: string = crypto.randomUUID();
-    const cleanEmail = selectedPlacement.email.trim().toLowerCase();
+    const cleanEmail = (placementData.officialEmail || selectedPlacement.email || '').trim().toLowerCase();
+    if (!cleanEmail) {
+      setPlacementError(isAr ? 'يرجى إدخال البريد الإلكتروني المؤسسي الرسمي' : 'Please provide official corporate email');
+      setIsPlacing(false);
+      return;
+    }
     const fullSecondaryRoles = Array.from(new Set([effectiveRole, ...(placementData.secondaryRoles || [])]));
 
     const newEmployeeRecord = {
       id: userId,
       full_name: selectedPlacement.name,
-      email: selectedPlacement.email,
+      email: cleanEmail,
       phone: selectedPlacement.phone || '+968 9000 0000',
       role: finalRole,
       accessRole: effectiveRole,
@@ -978,7 +1003,8 @@ const EmployeeManagement = () => {
         .update({
           placement_status: 'placed',
           role: finalRole,
-          dept: targetDeptName
+          dept: targetDeptName,
+          email: cleanEmail
         })
         .or(`id.eq.${activePlacement.id},email.eq.${cleanEmail}`);
 
@@ -1013,7 +1039,9 @@ const EmployeeManagement = () => {
         civil_id: activePlacement.civil_id || '',
         passport_no: activePlacement.passport_no || '',
         residency_no: activePlacement.residency_no || '',
-        nationality: activePlacement.nationality || 'Omani'
+        nationality: activePlacement.nationality || 'Omani',
+        gender: activePlacement.gender || 'Male',
+        dob: activePlacement.dob || null
       }, { onConflict: 'id' });
 
       if (hrErr) {
@@ -1078,7 +1106,7 @@ const EmployeeManagement = () => {
       setCredentialsModal({
         show: true,
         name: activePlacement.name,
-        email: activePlacement.email,
+        email: cleanEmail,
         password: tempPassword,
         role: finalRole,
         dept: targetDeptName,
@@ -1107,12 +1135,13 @@ const EmployeeManagement = () => {
         Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('bg-timeout')), ms))]);
 
       const portalLoginUrl = `${window.location.origin}/login`;
+      const recipientEmail = (activePlacement.personal_email || activePlacement.email || cleanEmail);
       const bgEmailBody = {
-        to: activePlacement.email,
+        to: recipientEmail,
         subject: isAr
           ? `مرحباً بك في مجموعة ميسرة - تفاصيل التعيين وحسابك بالبوابة الإلكترونية`
           : `Welcome to Maisarah Group - Placement Details & Portal Access`,
-        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;direction:${isAr?'rtl':'ltr'};text-align:${isAr?'right':'left'};font-size:14px;line-height:1.6;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:16px;background:#fff"><div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #f3f4f6"><h2 style="color:#A11212;margin:0;font-size:20px;font-weight:800">${isAr?'مجموعة ميسرة للاستشارات المالية والتدقيق':'Maisarah Financial & Auditing Group'}</h2><p style="color:#6b7280;font-size:12px;margin-top:4px;font-weight:600">${isAr?'إشعار اعتماد التعيين وتفعيل حساب الموظف':'Placement Confirmation & Portal Activation'}</p></div><p style="font-size:15px">${isAr?'عزيزي/عزيزتي':'Dear'} <strong>${activePlacement.name}</strong>,</p><p>${isAr?'يسعدنا انضمامك إلى فريق مجموعة ميسرة. تم اعتماد تعيينك وتفعيل حسابك في بوابة الموظفين.':'We are pleased to welcome you to Maisarah Group. Your placement is approved and your Employee Portal account is active.'}</p><div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:20px 0"><h4 style="margin:0 0 10px;color:#374151;font-size:13px;font-weight:700">${isAr?'تفاصيل التعيين:':'Placement Details:'}</h4><p style="margin:4px 0;font-size:13px"><strong>${isAr?'القسم:':'Department:'}</strong> ${targetDeptName}</p><p style="margin:4px 0;font-size:13px"><strong>${isAr?'المسمى الوظيفي:':'Job Title:'}</strong> ${finalRole}</p><p style="margin:4px 0;font-size:13px"><strong>${isAr?'المشرف:':'Supervisor:'}</strong> ${finalSupervisor}</p></div><div style="background:#fff8f8;border:1px solid #fecaca;border-radius:12px;padding:16px;margin:20px 0"><h4 style="margin:0 0 10px;color:#991b1b;font-size:13px;font-weight:700">${isAr?'بيانات تسجيل الدخول:':'Access Credentials:'}</h4><p style="margin:6px 0;font-size:13px"><strong>${isAr?'رابط البوابة:':'Portal URL:'}</strong> <a href="${portalLoginUrl}" style="color:#A11212;font-weight:bold">${portalLoginUrl}</a></p><p style="margin:6px 0;font-size:13px"><strong>${isAr?'البريد:':'Email:'}</strong> <span style="font-family:monospace;font-weight:bold">${activePlacement.email}</span></p><p style="margin:6px 0;font-size:13px"><strong>${isAr?'كلمة المرور المؤقتة:':'Temp Password:'}</strong> <span style="font-family:monospace;background:#fff;padding:4px 10px;border-radius:6px;font-weight:bold;color:#111827;border:1px solid #e5e7eb">${tempPassword}</span></p></div><div style="text-align:center;margin:24px 0"><a href="${portalLoginUrl}" style="display:inline-block;background:#A11212;color:#fff;padding:12px 28px;border-radius:10px;font-weight:700;text-decoration:none;font-size:13px">${isAr?'تسجيل الدخول':'Log In to Portal'}</a></div><p style="font-size:12px;color:#6b7280">${isAr?'يرجى تغيير كلمة المرور فور تسجيل الدخول.':'Please change your temporary password on first login.'}</p><div style="border-top:1px solid #f3f4f6;padding-top:16px;color:#6b7280;font-size:12px"><p style="margin:0">${isAr?'مع أطيب التحيات،':'Best Regards,'}</p><p style="margin:2px 0 0;font-weight:700;color:#111827">${isAr?'إدارة التسكين · مجموعة ميسرة':'Operations & Placement · Maisarah Group'}</p></div></div>`
+        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;direction:${isAr?'rtl':'ltr'};text-align:${isAr?'right':'left'};font-size:14px;line-height:1.6;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:16px;background:#fff"><div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #f3f4f6"><h2 style="color:#A11212;margin:0;font-size:20px;font-weight:800">${isAr?'مجموعة ميسرة للاستشارات المالية والتدقيق':'Maisarah Financial & Auditing Group'}</h2><p style="color:#6b7280;font-size:12px;margin-top:4px;font-weight:600">${isAr?'إشعار اعتماد التعيين وتفعيل حساب الموظف':'Placement Confirmation & Portal Activation'}</p></div><p style="font-size:15px">${isAr?'عزيزي/عزيزتي':'Dear'} <strong>${activePlacement.name}</strong>,</p><p>${isAr?'يسعدنا انضمامك إلى فريق مجموعة ميسرة. تم اعتماد تعيينك وتفعيل حسابك في بوابة الموظفين.':'We are pleased to welcome you to Maisarah Group. Your placement is approved and your Employee Portal account is active.'}</p><div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:20px 0"><h4 style="margin:0 0 10px;color:#374151;font-size:13px;font-weight:700">${isAr?'تفاصيل التعيين:':'Placement Details:'}</h4><p style="margin:4px 0;font-size:13px"><strong>${isAr?'القسم:':'Department:'}</strong> ${targetDeptName}</p><p style="margin:4px 0;font-size:13px"><strong>${isAr?'المسمى الوظيفي:':'Job Title:'}</strong> ${finalRole}</p><p style="margin:4px 0;font-size:13px"><strong>${isAr?'المشرف:':'Supervisor:'}</strong> ${finalSupervisor}</p></div><div style="background:#fff8f8;border:1px solid #fecaca;border-radius:12px;padding:16px;margin:20px 0"><h4 style="margin:0 0 10px;color:#991b1b;font-size:13px;font-weight:700">${isAr?'بيانات تسجيل الدخول:':'Access Credentials:'}</h4><p style="margin:6px 0;font-size:13px"><strong>${isAr?'رابط البوابة:':'Portal URL:'}</strong> <a href="${portalLoginUrl}" style="color:#A11212;font-weight:bold">${portalLoginUrl}</a></p><p style="margin:6px 0;font-size:13px"><strong>${isAr?'البريد المؤسسي (اسم المستخدم):':'Corporate Email (Username):'}</strong> <span style="font-family:monospace;font-weight:bold;color:#A11212">${cleanEmail}</span></p><p style="margin:6px 0;font-size:13px"><strong>${isAr?'كلمة المرور المؤقتة:':'Temp Password:'}</strong> <span style="font-family:monospace;background:#fff;padding:4px 10px;border-radius:6px;font-weight:bold;color:#111827;border:1px solid #e5e7eb">${tempPassword}</span></p></div><div style="text-align:center;margin:24px 0"><a href="${portalLoginUrl}" style="display:inline-block;background:#A11212;color:#fff;padding:12px 28px;border-radius:10px;font-weight:700;text-decoration:none;font-size:13px">${isAr?'تسجيل الدخول':'Log In to Portal'}</a></div><p style="font-size:12px;color:#6b7280">${isAr?'يرجى تغيير كلمة المرور فور تسجيل الدخول.':'Please change your temporary password on first login.'}</p><div style="border-top:1px solid #f3f4f6;padding-top:16px;color:#6b7280;font-size:12px"><p style="margin:0">${isAr?'مع أطيب التحيات،':'Best Regards,'}</p><p style="margin:2px 0 0;font-weight:700;color:#111827">${isAr?'إدارة التسكين · مجموعة ميسرة':'Operations & Placement · Maisarah Group'}</p></div></div>`
       };
 
       (async () => {
@@ -1855,8 +1884,23 @@ const EmployeeManagement = () => {
                                   {p.name.charAt(0)}
                                 </div>
                                 <div>
-                                  <p className="font-black text-gray-900 text-sm">{p.name}</p>
-                                  <p className="text-[10px] font-bold text-gray-455">{p.email} · {p.phone || 'N/A'}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-black text-gray-900 text-sm">{p.name}</p>
+                                    {p.nationality && (
+                                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                                        {p.nationality}
+                                      </span>
+                                    )}
+                                    {p.gender && (
+                                      <span className="text-[9px] font-bold text-gray-400">
+                                        {p.gender === 'Female' ? '👩' : '👨'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] font-bold text-gray-500 mt-0.5">
+                                    {p.phone || p.email || (isAr ? 'لا يوجد هاتف' : 'No phone')}
+                                    {p.civil_id ? ` · 🇴🇲 ID: ${p.civil_id}` : p.passport_no ? ` · 🌐 Passport: ${p.passport_no}` : ''}
+                                  </p>
                                 </div>
                               </div>
                             </td>
@@ -2188,26 +2232,73 @@ const EmployeeManagement = () => {
                 </div>
               )}
 
-              <div className="bg-brand-dark/5 p-4 rounded-2xl border border-brand-dark/10 space-y-2">
-                <p className="text-[10px] font-black text-brand-dark uppercase tracking-wider">{isAr ? 'معلومات التوظيف المقترحة' : 'Suggested Onboarding Details'}</p>
-                <div className="grid grid-cols-2 gap-4 text-xs font-bold text-gray-700 mt-2">
+              <div className="bg-brand-dark/5 p-4 rounded-2xl border border-brand-dark/10 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-black text-brand-dark uppercase tracking-wider">
+                    {isAr ? 'ملف المرشح المتقدم للتعيين' : 'Candidate Dossier Profile'}
+                  </p>
+                  <span className="text-[10px] font-bold text-gray-500">
+                    {selectedPlacement.employment_type || 'Experienced'}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-bold text-gray-700 pt-1">
                   <div>
                     <span className="text-gray-400 block text-[9px] uppercase">{isAr ? 'الاسم الكامل:' : 'Full Name:'}</span>
-                    {selectedPlacement.name}
+                    <span className="text-gray-900 font-extrabold">{selectedPlacement.name}</span>
                   </div>
                   <div>
-                    <span className="text-gray-400 block text-[9px] uppercase">{isAr ? 'البريد الإلكتروني:' : 'Email Address:'}</span>
-                    {selectedPlacement.email}
+                    <span className="text-gray-400 block text-[9px] uppercase">{isAr ? 'الاتصال الشخصي:' : 'Personal Contact:'}</span>
+                    <span className="truncate block font-normal">{selectedPlacement.phone || selectedPlacement.email || 'N/A'}</span>
                   </div>
                   <div>
-                    <span className="text-gray-400 block text-[9px] uppercase">{isAr ? 'المسمى الوظيفي المقترح:' : 'Suggested Job title:'}</span>
-                    {selectedPlacement.role}
+                    <span className="text-gray-400 block text-[9px] uppercase">{isAr ? 'الجنسية والنوع:' : 'Nationality & Gender:'}</span>
+                    <span>{selectedPlacement.nationality || 'Omani'} • {selectedPlacement.gender || 'Male'}</span>
                   </div>
                   <div>
-                    <span className="text-gray-400 block text-[9px] uppercase">{isAr ? 'القسم المقترح:' : 'Suggested Department:'}</span>
-                    {selectedPlacement.dept}
+                    <span className="text-gray-400 block text-[9px] uppercase">{isAr ? 'وثيقة الهوية:' : 'Identification Document:'}</span>
+                    <span className="font-mono text-[11px] text-[#A11212]">
+                      {selectedPlacement.civil_id
+                        ? `🇴🇲 Civil ID: ${selectedPlacement.civil_id}`
+                        : selectedPlacement.passport_no
+                          ? `🌐 Passport: ${selectedPlacement.passport_no}`
+                          : (isAr ? 'غير مسجل' : 'Not recorded')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block text-[9px] uppercase">{isAr ? 'تاريخ الميلاد:' : 'Date of Birth:'}</span>
+                    <span>{selectedPlacement.dob || (isAr ? 'غير مسجل' : 'N/A')}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block text-[9px] uppercase">{isAr ? 'القسم / المسمى المقترح:' : 'Proposed Dept/Role:'}</span>
+                    <span className="truncate block">{selectedPlacement.dept} • {selectedPlacement.role}</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Official Corporate Email Assignment */}
+              <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200/90 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-black text-amber-950 uppercase tracking-wide">
+                    {isAr ? 'البريد الإلكتروني المؤسسي الرسمي للموظف *' : 'Official Corporate Email Address *'}
+                  </label>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300/50">
+                    {isAr ? 'اسم المستخدم للدخول' : 'Portal Login Identity'}
+                  </span>
+                </div>
+                <input
+                  type="email"
+                  required
+                  value={placementData.officialEmail}
+                  onChange={(e) => setPlacementData({ ...placementData, officialEmail: e.target.value })}
+                  placeholder="employee@maisarah.net"
+                  className="w-full bg-white border border-amber-300 rounded-xl px-4 py-2.5 text-xs font-black text-gray-900 focus:outline-none focus:border-[#A11212] font-mono shadow-xs"
+                />
+                <p className="text-[10px] text-amber-800/90 font-medium leading-tight">
+                  {isAr
+                    ? 'سيتم إنشاء حساب الموظف في البوابة بهذا البريد الرسمي، مع إرسال بيانات الدخول إلى بريده الشخصي وواتساب.'
+                    : 'The employee portal user will be provisioned under this official corporate address, and credentials dispatched.'}
+                </p>
               </div>
 
               {/* 1. Designated Department & Employment Start Date */}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Bell, HelpCircle, Settings, Menu, ChevronDown, CheckCircle2,
-  AlertTriangle, Clock, Receipt, FileText, Check, X, ShieldCheck, Layers, Sparkles
+  AlertTriangle, Clock, Receipt, FileText, Check, X, ShieldCheck, Layers, Sparkles,
+  KeyRound, Lock, Eye, EyeOff
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
@@ -37,6 +38,51 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const [hierarchyMode, setHierarchyModeState] = useState<HierarchyMode>(getHierarchyMode());
+
+  // Change Password State
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ password: '', confirm: '' });
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+
+    if (passwordForm.password.length < 6) {
+      setPasswordError(isAr ? 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل' : 'Password must be at least 6 characters');
+      return;
+    }
+
+    if (passwordForm.password !== passwordForm.confirm) {
+      setPasswordError(isAr ? 'كلمتا المرور غير متطابقتين' : 'Passwords do not match');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      const { error: updateErr } = await supabase.auth.updateUser({
+        password: passwordForm.password
+      });
+
+      if (updateErr) throw updateErr;
+
+      setPasswordSuccess(true);
+      setTimeout(() => {
+        setIsChangePasswordOpen(false);
+        setPasswordSuccess(false);
+        setPasswordForm({ password: '', confirm: '' });
+      }, 2000);
+    } catch (err: any) {
+      console.error('Password update notice:', err);
+      setPasswordError(err?.message || (isAr ? 'تعذر تحديث كلمة المرور' : 'Failed to update password'));
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   useEffect(() => {
     return subscribeHierarchyMode((mode) => setHierarchyModeState(mode));
@@ -377,6 +423,19 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
                 <p className="text-xs text-gray-500 capitalize">{role}</p>
               </div>
               <button 
+                onClick={() => {
+                  setIsProfileOpen(false);
+                  setIsChangePasswordOpen(true);
+                  setPasswordForm({ password: '', confirm: '' });
+                  setPasswordError(null);
+                  setPasswordSuccess(false);
+                }}
+                className={`w-full px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 font-bold transition flex items-center gap-2 cursor-pointer border-b border-gray-100 ${isAr ? 'text-right' : 'text-left'}`}
+              >
+                <KeyRound size={14} className="text-[#A11212]" />
+                <span>{isAr ? 'تغيير كلمة المرور' : 'Change Password'}</span>
+              </button>
+              <button 
                 onClick={signOut}
                 className={`w-full px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 font-bold transition flex items-center gap-2 cursor-pointer ${isAr ? 'text-right' : 'text-left'}`}
               >
@@ -386,6 +445,130 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
           )}
         </div>
       </div>
+
+      {/* Change Password Modal */}
+      {isChangePasswordOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-gray-100 relative animate-scale-up" dir={isAr ? 'rtl' : 'ltr'}>
+            <button
+              type="button"
+              onClick={() => setIsChangePasswordOpen(false)}
+              className={`absolute top-5 ${isAr ? 'left-5' : 'right-5'} p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors`}
+            >
+              <X size={18} />
+            </button>
+
+            <div className="text-center mb-6">
+              <div className="inline-flex p-3 bg-red-50 text-[#A11212] rounded-2xl mb-3">
+                <KeyRound size={26} />
+              </div>
+              <h3 className="text-xl font-black text-gray-900">
+                {isAr ? 'تغيير كلمة المرور' : 'Change Password'}
+              </h3>
+              <p className="text-xs text-gray-500 font-medium mt-1">
+                {isAr 
+                  ? 'أدخل كلمة المرور الجديدة لحسابك المؤسسي' 
+                  : 'Enter your new password to secure your account'}
+              </p>
+            </div>
+
+            {passwordSuccess ? (
+              <div className="space-y-3 py-4 text-center">
+                <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                  <CheckCircle2 size={32} />
+                </div>
+                <p className="text-sm font-black text-gray-900">
+                  {isAr ? 'تم تحديث كلمة المرور بنجاح!' : 'Password Updated Successfully!'}
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                {passwordError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
+                    <AlertTriangle size={16} className="shrink-0" />
+                    <span>{passwordError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest px-1">
+                    {isAr ? 'كلمة المرور الجديدة' : 'New Password'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="new-password"
+                      value={passwordForm.password}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, password: e.target.value }))}
+                      placeholder="••••••••"
+                      className={`w-full ${isAr ? 'pr-11 pl-11' : 'pl-11 pr-11'} py-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-[#A11212] focus:bg-white text-sm font-medium`}
+                    />
+                    <Lock className={`absolute top-1/2 -translate-y-1/2 ${isAr ? 'right-3.5' : 'left-3.5'} text-gray-400`} size={18} />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className={`absolute top-1/2 -translate-y-1/2 ${isAr ? 'left-3' : 'right-3'} text-gray-400 hover:text-gray-700 p-1 rounded-lg`}
+                    >
+                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest px-1">
+                    {isAr ? 'تأكيد كلمة المرور' : 'Confirm New Password'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="new-password"
+                      value={passwordForm.confirm}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, confirm: e.target.value }))}
+                      placeholder="••••••••"
+                      className={`w-full ${isAr ? 'pr-11 pl-11' : 'pl-11 pr-11'} py-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-[#A11212] focus:bg-white text-sm font-medium`}
+                    />
+                    <Lock className={`absolute top-1/2 -translate-y-1/2 ${isAr ? 'right-3.5' : 'left-3.5'} text-gray-400`} size={18} />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className={`absolute top-1/2 -translate-y-1/2 ${isAr ? 'left-3' : 'right-3'} text-gray-400 hover:text-gray-700 p-1 rounded-lg`}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-gray-400 px-1">
+                  {isAr ? '• يجب ألا تقل عن 6 خانات' : '• Must be at least 6 characters'}
+                </p>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsChangePasswordOpen(false)}
+                    className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 transition cursor-pointer"
+                  >
+                    {isAr ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={passwordLoading}
+                    className="flex-1 bg-[#A11212] hover:bg-red-800 text-white font-bold text-xs py-3 rounded-xl transition shadow-md shadow-red-900/10 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    {passwordLoading ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <span>{isAr ? 'تحديث كلمة المرور' : 'Update Password'}</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 };

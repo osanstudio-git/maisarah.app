@@ -8,8 +8,10 @@ export interface RecruitCandidate {
   stage: 'cv_received' | 'shortlisted' | 'interview_scheduled' | 'interview_done' | 'offered' | 'on_hold' | 'rejected';
   score: number;
   email: string;
+  personal_email?: string;
   phone: string;
   company_phone?: string;
+  id_type?: 'civil_id' | 'passport';
   civil_id?: string;
   passport_no?: string;
   residency_no?: string;
@@ -29,6 +31,7 @@ export interface RecruitCandidate {
     bank_details_submitted: boolean;
     documents_uploaded: boolean;
     it_assets_ready: boolean;
+    dossier?: any;
   };
   created_at?: string;
 }
@@ -194,6 +197,8 @@ export async function syncRecruitsFromSupabase(): Promise<RecruitCandidate[]> {
         const dossier = item.onboarding_tasks?.dossier || {};
         const cleanItem: RecruitCandidate = {
           ...item,
+          personal_email: item.personal_email || dossier.personal_email || item.email || '',
+          id_type: item.id_type || dossier.id_type || (item.passport_no ? 'passport' : 'civil_id'),
           civil_id: item.civil_id || dossier.civil_id || '',
           passport_no: item.passport_no || dossier.passport_no || '',
           residency_no: item.residency_no || dossier.residency_no || '',
@@ -257,6 +262,8 @@ function sanitizeRecruitForDb(candidate: any): any {
     : { contract_signed: false, bank_details_submitted: false, documents_uploaded: false, it_assets_ready: false };
 
   baseTasks.dossier = {
+    personal_email: candidate.personal_email || candidate.email || '',
+    id_type: candidate.id_type || (candidate.passport_no ? 'passport' : 'civil_id'),
     civil_id: candidate.civil_id || '',
     passport_no: candidate.passport_no || '',
     residency_no: candidate.residency_no || '',
