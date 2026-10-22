@@ -64,6 +64,7 @@ export default function HRRecruitment() {
   const [activeTab, setActiveTab] = useState<'pipeline' | 'onboarding'>('pipeline');
   const [searchQuery, setSearchQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
+  const [onboardingFilter, setOnboardingFilter] = useState<'all' | 'pending' | 'placed' | 'completed'>('all');
 
   // Modals & Drawers
   const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -128,6 +129,29 @@ export default function HRRecruitment() {
 
   useEffect(() => {
     fetchCandidates();
+
+    // 1. Listen for local broadcast & window custom events
+    const handleRecruitsUpdated = () => {
+      fetchCandidates();
+    };
+    window.addEventListener('maisarah_recruits_updated', handleRecruitsUpdated);
+    window.addEventListener('maisarah_employees_updated', handleRecruitsUpdated);
+
+    // 2. Real-time Supabase postgres_changes listener for instantaneous sync
+    const channel = supabase.channel('hr_recruits_realtime_feed')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_recruits' }, () => {
+        fetchCandidates();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_employees' }, () => {
+        fetchCandidates();
+      })
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('maisarah_recruits_updated', handleRecruitsUpdated);
+      window.removeEventListener('maisarah_employees_updated', handleRecruitsUpdated);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Update specific onboarding task
@@ -363,7 +387,17 @@ export default function HRRecruitment() {
     return matchesSearch && matchesDept;
   });
 
-  const offeredHires = filteredCandidates.filter(c => c.stage === 'offered' || c.placement_status === 'pending_placement');
+  const offeredHires = filteredCandidates.filter(c => c.stage === 'offered' || c.placement_status === 'pending_placement' || c.placement_status === 'placed');
+
+  const displayedOnboardingHires = offeredHires.filter(c => {
+    if (onboardingFilter === 'pending') return c.placement_status === 'pending_placement';
+    if (onboardingFilter === 'placed') return c.placement_status === 'placed';
+    if (onboardingFilter === 'completed') {
+      const tasks = c.onboarding_tasks || { contract_signed: false, bank_details_submitted: false, documents_uploaded: false, it_assets_ready: false };
+      return Object.values(tasks).filter(Boolean).length === 4;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6 pb-12" dir={isAr ? 'rtl' : 'ltr'}>
@@ -427,13 +461,15 @@ export default function HRRecruitment() {
             </p>
           </div>
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs">
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">{isAr ? 'جاهزون للتهيئة' : 'Offered & Onboarding'}</p>
-            <p className="text-2xl font-black text-emerald-600 mt-1">{offeredHires.length}</p>
-          </div>
-          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs">
-            <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">{isAr ? 'بانتظار اعتماد المدير' : 'Manager Placements'}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">{isAr ? 'بانتظار اعتماد المدير' : 'Awaiting Manager'}</p>
             <p className="text-2xl font-black text-amber-600 mt-1">
               {candidates.filter(c => c.placement_status === 'pending_placement').length}
+            </p>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs">
+            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">{isAr ? 'تم التعيين واعتماد الحساب' : 'Placed Workforce'}</p>
+            <p className="text-2xl font-black text-emerald-600 mt-1">
+              {candidates.filter(c => c.placement_status === 'placed').length}
             </p>
           </div>
         </div>
@@ -551,9 +587,17 @@ export default function HRRecruitment() {
                         {/* Onboarding preview indicator for offered stage */}
                         {c.stage === 'offered' && c.onboarding_tasks && (
                           <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-[10px]">
-                            <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                              {isAr ? 'جاهز للتسكين' : 'Pending Placement'}
-                            </span>
+                            {c.placement_status === 'placed' ? (
+                              <span className="font-black text-emerald-800 bg-emerald-100/90 border border-emerald-300/50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <CheckCircle2 size={11} className="text-emerald-600" />
+                                {isAr ? 'تم التسكين' : 'Placed'}
+                              </span>
+                            ) : (
+                              <span className="font-black text-amber-800 bg-amber-100/90 border border-amber-300/50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Clock size={11} className="text-amber-600" />
+                                {isAr ? 'بانتظار المدير' : 'Pending Placement'}
+                              </span>
+                            )}
                             <span className="text-gray-400 font-bold">
                               {Object.values(c.onboarding_tasks).filter(Boolean).length}/4 tasks
                             </span>
@@ -579,30 +623,58 @@ export default function HRRecruitment() {
               </h3>
               <p className="text-xs font-medium text-gray-500 mt-0.5">
                 {isAr
-                  ? 'تحقق من اكتمال المستندات وتأكيد جاهزية ملف الموظف قبل اعتماد التعيين لدى المدير.'
-                  : 'Track task readiness for accepted candidates before final allocation in Manager Portal.'}
+                  ? 'متابعة استكمال العقد والبيانات البنكية والهوية والأجهزة للموظفين المعتمدين من الإدارة أو بانتظار التسكين.'
+                  : 'Track readiness of contract, bank details, identification docs, and IT assets for candidates placed by Management.'}
               </p>
             </div>
             <span className="text-xs font-black text-[#A11212] bg-[#A11212]/10 px-3 py-1.5 rounded-full self-start sm:self-auto">
-              {offeredHires.length} {isAr ? 'موظف جاهز' : 'Candidates in Queue'}
+              {displayedOnboardingHires.length} {isAr ? 'موظف في القائمة' : 'Candidates Displayed'}
             </span>
           </div>
 
-          {offeredHires.length === 0 ? (
+          {/* Sub-Filter Status Tabs */}
+          <div className="px-6 py-3 bg-gray-50/80 border-b border-gray-100 flex flex-wrap items-center gap-2">
+            {[
+              { id: 'all', labelEn: 'All in Queue', labelAr: 'الكل في القائمة', count: offeredHires.length },
+              { id: 'pending', labelEn: 'Awaiting Manager', labelAr: 'بانتظار اعتماد المدير', count: offeredHires.filter(c => c.placement_status === 'pending_placement').length },
+              { id: 'placed', labelEn: 'Placed & Hired', labelAr: 'تم التسكين والاعتماد', count: offeredHires.filter(c => c.placement_status === 'placed').length },
+              { id: 'completed', labelEn: 'Fully Onboarded (4/4)', labelAr: 'مكتمل التهيئة (4/4)', count: offeredHires.filter(c => Object.values(c.onboarding_tasks || {}).filter(Boolean).length === 4).length }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setOnboardingFilter(tab.id as any)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  onboardingFilter === tab.id
+                    ? 'bg-white text-gray-900 shadow-xs border border-gray-200'
+                    : 'text-gray-500 hover:text-gray-900 bg-transparent'
+                }`}
+              >
+                <span>{isAr ? tab.labelAr : tab.labelEn}</span>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  onboardingFilter === tab.id ? 'bg-[#A11212] text-white' : 'bg-gray-200 text-gray-600'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {displayedOnboardingHires.length === 0 ? (
             <div className="p-12 text-center">
               <div className="w-16 h-16 bg-gray-100 text-gray-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
                 <UserCheck size={28} />
               </div>
-              <h4 className="text-sm font-black text-gray-700">{isAr ? 'لا توجد تعيينات قيد الانتظار' : 'No Onboarding Hires Currently'}</h4>
+              <h4 className="text-sm font-black text-gray-700">{isAr ? 'لا توجد تعيينات في هذا القسم' : 'No Candidates in this Category'}</h4>
               <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
                 {isAr
-                  ? 'عند نقل أي مرشح إلى مرحلة العرض أو تسجيل موظف جديد، سيظهر مباشرة في هذه القائمة.'
-                  : 'When candidates are offered a position or registered, they will appear here with their onboarding checklist.'}
+                  ? 'لا يوجد موظفون يطابقون الفلتر المحدد حالياً.'
+                  : 'No candidate records match the active filter criteria.'}
               </p>
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {offeredHires.map(c => {
+              {displayedOnboardingHires.map(c => {
                 const tasks = c.onboarding_tasks || {
                   contract_signed: false,
                   bank_details_submitted: false,
@@ -617,9 +689,27 @@ export default function HRRecruitment() {
                     <div className="flex-1 min-w-[240px]">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-black text-base text-gray-900">{c.name}</h4>
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
-                          {c.placement_status === 'placed' ? (isAr ? 'تم التسكين' : 'Placed') : (isAr ? 'بانتظار المدير' : 'Awaiting Placement')}
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1 ${
+                          c.placement_status === 'placed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {c.placement_status === 'placed' ? (
+                            <>
+                              <CheckCircle2 size={11} className="text-emerald-600" />
+                              <span>{isAr ? 'تم التسكين' : 'Placed'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Clock size={11} className="text-amber-600" />
+                              <span>{isAr ? 'بانتظار المدير' : 'Awaiting Placement'}</span>
+                            </>
+                          )}
                         </span>
+                        {completedCount === 4 && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 flex items-center gap-1">
+                            <CheckCircle2 size={11} className="text-blue-600" />
+                            <span>{isAr ? 'مكتمل التهيئة' : 'Fully Onboarded'}</span>
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mb-2">
                         <span className="text-xs font-bold text-gray-500">
