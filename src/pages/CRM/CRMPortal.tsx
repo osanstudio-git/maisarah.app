@@ -19,6 +19,7 @@ import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
 import CRMLeadManagement from '../../components/crm/CRMLeadManagement';
 import BusinessClubAdmin from '../../components/crm/BusinessClubAdmin';
 import CRMB2BPartners from '../../components/crm/CRMB2BPartners';
+import ModernCRMDashboard from '../../components/crm/ModernCRMDashboard';
 import type { B2BPartner } from '../../components/crm/CRMB2BPartners';
 import { addDSREntry } from '../../utils/dsrSync';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
@@ -1630,113 +1631,14 @@ export default function CRMPortal() {
 
       {/* 1. DASHBOARD INSIGHTS TAB */}
       {activeTab === 'dashboard' && (
-        <div className="space-y-6">
-          {/* Metrics Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
-              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Total Leads</p>
-              <h3 className="text-3xl font-black text-gray-900 mt-2">{leads.length + 3}</h3>
-              <p className="text-[10px] text-orange-600 font-bold mt-1">Pending Qualification</p>
-            </div>
-            <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
-              <p className="text-[10px] text-[#A11212] font-black uppercase tracking-widest">Converted Clients</p>
-              <h3 className="text-3xl font-black text-gray-900 mt-2">24</h3>
-              <p className="text-[10px] text-green-700 font-bold mt-1">➔ 75% Conversion Rate</p>
-            </div>
-            <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
-              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">B2B Retainers</p>
-              <h3 className="text-3xl font-black text-gray-900 mt-2">
-                {clients.filter(c => c.type === 'B2B').length}
-              </h3>
-              <p className="text-[10px] text-gray-500 font-bold mt-1">Active Accounts</p>
-            </div>
-            <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
-              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Total ARR value</p>
-              <h3 className="text-3xl font-black text-[#A11212] mt-2">
-                {clients.reduce((acc, c) => acc + c.yearlyBilling, 0).toLocaleString()} OMR
-              </h3>
-              <p className="text-[10px] text-gray-500 font-bold mt-1">Annual Recurring Revenue</p>
-            </div>
-          </div>
-
-          {/* Chart & Summary Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Conversion Chart */}
-            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-widest text-[#A11212]">Conversion Metrics & Growth</h4>
-                <p className="text-[10px] text-gray-400 font-bold">Historical data indicating client conversion performance</p>
-              </div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={RECHARTS_DATA}>
-                    <defs>
-                      <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#A11212" stopOpacity={0.2} />
-                        <stop offset="95%" stopColor="#A11212" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="colorConv" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#16a34a" stopOpacity={0.2} />
-                        <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" stroke="#9ca3af" fontSize={11} />
-                    <YAxis stroke="#9ca3af" fontSize={11} />
-                    <Tooltip />
-                    <Area type="monotone" dataKey="Leads" stroke="#A11212" fillOpacity={1} fill="url(#colorLeads)" />
-                    <Area type="monotone" dataKey="Converted" stroke="#16a34a" fillOpacity={1} fill="url(#colorConv)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Quick Summary / Notifications */}
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6 flex flex-col justify-between">
-              <div className="space-y-4">
-                <h4 className="text-xs font-black uppercase tracking-widest text-[#A11212]">Recent Activities & Alerts</h4>
-                <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
-                  {dynamicAlerts.length === 0 ? (
-                    <div className="flex gap-3 items-start p-3 bg-gray-50 rounded-2xl border border-gray-200">
-                      <CheckCircle2 size={18} className="text-green-700 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-xs font-black text-gray-700">{isAr ? 'لا توجد تنبيهات عاجلة' : 'No Urgent Alerts'}</p>
-                        <p className="text-[10px] text-gray-500 mt-0.5">{isAr ? 'جميع العمليات والفرص تسير بشكل جيد.' : 'All pipelines and active retentions are in healthy status.'}</p>
-                      </div>
-                    </div>
-                  ) : (
-                    dynamicAlerts.map((alert, idx) => (
-                      <div
-                        key={idx}
-                        className={`flex gap-3 items-start p-3 rounded-2xl border ${alert.type === 'stale_lead'
-                          ? 'bg-red-50/40 border-red-100/50 text-[#A11212]'
-                          : 'bg-yellow-50/40 border-yellow-100/50 text-yellow-700'
-                          }`}
-                      >
-                        <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs font-black text-gray-800">{alert.title}</p>
-                          <p className="text-[10px] text-gray-500 mt-0.5">{alert.desc}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-[#A11212]/5 p-4 rounded-2xl border border-[#A11212]/10 text-center">
-                <p className="text-xs font-black text-gray-900">VP Verification Required</p>
-                <p className="text-[10px] text-gray-500 mt-1">There are pending exports awaiting managerial sign-off.</p>
-                <button
-                  onClick={() => handleTabChange('financials')}
-                  className="mt-3 w-full bg-[#A11212] hover:bg-[#800e0e] text-white text-[10px] font-black uppercase tracking-wider py-2.5 rounded-xl transition-all"
-                >
-                  Manage Approvals
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ModernCRMDashboard
+          isAr={isAr}
+          leads={leads}
+          clients={clients}
+          quotations={quotations}
+          onOpenAddDeal={() => handleTabChange('pipeline')}
+          onViewAllDeals={() => handleTabChange('pipeline')}
+        />
       )}
 
       {/* 2. B2B CORPORATE & CHANNEL PARTNERS TAB */}
