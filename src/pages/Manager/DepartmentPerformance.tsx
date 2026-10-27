@@ -35,8 +35,11 @@ import {
   Users,
   Check,
   Filter,
-  X
+  X,
+  Settings2
 } from 'lucide-react';
+import DepartmentsStudioModal from '../../components/admin/DepartmentsStudioModal';
+import { fetchAllDepartments } from '../../services/departmentService';
 
 interface EmployeeWorkload {
   id: string;
@@ -137,6 +140,23 @@ const DepartmentPerformance = () => {
   const [delayIncidents, setDelayIncidents] = useState<DelayIncident[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [departmentsList, setDepartmentsList] = useState(STATIC_DEPARTMENTS);
+  const [showStudioModal, setShowStudioModal] = useState(false);
+
+  const reloadDepartments = useCallback(async () => {
+    try {
+      const depts = await fetchAllDepartments();
+      if (depts && depts.length > 0) {
+        setDepartmentsList(depts);
+      }
+    } catch (e) {
+      console.warn('Using static departments:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    reloadDepartments();
+  }, [reloadDepartments]);
 
   // Quick Deliverable Modal
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -434,14 +454,24 @@ const DepartmentPerformance = () => {
               onChange={(e) => setSelectedDeptId(e.target.value)}
               className="w-full py-3 px-4 bg-brand-dark text-white rounded-2xl outline-none text-xs font-black appearance-none transition-all cursor-pointer shadow-lg shadow-brand-dark/20 pr-9 pl-4"
             >
-              {STATIC_DEPARTMENTS.map(dept => (
+              {departmentsList.map(dept => (
                 <option key={dept.id} value={dept.id} className="bg-white text-gray-900">
-                  {isAr ? dept.nameAr : dept.name} ({dept.head_title})
+                  {isAr ? (dept.name_ar || dept.nameAr || dept.name) : dept.name} ({dept.head_title})
                 </option>
               ))}
             </select>
             <ChevronDown className={`absolute ${isAr ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-white/80 pointer-events-none`} size={16} />
           </div>
+
+          {/* Department Studio Button (Admin) */}
+          <button
+            onClick={() => setShowStudioModal(true)}
+            className="px-4 py-3 bg-gradient-to-r from-red-950 via-gray-900 to-black hover:opacity-90 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all cursor-pointer border border-red-800/40"
+            title={isAr ? 'استوديو إدارة الأقسام والخدمات' : 'Departments & Services Studio'}
+          >
+            <Settings2 size={16} className="text-red-400" />
+            <span>{isAr ? 'استوديو الأقسام' : 'Dept Studio'}</span>
+          </button>
 
           {/* Quick Assign Work Button */}
           <button
@@ -466,7 +496,7 @@ const DepartmentPerformance = () => {
 
       {/* ── Department Quick Switcher Chips ──────────────────────────────── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-        {STATIC_DEPARTMENTS.map(d => {
+        {departmentsList.map(d => {
           const isSelected = d.id === selectedDeptId;
           return (
             <button
@@ -479,7 +509,7 @@ const DepartmentPerformance = () => {
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-brand-dark'}`} />
-              <span>{isAr ? d.nameAr : d.name}</span>
+              <span>{isAr ? (d.name_ar || d.nameAr || d.name) : d.name}</span>
             </button>
           );
         })}
@@ -1043,6 +1073,13 @@ const DepartmentPerformance = () => {
           </div>
         </div>
       )}
+
+      {/* Departments & Services Studio Modal */}
+      <DepartmentsStudioModal
+        isOpen={showStudioModal}
+        onClose={() => setShowStudioModal(false)}
+        onDepartmentUpdated={reloadDepartments}
+      />
     </div>
   );
 };

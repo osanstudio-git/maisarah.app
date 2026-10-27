@@ -906,8 +906,8 @@ export default function CRMLeadManagement() {
   const handleOpenEditModal = (lead: CRMLead) => {
     setEditingLead(lead);
     setFormError(null);
-    const servs = lead.services && lead.services.length > 0 
-      ? lead.services 
+    const servs = lead.services && lead.services.length > 0
+      ? lead.services
       : (lead.interested_service ? [lead.interested_service] : ['VAT filing']);
 
     setLeadForm({
@@ -1297,7 +1297,7 @@ export default function CRMLeadManagement() {
       if (fetchErr) throw fetchErr;
 
       const { userNotes, meta } = parseLeadNotes(latestLead.notes);
-      
+
       // Strict User Rule: Completed date set automatically when delivery status is marked Completed; cleared if changed back.
       const isCompleted = newStatus === 'completed';
       const completedAt = isCompleted ? (meta.completed_at || new Date().toISOString()) : null;
@@ -2269,7 +2269,7 @@ export default function CRMLeadManagement() {
       setCustomPartners(updated);
       try {
         localStorage.setItem('maisarah_crm_custom_partners', JSON.stringify(updated));
-      } catch {}
+      } catch { }
     }
 
     const updatedCommissions = {
@@ -2279,7 +2279,7 @@ export default function CRMLeadManagement() {
     setPartnerCommissionMap(updatedCommissions);
     try {
       localStorage.setItem('maisarah_crm_partner_commissions', JSON.stringify(updatedCommissions));
-    } catch {}
+    } catch { }
 
     setToast({
       show: true,
@@ -2300,7 +2300,7 @@ export default function CRMLeadManagement() {
     setPartnerCommissionMap(updated);
     try {
       localStorage.setItem('maisarah_crm_partner_commissions', JSON.stringify(updated));
-    } catch {}
+    } catch { }
   };
 
   return (
@@ -2308,11 +2308,10 @@ export default function CRMLeadManagement() {
 
       {/* ── Toast Alert ─────────────────────────────────────────────────── */}
       {toast.show && (
-        <div className={`fixed top-6 end-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${
-          toast.type === 'success'
+        <div className={`fixed top-6 end-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${toast.type === 'success'
             ? 'bg-emerald-900/95 text-emerald-100 border-emerald-500/30'
             : 'bg-red-900/95 text-red-100 border-red-500/30'
-        }`}>
+          }`}>
           {toast.type === 'success' ? <CheckCircle2 size={20} className="text-emerald-400 shrink-0" /> : <AlertCircle size={20} className="text-red-400 shrink-0" />}
           <div>
             <p className="text-xs font-black uppercase tracking-wider">{toast.title}</p>
@@ -2421,18 +2420,15 @@ export default function CRMLeadManagement() {
             </div>
           </div>
 
-          <div className={`p-3.5 rounded-2xl border shadow-xs ${
-            stats.overdueFollowups > 0 ? 'bg-rose-50/80 border-rose-200' : 'bg-white border-gray-100'
-          }`}>
-            <p className={`text-[10px] font-black uppercase tracking-widest ${
-              stats.overdueFollowups > 0 ? 'text-rose-700' : 'text-gray-400'
+          <div className={`p-3.5 rounded-2xl border shadow-xs ${stats.overdueFollowups > 0 ? 'bg-rose-50/80 border-rose-200' : 'bg-white border-gray-100'
             }`}>
+            <p className={`text-[10px] font-black uppercase tracking-widest ${stats.overdueFollowups > 0 ? 'text-rose-700' : 'text-gray-400'
+              }`}>
               {isAr ? 'المتابعات المتأخرة' : 'Overdue Follow-ups'}
             </p>
             <div className="flex items-baseline justify-between mt-1">
-              <p className={`text-xl font-black ${
-                stats.overdueFollowups > 0 ? 'text-rose-700' : 'text-gray-900'
-              }`}>
+              <p className={`text-xl font-black ${stats.overdueFollowups > 0 ? 'text-rose-700' : 'text-gray-900'
+                }`}>
                 {stats.overdueFollowups}
               </p>
               {stats.overdueFollowups > 0 && (
@@ -2451,11 +2447,10 @@ export default function CRMLeadManagement() {
         <button
           type="button"
           onClick={() => setActiveTab('dashboard')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
-            activeTab === 'dashboard'
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${activeTab === 'dashboard'
               ? 'bg-white text-gray-900 shadow-xs'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
-          }`}
+            }`}
         >
           <TrendingUp size={15} className={activeTab === 'dashboard' ? 'text-[#A11212]' : 'text-gray-400'} />
           <span>{isAr ? 'لوحة المؤشرات' : 'Dashboard'}</span>
@@ -2465,11 +2460,10 @@ export default function CRMLeadManagement() {
         <button
           type="button"
           onClick={() => setActiveTab('pipeline')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
-            activeTab === 'pipeline'
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${activeTab === 'pipeline'
               ? 'bg-white text-gray-900 shadow-xs'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
-          }`}
+            }`}
         >
           <Layers size={15} className={activeTab === 'pipeline' ? 'text-[#A11212]' : 'text-gray-400'} />
           <span>{isAr ? 'لوحة خط الأنابيب' : 'Pipeline (board)'}</span>
@@ -2482,11 +2476,10 @@ export default function CRMLeadManagement() {
         <button
           type="button"
           onClick={() => setActiveTab('table')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
-            activeTab === 'table'
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${activeTab === 'table'
               ? 'bg-white text-gray-900 shadow-xs'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
-          }`}
+            }`}
         >
           <Users size={15} className={activeTab === 'table' ? 'text-[#A11212]' : 'text-gray-400'} />
           <span>{isAr ? 'جميع الصفقات (جدول)' : 'All leads (table)'}</span>
@@ -2496,11 +2489,10 @@ export default function CRMLeadManagement() {
         <button
           type="button"
           onClick={() => setActiveTab('delivery')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
-            activeTab === 'delivery'
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${activeTab === 'delivery'
               ? 'bg-white text-emerald-900 shadow-xs ring-1 ring-emerald-500/30'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
-          }`}
+            }`}
         >
           <CheckSquare size={15} className={activeTab === 'delivery' ? 'text-emerald-600' : 'text-gray-400'} />
           <span>{isAr ? 'التنفيذ والمدفوعات' : 'Delivery & payments'}</span>
@@ -2513,11 +2505,10 @@ export default function CRMLeadManagement() {
         <button
           type="button"
           onClick={() => setActiveTab('recurring')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
-            activeTab === 'recurring'
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${activeTab === 'recurring'
               ? 'bg-white text-gray-900 shadow-xs ring-1 ring-[#A11212]/30'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
-          }`}
+            }`}
         >
           <RefreshCw size={15} className={activeTab === 'recurring' ? 'text-[#A11212]' : 'text-gray-400'} />
           <span>{isAr ? 'الأعمال الدورية' : 'Recurring work'}</span>
@@ -2530,11 +2521,10 @@ export default function CRMLeadManagement() {
         <button
           type="button"
           onClick={() => setActiveTab('partners')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
-            activeTab === 'partners'
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${activeTab === 'partners'
               ? 'bg-white text-gray-900 shadow-xs'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
-          }`}
+            }`}
         >
           <Briefcase size={15} className={activeTab === 'partners' ? 'text-purple-600' : 'text-gray-400'} />
           <span>{isAr ? 'شركاء الأعمال' : 'B2B partners'}</span>
@@ -2598,18 +2588,16 @@ export default function CRMLeadManagement() {
               <button
                 type="button"
                 onClick={() => setActiveTab('pipeline')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                  activeTab === 'pipeline' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${activeTab === 'pipeline' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                  }`}
               >
                 {isAr ? 'لوحة كانبان' : 'Kanban'}
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('table')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                  activeTab === 'table' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${activeTab === 'table' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                  }`}
               >
                 {isAr ? 'جدول البيانات' : 'Table'}
               </button>
@@ -2639,12 +2627,11 @@ export default function CRMLeadManagement() {
                 <div className="pb-3 border-b border-gray-200/60 mb-3 space-y-1">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`w-2.5 h-2.5 rounded-full ${
-                        col.id === 'won' ? 'bg-emerald-500' :
-                        col.id === 'lost' ? 'bg-rose-500' :
-                        col.id === 'proposal_sent' ? 'bg-amber-500' :
-                        col.id === 'negotiation' ? 'bg-purple-500' : 'bg-blue-500'
-                      }`}></span>
+                      <span className={`w-2.5 h-2.5 rounded-full ${col.id === 'won' ? 'bg-emerald-500' :
+                          col.id === 'lost' ? 'bg-rose-500' :
+                            col.id === 'proposal_sent' ? 'bg-amber-500' :
+                              col.id === 'negotiation' ? 'bg-purple-500' : 'bg-blue-500'
+                        }`}></span>
                       <h3 className={`font-black text-xs uppercase tracking-wider ${col.color}`}>
                         {isAr ? col.labelAr : col.labelEn}
                       </h3>
@@ -2711,11 +2698,10 @@ export default function CRMLeadManagement() {
                               >
                                 <Edit2 size={12} />
                               </button>
-                              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                                lead.priority === 'urgent' ? 'bg-red-100 text-red-700 animate-pulse' :
-                                lead.priority === 'high' ? 'bg-amber-100 text-amber-700' :
-                                lead.priority === 'medium' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                              }`}>
+                              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase ${lead.priority === 'urgent' ? 'bg-red-100 text-red-700 animate-pulse' :
+                                  lead.priority === 'high' ? 'bg-amber-100 text-amber-700' :
+                                    lead.priority === 'medium' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                }`}>
                                 {lead.priority}
                               </span>
                             </div>
@@ -2767,13 +2753,12 @@ export default function CRMLeadManagement() {
                             <button
                               type="button"
                               onClick={() => handleOpenPaymentModal(lead)}
-                              className={`w-full flex items-center justify-between p-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
-                                lead.payment_status === 'fully_paid'
+                              className={`w-full flex items-center justify-between p-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${lead.payment_status === 'fully_paid'
                                   ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
                                   : lead.payment_status === 'partially_paid'
                                     ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
                                     : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-center gap-1">
                                 <CreditCard size={11} className="shrink-0" />
@@ -2809,11 +2794,10 @@ export default function CRMLeadManagement() {
 
                           {/* Follow-up Date Alert */}
                           {lead.next_followup && (
-                            <div className={`text-[10px] font-bold p-1.5 rounded-lg flex items-center gap-1.5 ${
-                              isOverdue
+                            <div className={`text-[10px] font-bold p-1.5 rounded-lg flex items-center gap-1.5 ${isOverdue
                                 ? 'bg-rose-100 text-rose-800 border border-rose-300/80 font-black'
                                 : 'bg-gray-50 text-gray-600'
-                            }`}>
+                              }`}>
                               {isOverdue ? <AlertTriangle size={12} className="text-rose-600 shrink-0" /> : <Clock size={11} className="text-gray-400 shrink-0" />}
                               <span>{isOverdue ? (isAr ? `متأخر: ${lead.next_followup}` : `Overdue: ${lead.next_followup}`) : (isAr ? `متابعة: ${lead.next_followup}` : `Follow-up: ${lead.next_followup}`)}</span>
                             </div>
@@ -2849,9 +2833,8 @@ export default function CRMLeadManagement() {
                                 <span className="truncate">{isAr ? 'عرض السعر' : 'Quotation'}</span>
                               </div>
                               {linkedQuote && (
-                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${
-                                  linkedQuote.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-200 text-purple-900'
-                                }`}>
+                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${linkedQuote.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-200 text-purple-900'
+                                  }`}>
                                   {linkedQuote.status}
                                 </span>
                               )}
@@ -3048,13 +3031,12 @@ export default function CRMLeadManagement() {
                               <button
                                 type="button"
                                 onClick={() => handleOpenPaymentModal(lead)}
-                                className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[9px] font-bold border transition-colors cursor-pointer ${
-                                  lead.payment_status === 'fully_paid'
+                                className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[9px] font-bold border transition-colors cursor-pointer ${lead.payment_status === 'fully_paid'
                                     ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
                                     : lead.payment_status === 'partially_paid'
                                       ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
                                       : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
-                                }`}
+                                  }`}
                                 title={isAr ? 'فتح دفتر المدفوعات' : 'Open Payment Ledger'}
                               >
                                 <CreditCard size={9} />
@@ -3263,25 +3245,21 @@ export default function CRMLeadManagement() {
               </div>
             </div>
 
-            <div className={`p-5 rounded-3xl border shadow-xs flex flex-col justify-between ${
-              deliveryStats.totalPending > 0 ? 'bg-amber-50/40 border-amber-200' : 'bg-white border-gray-100'
-            }`}>
+            <div className={`p-5 rounded-3xl border shadow-xs flex flex-col justify-between ${deliveryStats.totalPending > 0 ? 'bg-amber-50/40 border-amber-200' : 'bg-white border-gray-100'
+              }`}>
               <div className="flex items-center justify-between">
-                <span className={`text-[10px] font-black uppercase tracking-widest ${
-                  deliveryStats.totalPending > 0 ? 'text-amber-800' : 'text-gray-500'
-                }`}>
+                <span className={`text-[10px] font-black uppercase tracking-widest ${deliveryStats.totalPending > 0 ? 'text-amber-800' : 'text-gray-500'
+                  }`}>
                   {isAr ? 'الذمم والمتبقي' : 'Outstanding Receivables'}
                 </span>
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                  deliveryStats.totalPending > 0 ? 'bg-amber-100 text-amber-700' : 'bg-gray-50 text-gray-600'
-                }`}>
+                <span className={`w-8 h-8 rounded-xl flex items-center justify-center ${deliveryStats.totalPending > 0 ? 'bg-amber-100 text-amber-700' : 'bg-gray-50 text-gray-600'
+                  }`}>
                   <Receipt size={16} />
                 </span>
               </div>
               <div className="mt-3">
-                <p className={`text-2xl font-black ${
-                  deliveryStats.totalPending > 0 ? 'text-amber-900' : 'text-gray-900'
-                }`}>
+                <p className={`text-2xl font-black ${deliveryStats.totalPending > 0 ? 'text-amber-900' : 'text-gray-900'
+                  }`}>
                   OMR {formatOMR(deliveryStats.totalPending)}
                 </p>
                 <div className="flex items-center justify-between text-[10px] font-semibold mt-1">
@@ -3309,11 +3287,10 @@ export default function CRMLeadManagement() {
                     key={statusKey}
                     type="button"
                     onClick={() => setDeliveryFilter(statusKey)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      isActive
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${isActive
                         ? 'bg-[#A11212] text-white shadow-xs'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                      }`}
                   >
                     {labels[statusKey]}
                   </button>
@@ -3336,11 +3313,10 @@ export default function CRMLeadManagement() {
                     key={pKey}
                     type="button"
                     onClick={() => setDeliveryPaymentFilter(pKey)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      isActive
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${isActive
                         ? 'bg-gray-900 text-white shadow-xs'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                      }`}
                   >
                     {pLabels[pKey]}
                   </button>
@@ -3440,18 +3416,17 @@ export default function CRMLeadManagement() {
                                 <span className="font-black text-gray-900">OMR {formatOMR(dealValue)}</span>
                               </div>
                               <div className="flex items-center gap-1.5 mt-1">
-                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                                  isFullyPaid
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isFullyPaid
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : isPartiallyPaid
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-amber-100 text-amber-800'
-                                }`}>
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}>
                                   {isFullyPaid
                                     ? (isAr ? 'مسدد بالكامل' : 'Fully Paid')
                                     : isPartiallyPaid
-                                    ? (isAr ? `مدفوع: OMR ${formatOMR(totalPaid)}` : `Paid: OMR ${formatOMR(totalPaid)}`)
-                                    : (isAr ? 'غير مدفوع' : 'Unpaid')}
+                                      ? (isAr ? `مدفوع: OMR ${formatOMR(totalPaid)}` : `Paid: OMR ${formatOMR(totalPaid)}`)
+                                      : (isAr ? 'غير مدفوع' : 'Unpaid')}
                                 </span>
                               </div>
                               {!isFullyPaid && balance > 0 && (
@@ -3475,13 +3450,12 @@ export default function CRMLeadManagement() {
                             <select
                               value={currentDelivery}
                               onChange={e => handleUpdateDeliveryStatus(lead.id, e.target.value as any)}
-                              className={`text-xs font-black rounded-xl px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none ${
-                                currentDelivery === 'completed'
+                              className={`text-xs font-black rounded-xl px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none ${currentDelivery === 'completed'
                                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                                   : currentDelivery === 'in_progress'
-                                  ? 'bg-blue-50 text-blue-800 border-blue-300'
-                                  : 'bg-gray-50 text-gray-700 border-gray-200'
-                              }`}
+                                    ? 'bg-blue-50 text-blue-800 border-blue-300'
+                                    : 'bg-gray-50 text-gray-700 border-gray-200'
+                                }`}
                             >
                               <option value="not_started">{isAr ? 'لم يبدأ' : 'Not Started'}</option>
                               <option value="in_progress">{isAr ? 'قيد التنفيذ' : 'In Progress'}</option>
@@ -3526,11 +3500,10 @@ export default function CRMLeadManagement() {
                                   type="date"
                                   value={lead.payment_due_date || ''}
                                   onChange={e => handleUpdateFulfillmentDate(lead.id, 'payment_due_date', e.target.value)}
-                                  className={`text-[11px] font-semibold rounded-lg px-2 py-1 border focus:outline-none ${
-                                    isDueDateOverdue
+                                  className={`text-[11px] font-semibold rounded-lg px-2 py-1 border focus:outline-none ${isDueDateOverdue
                                       ? 'bg-rose-50 border-rose-300 text-rose-800'
                                       : 'bg-gray-50 border-gray-200 text-gray-700 focus:border-[#A11212]'
-                                  }`}
+                                    }`}
                                 />
                                 {isDueDateOverdue && (
                                   <p className="text-[10px] font-black text-rose-600 flex items-center gap-1">
@@ -3643,18 +3616,15 @@ export default function CRMLeadManagement() {
               </div>
             </div>
 
-            <div className={`p-5 rounded-3xl border shadow-xs flex flex-col justify-between ${
-              recurringStats.overdueCount > 0 ? 'bg-rose-50/50 border-rose-200' : 'bg-white border-emerald-100'
-            }`}>
+            <div className={`p-5 rounded-3xl border shadow-xs flex flex-col justify-between ${recurringStats.overdueCount > 0 ? 'bg-rose-50/50 border-rose-200' : 'bg-white border-emerald-100'
+              }`}>
               <div className="flex items-center justify-between">
-                <span className={`text-[10px] font-black uppercase tracking-widest ${
-                  recurringStats.overdueCount > 0 ? 'text-rose-700' : 'text-emerald-700'
-                }`}>
+                <span className={`text-[10px] font-black uppercase tracking-widest ${recurringStats.overdueCount > 0 ? 'text-rose-700' : 'text-emerald-700'
+                  }`}>
                   {isAr ? 'إنجاز الدورة الحالية' : 'Current Cycle Health'}
                 </span>
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                  recurringStats.overdueCount > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-600'
-                }`}>
+                <span className={`w-8 h-8 rounded-xl flex items-center justify-center ${recurringStats.overdueCount > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-600'
+                  }`}>
                   <CheckSquare size={16} />
                 </span>
               </div>
@@ -3697,11 +3667,10 @@ export default function CRMLeadManagement() {
                     key={freq}
                     type="button"
                     onClick={() => setRecurringFrequencyFilter(freq)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      isActive
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${isActive
                         ? 'bg-[#A11212] text-white shadow-xs'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                      }`}
                   >
                     {freqLabels[freq]}
                   </button>
@@ -3725,11 +3694,10 @@ export default function CRMLeadManagement() {
                       key={st}
                       type="button"
                       onClick={() => setRecurringStatusFilter(st)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        isActive
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${isActive
                           ? 'bg-gray-900 text-white shadow-xs'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
+                        }`}
                     >
                       {stLabels[st]}
                     </button>
@@ -3890,13 +3858,12 @@ export default function CRMLeadManagement() {
                               <select
                                 value={job.status || 'pending'}
                                 onChange={e => handleUpdateRecurringStatus(lead.id, job.id, e.target.value as any)}
-                                className={`text-[11px] font-black rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none ${
-                                  job.status === 'completed'
+                                className={`text-[11px] font-black rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none ${job.status === 'completed'
                                     ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                                     : job.status === 'in_progress'
-                                    ? 'bg-blue-50 text-blue-800 border-blue-300'
-                                    : 'bg-amber-50 text-amber-800 border-amber-200'
-                                }`}
+                                      ? 'bg-blue-50 text-blue-800 border-blue-300'
+                                      : 'bg-amber-50 text-amber-800 border-amber-200'
+                                  }`}
                               >
                                 <option value="pending">{isAr ? 'معلق' : 'Pending'}</option>
                                 <option value="in_progress">{isAr ? 'قيد الإنجاز' : 'In Progress'}</option>
@@ -3907,11 +3874,10 @@ export default function CRMLeadManagement() {
                                 <button
                                   type="button"
                                   onClick={() => handleToggleFeeReceived(lead.id, job.id, !job.fee_received)}
-                                  className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
-                                    job.fee_received
+                                  className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md border transition-all cursor-pointer ${job.fee_received
                                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                                       : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-                                  }`}
+                                    }`}
                                   title={isAr ? 'تبديل حالة استلام الأتعاب' : 'Toggle Fee Received'}
                                 >
                                   {job.fee_received ? (
@@ -4183,11 +4149,10 @@ export default function CRMLeadManagement() {
                     key={p}
                     type="button"
                     onClick={() => setDashPeriodFilter(p)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      isActive
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${isActive
                         ? 'bg-[#A11212] text-white shadow-xs'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                      }`}
                   >
                     {labels[p]}
                   </button>
@@ -4358,9 +4323,8 @@ export default function CRMLeadManagement() {
                   </p>
                 </div>
 
-                <div className={`p-4 rounded-2xl border shadow-xs ${
-                  dashboardData.kpis.pendingReceivables > 0 ? 'bg-amber-50/40 border-amber-200' : 'bg-white border-gray-100'
-                }`}>
+                <div className={`p-4 rounded-2xl border shadow-xs ${dashboardData.kpis.pendingReceivables > 0 ? 'bg-amber-50/40 border-amber-200' : 'bg-white border-gray-100'
+                  }`}>
                   <p className="text-[10px] font-black uppercase tracking-widest text-amber-800">
                     {isAr ? 'الذمم والمبالغ المتبقية' : 'Outstanding Receivables'}
                   </p>
@@ -4416,32 +4380,26 @@ export default function CRMLeadManagement() {
                   </p>
                 </div>
 
-                <div className={`p-4 rounded-2xl border shadow-xs ${
-                  dashboardData.kpis.overdueFollowups > 0 ? 'bg-rose-50 border-rose-200' : 'bg-white border-gray-100'
-                }`}>
-                  <p className={`text-[10px] font-black uppercase tracking-widest ${
-                    dashboardData.kpis.overdueFollowups > 0 ? 'text-rose-700' : 'text-gray-400'
+                <div className={`p-4 rounded-2xl border shadow-xs ${dashboardData.kpis.overdueFollowups > 0 ? 'bg-rose-50 border-rose-200' : 'bg-white border-gray-100'
                   }`}>
+                  <p className={`text-[10px] font-black uppercase tracking-widest ${dashboardData.kpis.overdueFollowups > 0 ? 'text-rose-700' : 'text-gray-400'
+                    }`}>
                     {isAr ? 'متابعات متأخرة' : 'Overdue Follow-ups'}
                   </p>
-                  <p className={`text-xl font-black ${
-                    dashboardData.kpis.overdueFollowups > 0 ? 'text-rose-700' : 'text-gray-900'
-                  } mt-1`}>
+                  <p className={`text-xl font-black ${dashboardData.kpis.overdueFollowups > 0 ? 'text-rose-700' : 'text-gray-900'
+                    } mt-1`}>
                     {dashboardData.kpis.overdueFollowups}
                   </p>
                 </div>
 
-                <div className={`p-4 rounded-2xl border shadow-xs ${
-                  dashboardData.kpis.overdueRetainers > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'
-                }`}>
-                  <p className={`text-[10px] font-black uppercase tracking-widest ${
-                    dashboardData.kpis.overdueRetainers > 0 ? 'text-amber-800' : 'text-gray-400'
+                <div className={`p-4 rounded-2xl border shadow-xs ${dashboardData.kpis.overdueRetainers > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'
                   }`}>
+                  <p className={`text-[10px] font-black uppercase tracking-widest ${dashboardData.kpis.overdueRetainers > 0 ? 'text-amber-800' : 'text-gray-400'
+                    }`}>
                     {isAr ? 'اشتراكات مستحقة' : 'Due Retainer Cycles'}
                   </p>
-                  <p className={`text-xl font-black ${
-                    dashboardData.kpis.overdueRetainers > 0 ? 'text-amber-900' : 'text-gray-900'
-                  } mt-1`}>
+                  <p className={`text-xl font-black ${dashboardData.kpis.overdueRetainers > 0 ? 'text-amber-900' : 'text-gray-900'
+                    } mt-1`}>
                     {dashboardData.kpis.overdueRetainers}
                   </p>
                 </div>
@@ -4489,13 +4447,12 @@ export default function CRMLeadManagement() {
                         </div>
                         <div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden p-0.5">
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              st.id === 'won'
+                            className={`h-full rounded-full transition-all duration-500 ${st.id === 'won'
                                 ? 'bg-emerald-500'
                                 : st.id === 'lost'
-                                ? 'bg-rose-400'
-                                : 'bg-gradient-to-r from-purple-500 to-indigo-600'
-                            }`}
+                                  ? 'bg-rose-400'
+                                  : 'bg-gradient-to-r from-purple-500 to-indigo-600'
+                              }`}
                             style={{ width: `${widthPct}%` }}
                           />
                         </div>
@@ -4933,13 +4890,12 @@ export default function CRMLeadManagement() {
                           {/* 3. Win Rate */}
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-2">
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
-                                p.conversionRate >= 50
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-black ${p.conversionRate >= 50
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : p.conversionRate > 0
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-gray-100 text-gray-600'
-                              }`}>
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
                                 {p.conversionRate}%
                               </span>
                             </div>
@@ -5380,14 +5336,13 @@ export default function CRMLeadManagement() {
                 <button
                   type="submit"
                   disabled={isSavingQuote}
-                  className={`flex-1 text-white py-3 rounded-xl font-black text-xs uppercase transition-all shadow-md disabled:opacity-50 cursor-pointer ${
-                    quoteForm.status === 'accepted'
+                  className={`flex-1 text-white py-3 rounded-xl font-black text-xs uppercase transition-all shadow-md disabled:opacity-50 cursor-pointer ${quoteForm.status === 'accepted'
                       ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
                       : 'bg-[#A11212] hover:bg-[#800e0e] shadow-[#A11212]/20'
-                  }`}
+                    }`}
                 >
-                  {isSavingQuote 
-                    ? (isAr ? 'جاري التنفيذ والتحويل...' : 'Processing...') 
+                  {isSavingQuote
+                    ? (isAr ? 'جاري التنفيذ والتحويل...' : 'Processing...')
                     : quoteForm.status === 'accepted'
                       ? (isAr ? 'قبول العرض والتحويل لعميل ومهمة' : 'Accept & Convert to Client')
                       : (isAr ? 'حفظ التغييرات' : 'Save Quotation')
@@ -5525,11 +5480,10 @@ export default function CRMLeadManagement() {
                     return (
                       <label
                         key={srv.id}
-                        className={`flex items-center gap-2 p-2 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
-                          isChecked
+                        className={`flex items-center gap-2 p-2 rounded-xl text-xs font-bold cursor-pointer transition-all border ${isChecked
                             ? 'bg-red-50 text-[#A11212] border-red-200 shadow-2xs'
                             : 'bg-white text-gray-700 border-gray-200/80 hover:bg-gray-100'
-                        }`}
+                          }`}
                       >
                         <input
                           type="checkbox"
@@ -5874,11 +5828,10 @@ export default function CRMLeadManagement() {
                   </div>
                 </div>
 
-                <div className={`p-3 rounded-2xl border ${
-                  (selectedLeadForPayment.pending_payment ?? selectedLeadForPayment.estimated_value) <= 0
+                <div className={`p-3 rounded-2xl border ${(selectedLeadForPayment.pending_payment ?? selectedLeadForPayment.estimated_value) <= 0
                     ? 'bg-gray-50 border-gray-100 text-gray-400'
                     : 'bg-amber-50 border-amber-200 text-amber-900'
-                }`}>
+                  }`}>
                   <span className="text-[10px] font-black uppercase block mb-1">
                     {isAr ? 'المتبقي المستحق' : 'Balance Due'}
                   </span>
@@ -5891,13 +5844,12 @@ export default function CRMLeadManagement() {
               {/* Status Badge Strip */}
               <div className="flex items-center justify-between p-2.5 bg-gray-50/80 rounded-xl border border-gray-100 text-xs font-bold">
                 <span className="text-gray-500">{isAr ? 'حالة السداد العامة:' : 'Payment Status:'}</span>
-                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${
-                  selectedLeadForPayment.payment_status === 'fully_paid'
+                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${selectedLeadForPayment.payment_status === 'fully_paid'
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                     : selectedLeadForPayment.payment_status === 'partially_paid'
                       ? 'bg-amber-100 text-amber-800 border border-amber-200'
                       : 'bg-gray-200 text-gray-700 border border-gray-300'
-                }`}>
+                  }`}>
                   {selectedLeadForPayment.payment_status === 'fully_paid'
                     ? (isAr ? 'مسدد بالكامل (Fully Paid)' : 'Fully Paid')
                     : selectedLeadForPayment.payment_status === 'partially_paid'

@@ -15,7 +15,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Briefcase,
+  Layers,
 } from 'lucide-react';
+import DepartmentAdaptiveWorkspace from '../../components/employee/DepartmentAdaptiveWorkspace';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -390,6 +392,11 @@ const EmployeeDashboard = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* ── Operational Cockpit & Tasks ────────────────────────────────────── */}
+      <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-6 border border-gray-100 shadow-sm">
+        <DepartmentAdaptiveWorkspace />
       </div>
 
       {/* ── Main Content Row ───────────────────────────────────────────── */}
