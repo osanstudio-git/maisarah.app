@@ -4043,8 +4043,13 @@ export default function CRMLeadManagement() {
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 focus:outline-none focus:border-[#A11212]"
                   required
                 >
+                  {recurringForm.service && !SPEC_SERVICES.some(s => s.en === recurringForm.service || s.id === recurringForm.service) && (
+                    <option value={recurringForm.service}>{recurringForm.service}</option>
+                  )}
                   {SPEC_SERVICES.map(srv => (
-                    <option key={srv} value={srv}>{srv}</option>
+                    <option key={srv.id} value={srv.en}>
+                      {isAr ? srv.ar : srv.en}
+                    </option>
                   ))}
                 </select>
               </div>
