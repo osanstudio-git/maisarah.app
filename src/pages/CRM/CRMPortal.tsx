@@ -32,16 +32,20 @@ interface Lead {
   email: string;
   phone: string;
   companyName?: string;
-  source?: 'b2b' | 'referral' | 'social_media' | 'direct' | 'website' | 'other';
-  status: 'interested' | 'called' | 'whatsapp_connected' | 'quoted' | 'not_interested' | 'converted' | 'cold' | 'warm' | 'hot';
+  source?: 'b2b' | 'referral' | 'social_media' | 'direct' | 'website' | 'other' | string;
+  status: 'interested' | 'called' | 'whatsapp_connected' | 'quoted' | 'not_interested' | 'converted' | 'cold' | 'warm' | 'hot' | string;
   qualificationColor: 'red' | 'yellow' | 'green';
-  pipelineStep: 'follow_up' | 'add_data' | 'connect' | 'update' | 'sort';
+  pipelineStep: 'follow_up' | 'add_data' | 'connect' | 'update' | 'sort' | string;
   followUpDate?: string;
   notes: string;
   created_at: string;
   isClubMember?: boolean;
   activityHistory?: string[];
   portal_access_sent?: boolean;
+  estimated_value?: number;
+  department_id?: string;
+  interested_service?: string;
+  deal_stage?: string;
 }
 
 interface Client {
@@ -262,13 +266,17 @@ export default function CRMPortal() {
     companyName: row.company_name ?? undefined,
     source: row.source ?? 'b2b',
     status: row.status ?? 'interested',
-    qualificationColor: (row.status === 'accepted' || row.status === 'converted' || row.status === 'quoted') ? 'green' : (row.status === 'contacted' || row.status === 'called' || row.status === 'whatsapp_connected') ? 'yellow' : 'red',
+    qualificationColor: (row.status === 'accepted' || row.status === 'converted' || row.status === 'quoted' || row.status === 'won') ? 'green' : (row.status === 'contacted' || row.status === 'called' || row.status === 'whatsapp_connected') ? 'yellow' : 'red',
     pipelineStep: row.pipeline_step ?? (row.status === 'new' ? 'connect' : row.status === 'contacted' ? 'follow_up' : row.status === 'quoted' ? 'update' : 'sort'),
     followUpDate: row.follow_up_date ?? undefined,
     notes: row.notes ?? '',
     created_at: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
     isClubMember: row.is_club_member ?? false,
     activityHistory: row.activity_history ?? [],
+    estimated_value: Number(row.estimated_value || row.deal_value || row.budget || 0),
+    department_id: row.department_id || '',
+    interested_service: row.interested_service || row.service_details || row.service_name || '',
+    deal_stage: row.deal_stage || row.status || '',
   });
 
   // ── Map Supabase row → Client interface ──────────────────────────────────
