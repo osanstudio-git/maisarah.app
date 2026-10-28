@@ -30,7 +30,12 @@ import {
   Sparkles,
   Key,
   Copy,
-  Check
+  Check,
+  SlidersHorizontal,
+  LayoutGrid,
+  CheckSquare,
+  Square,
+  RefreshCw
 } from 'lucide-react';
 import { getAllDepartments, getDepartmentById, getJobPositionsByDepartment } from '../../config/departments';
 import { logActivity } from '../../lib/activityLogger';
@@ -94,6 +99,13 @@ const EmployeeManagement = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
   const [confirmName, setConfirmName] = useState('');
+
+  // Workspace Access Management Modal States
+  const [workspaceModalEmployee, setWorkspaceModalEmployee] = useState<Employee | null>(null);
+  const [workspacePrimaryRole, setWorkspacePrimaryRole] = useState<string>('employee');
+  const [workspaceSecondaryRoles, setWorkspaceSecondaryRoles] = useState<string[]>([]);
+  const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
+  const [workspaceSuccessMsg, setWorkspaceSuccessMsg] = useState<string | null>(null);
 
   // Placements Workflow States
   const [activeTab, setActiveTab] = useState<'roster' | 'placements'>('roster');
@@ -1178,6 +1190,181 @@ const EmployeeManagement = () => {
     }
   };
 
+  // ── Workspaces Master List ───────────────────────────────────────────────
+  const ALL_WORKSPACES = [
+    {
+      id: 'employee',
+      nameEn: 'Staff Workspace',
+      nameAr: 'مساحة عمل الموظف',
+      descEn: 'Tasks, Daily Status Reports (DSR), Client Documents & Checklists',
+      descAr: 'المهام اليومية وتقارير DSR ومستندات العملاء وقوائم التدقيق',
+      icon: '👤',
+      badgeColor: 'bg-blue-50 text-blue-700 border-blue-200'
+    },
+    {
+      id: 'accountant',
+      nameEn: 'Accountant Portal',
+      nameAr: 'بوابة المحاسب والمالية',
+      descEn: 'Invoicing, Receipts, Financial Records, and Client Billing',
+      descAr: 'إدارة الفواتير والإيصالات والقيود المحاسبية ومطالبات العملاء',
+      icon: '💼',
+      badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    },
+    {
+      id: 'department_head',
+      nameEn: 'HOD Leadership Portal',
+      nameAr: 'بوابة رئيس القسم (HOD)',
+      descEn: 'Department Oversight, Task Routing, Review & Team Workload',
+      descAr: 'الإشراف على القسم وتوزيع المهام ومراجعة الأعمال وجودة المخرجات',
+      icon: '👑',
+      badgeColor: 'bg-amber-50 text-amber-700 border-amber-200'
+    },
+    {
+      id: 'crm',
+      nameEn: 'CRM & Client Portal',
+      nameAr: 'بوابة علاقات العملاء',
+      descEn: 'Leads Pipeline, Quotations Studio, B2B Corporate Hub',
+      descAr: 'خط استقطاب العملاء وعروض الأسعار وشراكات الأعمال B2B',
+      icon: '🤝',
+      badgeColor: 'bg-rose-50 text-[#A11212] border-rose-200'
+    },
+    {
+      id: 'sales',
+      nameEn: 'Field Sales Portal',
+      nameAr: 'بوابة المبيعات الميدانية',
+      descEn: 'Field Lead Capture, GPS logging, Deals & Sales Targets',
+      descAr: 'تسجيل العملاء الميداني وتتبع المبيعات الخارجية والأهداف',
+      icon: '🎯',
+      badgeColor: 'bg-purple-50 text-purple-700 border-purple-200'
+    },
+    {
+      id: 'hr',
+      nameEn: 'HR Control Center',
+      nameAr: 'إدارة الموارد البشرية',
+      descEn: 'Recruitment, Employee Directory, Attendance & Contracts',
+      descAr: 'التوظيف وشؤون الموظفين والعقود وسجلات الحضور والرواتب',
+      icon: '📋',
+      badgeColor: 'bg-sky-50 text-sky-700 border-sky-200'
+    },
+    {
+      id: 'manager',
+      nameEn: 'Executive Manager Panel',
+      nameAr: 'لوحة المدير التنفيذي',
+      descEn: 'Full System Master Control, Workspace Auditing & Oversight',
+      descAr: 'التحكم الإداري الكامل والرقابة المالية وتشغيل النظام',
+      icon: '⭐',
+      badgeColor: 'bg-slate-900 text-white border-slate-700'
+    }
+  ];
+
+  // Open Workspace Access Modal
+  const openWorkspaceModal = (emp: Employee) => {
+    setWorkspaceModalEmployee(emp);
+    const primary = emp.role || 'employee';
+    setWorkspacePrimaryRole(primary);
+    const sec = Array.isArray(emp.secondaryRoles) ? emp.secondaryRoles.filter(r => r && r !== primary) : [];
+    setWorkspaceSecondaryRoles(sec);
+    setWorkspaceSuccessMsg(null);
+  };
+
+  // Save Workspace Access (Supports granting multiple workspaces or revoking accidental assignments)
+  const handleSaveWorkspaceAccess = async () => {
+    if (!workspaceModalEmployee) return;
+    setIsSavingWorkspace(true);
+    setWorkspaceSuccessMsg(null);
+
+    try {
+      const cleanEmail = (workspaceModalEmployee.email || '').trim().toLowerCase();
+      const effectiveSecondary = Array.from(new Set([
+        workspacePrimaryRole,
+        ...workspaceSecondaryRoles
+      ]));
+
+      // 1. Direct DB updates
+      const profileUpdate: any = {
+        id: workspaceModalEmployee.id,
+        email: cleanEmail,
+        role: workspacePrimaryRole,
+        secondary_roles: effectiveSecondary
+      };
+
+      const hrEmployeeUpdate: any = {
+        id: workspaceModalEmployee.id,
+        accessRole: workspacePrimaryRole,
+        secondary_roles: effectiveSecondary
+      };
+
+      await Promise.allSettled([
+        supabase.from('profiles').update(profileUpdate).eq('id', workspaceModalEmployee.id),
+        supabase.from('hr_employees').update(hrEmployeeUpdate).eq('id', workspaceModalEmployee.id),
+        supabase.from('hr_recruits').update({
+          secondary_roles: effectiveSecondary
+        }).or(`id.eq.${workspaceModalEmployee.id},email.eq.${cleanEmail}`)
+      ]);
+
+      // 2. Background edge function invocation with 3s timeout
+      invokeEdgeFunctionWithTimeout('manage-auth', {
+        email: cleanEmail,
+        role: workspacePrimaryRole,
+        secondary_roles: effectiveSecondary
+      }, 3000).catch(e => console.warn('manage-auth invoke notice:', e));
+
+      // 3. Update local state
+      setEmployees(prev => prev.map(emp => {
+        if (emp.id === workspaceModalEmployee.id) {
+          return {
+            ...emp,
+            role: workspacePrimaryRole,
+            secondaryRoles: effectiveSecondary
+          };
+        }
+        return emp;
+      }));
+
+      // 4. Update localStorage placed employees cache
+      try {
+        const localPlaced: any[] = JSON.parse(localStorage.getItem('maisarah_placed_employees') || '[]');
+        const updatedPlaced = localPlaced.map(lp => {
+          if ((lp.email && lp.email.toLowerCase() === cleanEmail) || lp.id === workspaceModalEmployee.id) {
+            return {
+              ...lp,
+              role: workspacePrimaryRole,
+              accessRole: workspacePrimaryRole,
+              secondary_roles: effectiveSecondary
+            };
+          }
+          return lp;
+        });
+        localStorage.setItem('maisarah_placed_employees', JSON.stringify(updatedPlaced));
+      } catch (e) {
+        console.warn('Local placed sync warning:', e);
+      }
+
+      await logActivity(
+        'UPDATE_WORKSPACE_ACCESS',
+        `Updated workspace access for ${workspaceModalEmployee.name_en || cleanEmail}. Primary: ${workspacePrimaryRole}, Authorized: ${effectiveSecondary.join(', ')}`,
+        'system'
+      );
+
+      setWorkspaceSuccessMsg(
+        isAr
+          ? 'تم تحديث مساحات العمل بنجاح! يستطيع الموظف الآن التبديل بين البوابات المصرحة.'
+          : 'Workspace access updated successfully! The employee can now switch between assigned portals.'
+      );
+
+      setTimeout(() => {
+        setWorkspaceModalEmployee(null);
+        setWorkspaceSuccessMsg(null);
+      }, 1300);
+
+    } catch (err: any) {
+      console.error('Failed to update workspace access:', err);
+      alert(isAr ? 'حدث خطأ أثناء حفظ مساحات العمل' : 'Failed to update workspace permissions');
+    } finally {
+      setIsSavingWorkspace(false);
+    }
+  };
+
   const openEditModal = (emp: Employee) => {
     setEditingEmployee(emp);
     const primaryRole = emp.role || 'employee';
@@ -2088,6 +2275,7 @@ const EmployeeManagement = () => {
                       <option value="accountant">{isAr ? '💼 محاسب (Accountant)' : '💼 Accountant (Accounting & Invoicing)'}</option>
                       <option value="hr">{isAr ? '📋 إدارة الموارد البشرية (HR Manager)' : '📋 HR Manager (HR Control Center)'}</option>
                       <option value="crm">{isAr ? '🤝 علاقات العملاء (CRM Coordinator)' : '🤝 CRM Coordinator (Leads & Clients)'}</option>
+                      <option value="sales">{isAr ? '🎯 مندوب مبيعات ميداني (Field Sales)' : '🎯 Field Sales (Field Sales Portal)'}</option>
                       <option value="manager">{isAr ? '🏛️ مدير تنفيذي (Executive Manager)' : '🏛️ Executive Manager (Full System Oversight)'}</option>
                     </select>
                   </div>
@@ -2104,10 +2292,11 @@ const EmployeeManagement = () => {
                     </p>
                     <div className="flex flex-wrap gap-2 pt-1">
                       {[
-                        { id: 'accountant', labelEn: '💼 Accountant Portal', labelAr: '💼 بوابة المحاسب' },
                         { id: 'employee', labelEn: '👤 Staff Workspace', labelAr: '👤 مساحة الموظف' },
+                        { id: 'accountant', labelEn: '💼 Accountant Portal', labelAr: '💼 بوابة المحاسب' },
                         { id: 'department_head', labelEn: '👑 HOD Leadership', labelAr: '👑 رئيس قسم' },
                         { id: 'crm', labelEn: '🤝 CRM Portal', labelAr: '🤝 علاقات العملاء' },
+                        { id: 'sales', labelEn: '🎯 Field Sales', labelAr: '🎯 المبيعات الميدانية' },
                         { id: 'hr', labelEn: '📋 HR Manager', labelAr: '📋 الموارد البشرية' },
                         { id: 'manager', labelEn: '🏛️ Executive Manager', labelAr: '🏛️ المدير التنفيذي' }
                       ].map(sec => {
@@ -3399,6 +3588,256 @@ const EmployeeManagement = () => {
                 className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors cursor-pointer shadow-sm"
               >
                 {isAr ? 'إغلاق وإكمال' : 'Done / Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DEDICATED MANAGE WORKSPACE ACCESS MODAL ───────────────────────── */}
+      {workspaceModalEmployee && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-md animate-fade-in" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-scale-up border border-gray-100 flex flex-col max-h-[92vh]">
+            {/* Modal Header */}
+            <div className="p-6 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 bg-white/10 text-white rounded-2xl flex items-center justify-center shadow-inner border border-white/20">
+                  <SlidersHorizontal size={22} className="text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black tracking-tight">
+                    {isAr ? 'إدارة مساحات العمل وصلاحيات البوابات' : 'Manage Employee Workspaces & Portal Access'}
+                  </h3>
+                  <p className="text-[11px] text-gray-300 font-medium">
+                    {isAr
+                      ? 'تعديل أو إلغاء أو منح مساحات عمل متعددة وتخصيص البوابة الافتراضية'
+                      : 'Assign or revoke authorized workspaces and designate default landing portal'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWorkspaceModalEmployee(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
+              {/* Employee Snapshot Badge */}
+              <div className="p-4 bg-gray-50/80 rounded-2xl border border-gray-200/80 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-50 text-[#A11212] font-black text-sm flex items-center justify-center border border-red-200 shadow-xs">
+                    {(workspaceModalEmployee.name_en || 'E').charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-gray-900">
+                      {isAr ? workspaceModalEmployee.name_ar : workspaceModalEmployee.name_en}
+                    </h4>
+                    <p className="text-xs text-gray-500 font-mono">
+                      {workspaceModalEmployee.email}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-end">
+                  <span className="text-[10px] font-bold text-gray-400 block uppercase">
+                    {isAr ? 'القسم والمسمى الفعلي' : 'Department & Position'}
+                  </span>
+                  <span className="text-xs font-black text-gray-800">
+                    {workspaceModalEmployee.job_title} · {workspaceModalEmployee.department_id}
+                  </span>
+                </div>
+              </div>
+
+              {/* Success Notification Banner */}
+              {workspaceSuccessMsg && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 text-xs font-bold animate-in fade-in">
+                  <CheckCircle2 size={18} className="text-emerald-600 flex-shrink-0" />
+                  <span>{workspaceSuccessMsg}</span>
+                </div>
+              )}
+
+              {/* Section 1: Primary Default Workspace */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="text-[#A11212]">⭐</span>
+                    {isAr ? '1. مساحة العمل الافتراضية (البوابة الرئيسية عند تسجيل الدخول)' : '1. Primary Default Workspace (Default Landing Portal)'}
+                  </label>
+                  <span className="text-[10px] font-bold text-gray-400">
+                    {isAr ? 'تفتح تلقائياً عند الدخول' : 'Opens on login'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  {isAr
+                    ? 'حدد مساحة العمل الرئيسية التي يتم توجيه الموظف إليها فور إدخال كلمة المرور.'
+                    : 'Select the primary workspace where this employee lands immediately upon signing in.'}
+                </p>
+
+                <select
+                  value={workspacePrimaryRole}
+                  onChange={(e) => {
+                    const newPrimary = e.target.value;
+                    setWorkspacePrimaryRole(newPrimary);
+                    if (!workspaceSecondaryRoles.includes(newPrimary)) {
+                      setWorkspaceSecondaryRoles(prev => [...prev, newPrimary]);
+                    }
+                  }}
+                  className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:outline-none focus:border-[#A11212] cursor-pointer shadow-xs"
+                >
+                  {ALL_WORKSPACES.map(ws => (
+                    <option key={ws.id} value={ws.id}>
+                      {ws.icon} {isAr ? ws.nameAr : ws.nameEn}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Section 2: Multiple Accessible Workspaces */}
+              <div className="space-y-2.5 pt-2 border-t border-gray-100">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="text-[#A11212]">🔀</span>
+                    {isAr ? '2. صلاحيات مساحات العمل المتعددة (تبديل البوابات بحساب واحد)' : '2. Authorized Workspaces (Multi-Portal Switching)'}
+                  </label>
+                  <span className="text-[10px] font-bold text-gray-400">
+                    {1 + workspaceSecondaryRoles.filter(r => r !== workspacePrimaryRole).length} {isAr ? 'مساحات مفعلة' : 'Workspaces Active'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  {isAr
+                    ? 'حدد أو ألغِ أي مساحة عمل بنقرة واحدة. إذا تم تعيين مساحة بالخطأ، قم بإلغاء تحديدها لإلغائها فوراً.'
+                    : 'Check or uncheck any workspace to grant or revoke access. If a portal was assigned accidentally, uncheck it to remove it immediately.'}
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  {ALL_WORKSPACES.map(ws => {
+                    const isPrimary = workspacePrimaryRole === ws.id;
+                    const isAuthorized = isPrimary || workspaceSecondaryRoles.includes(ws.id);
+
+                    return (
+                      <div
+                        key={ws.id}
+                        onClick={() => {
+                          if (isPrimary) return;
+                          if (isAuthorized) {
+                            setWorkspaceSecondaryRoles(prev => prev.filter(r => r !== ws.id));
+                          } else {
+                            setWorkspaceSecondaryRoles(prev => [...prev, ws.id]);
+                          }
+                        }}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative select-none flex items-start gap-3 ${
+                          isPrimary
+                            ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-400/40'
+                            : isAuthorized
+                            ? 'bg-red-50/60 border-red-200 ring-1 ring-[#A11212]/30'
+                            : 'bg-white border-gray-200 hover:border-gray-300 opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="pt-0.5">
+                          <input
+                            type="checkbox"
+                            checked={isAuthorized}
+                            disabled={isPrimary}
+                            onChange={() => {}}
+                            className="w-4 h-4 rounded text-[#A11212] accent-[#A11212] cursor-pointer"
+                          />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="text-xs font-black text-gray-900 flex items-center gap-1.5 truncate">
+                              <span>{ws.icon}</span>
+                              <span>{isAr ? ws.nameAr : ws.nameEn}</span>
+                            </span>
+                            {isPrimary ? (
+                              <span className="text-[9px] font-black bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                {isAr ? 'الرئيسية' : 'Primary'}
+                              </span>
+                            ) : isAuthorized ? (
+                              <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                {isAr ? 'مصرح بها' : 'Granted'}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-medium bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                {isAr ? 'غير مفعل' : 'Revoked'}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-gray-500 leading-snug line-clamp-2">
+                            {isAr ? ws.descAr : ws.descEn}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section 3: Live Preview of TopNav "Switch Workspace" Menu */}
+              <div className="p-4 bg-slate-900 text-white rounded-2xl border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles size={12} />
+                    {isAr ? 'معاينة قائمة تبديل مساحة العمل للموظف' : "Live Preview: Employee's 'Switch Workspace' Menu"}
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    {isAr ? 'ما سيظهر في الشريط العلوي' : 'Visible in TopNav'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {/* Primary badge */}
+                  <div className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-black flex items-center gap-1.5">
+                    <span>{ALL_WORKSPACES.find(w => w.id === workspacePrimaryRole)?.icon}</span>
+                    <span>{isAr ? ALL_WORKSPACES.find(w => w.id === workspacePrimaryRole)?.nameAr : ALL_WORKSPACES.find(w => w.id === workspacePrimaryRole)?.nameEn}</span>
+                    <span className="text-[8px] uppercase bg-amber-400 text-slate-900 px-1 rounded font-black">{isAr ? 'أساسية' : 'Primary'}</span>
+                  </div>
+                  {/* Secondary authorized badges */}
+                  {workspaceSecondaryRoles
+                    .filter(r => r !== workspacePrimaryRole)
+                    .map(rId => {
+                      const ws = ALL_WORKSPACES.find(w => w.id === rId);
+                      if (!ws) return null;
+                      return (
+                        <div key={rId} className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/20 text-white text-xs font-bold flex items-center gap-1.5">
+                          <span>{ws.icon}</span>
+                          <span>{isAr ? ws.nameAr : ws.nameEn}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setWorkspaceModalEmployee(null)}
+                className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={isSavingWorkspace}
+                onClick={handleSaveWorkspaceAccess}
+                className="px-6 py-2.5 bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isSavingWorkspace ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    <span>{isAr ? 'جارِ حفظ الصلاحيات...' : 'Saving Permissions...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={15} />
+                    <span>{isAr ? 'حفظ وتحديث مساحات العمل' : 'Save Workspace Permissions'}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
