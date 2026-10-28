@@ -52,8 +52,17 @@ export default function ClientDepartmentChecklist({
   isAr,
   isManager = false
 }: ClientDepartmentChecklistProps) {
-  const { user } = useAuth();
-  const [activeDeptId, setActiveDeptId] = useState<string>(() => normalizeDepartmentId(defaultDeptId));
+  const { user, role } = useAuth();
+  const canSwitchDepartments = isManager || role === 'manager' || role === 'admin';
+  const effectiveDept = normalizeDepartmentId(defaultDeptId);
+  const [activeDeptId, setActiveDeptId] = useState<string>(() => effectiveDept);
+
+  useEffect(() => {
+    if (!canSwitchDepartments) {
+      setActiveDeptId(effectiveDept);
+    }
+  }, [effectiveDept, canSwitchDepartments]);
+
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterMode, setFilterMode] = useState<'all' | 'pending' | 'completed'>('all');
@@ -227,33 +236,48 @@ export default function ClientDepartmentChecklist({
 
   return (
     <div className="space-y-6" dir={isAr ? 'rtl' : 'ltr'}>
-      {/* ── Top Bar: Department Switcher & Controls ─────────────────────── */}
+      {/* ── Top Bar: Department Badge & Controls ─────────────────────── */}
       <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Department tabs */}
-        <div>
-          <label className="block text-xs font-black uppercase tracking-wider text-gray-400 mb-2">
-            {isAr ? 'قائمة فحص ومستندات القسم:' : 'Department Document Checklist:'}
-          </label>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {getAllDepartments().map(dept => {
-              const isSelected = dept.id === activeDeptId;
-              return (
-                <button
-                  key={dept.id}
-                  onClick={() => setActiveDeptId(dept.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    isSelected
-                      ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20 ring-2 ring-brand-dark/20'
-                      : 'bg-gray-100/80 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
-                  }`}
-                >
-                  <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-gray-400'}`} />
-                  {isAr ? (dept.name_ar || dept.name) : dept.name}
-                </button>
-              );
-            })}
+        {canSwitchDepartments ? (
+          /* Manager View: Switch between the 6 operational departments */
+          <div>
+            <label className="block text-xs font-black uppercase tracking-wider text-gray-400 mb-2">
+              {isAr ? 'قائمة فحص ومستندات القسم:' : 'Department Document Checklist:'}
+            </label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {getAllDepartments()
+                .filter(dept => ['bookkeeping', 'audit', 'tax_vat', 'income_tax', 'consultancy', 'liquidation'].includes(dept.id))
+                .map(dept => {
+                  const isSelected = dept.id === activeDeptId;
+                  return (
+                    <button
+                      key={dept.id}
+                      onClick={() => setActiveDeptId(dept.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20 ring-2 ring-brand-dark/20'
+                          : 'bg-gray-100/80 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-gray-400'}`} />
+                      {isAr ? (dept.name_ar || dept.name) : dept.name}
+                    </button>
+                  );
+                })}
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Employee View: Strictly department wise - only show their assigned department */
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-1">
+              {isAr ? 'قسم العمليات المخصص:' : 'Department Checklist:'}
+            </span>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-brand-dark text-white rounded-xl text-xs font-bold shadow-sm shadow-brand-dark/20">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              <span>{isAr ? (currentDept?.name_ar || currentDept?.name) : currentDept?.name}</span>
+            </div>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
