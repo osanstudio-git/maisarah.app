@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { toPng } from 'html-to-image';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabaseClient';
@@ -31,6 +31,7 @@ import {
   Mail,
   KeyRound,
   RefreshCw,
+  ClipboardCheck,
 } from 'lucide-react';
 import {
   normalizeDepartmentId,
@@ -40,6 +41,7 @@ import {
 } from '../../utils/departmentScoping';
 import { DEPARTMENT_CONFIGS } from '../../config/departments';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
+import ClientDepartmentChecklist from '../../components/employee/ClientDepartmentChecklist';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -121,7 +123,7 @@ const ClientDetail = ({
   const [invoices, setInvoices]   = useState<Invoice[]>([]);
   const [services, setServices]   = useState<Service[]>([]);
   const [loading, setLoading]     = useState(true);
-  const [activeTab, setActiveTab] = useState<'services' | 'invoices' | 'profile'>('services');
+  const [activeTab, setActiveTab] = useState<'checklist' | 'services' | 'invoices' | 'profile'>('checklist');
 
   useEffect(() => {
     const load = async () => {
@@ -190,21 +192,26 @@ const ClientDetail = ({
       {/* Tabs & Content Container */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="flex border-b border-gray-100 overflow-x-auto whitespace-nowrap">
-          {(['services', 'invoices', 'profile'] as const).map(tab => (
+          {(['checklist', 'services', 'invoices', 'profile'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 min-w-[100px] py-4 text-sm font-bold transition-colors flex items-center justify-center gap-2 ${
+              className={`flex-1 min-w-[120px] py-4 text-sm font-bold transition-colors flex items-center justify-center gap-2 ${
                 activeTab === tab
                   ? 'text-brand-dark border-b-2 border-brand-dark bg-red-50/40'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {tab === 'services' ? <Briefcase size={15} /> : tab === 'invoices' ? <Receipt size={15} /> : <UserCircle2 size={15} />}
-              {tab === 'services' ? (isAr ? 'الخدمات' : 'Services') : tab === 'invoices' ? (isAr ? 'الفواتير' : 'Invoices') : (isAr ? 'الملف الشخصي' : 'Profile')}
-              {tab !== 'profile' && (
+              {tab === 'checklist' ? <ClipboardCheck size={16} /> : tab === 'services' ? <Briefcase size={15} /> : tab === 'invoices' ? <Receipt size={15} /> : <UserCircle2 size={15} />}
+              {tab === 'checklist' ? (isAr ? 'قائمة الفحص والمستندات' : 'Checklists & Docs') : tab === 'services' ? (isAr ? 'الخدمات' : 'Services') : tab === 'invoices' ? (isAr ? 'الفواتير' : 'Invoices') : (isAr ? 'الملف الشخصي' : 'Profile')}
+              {tab === 'services' && (
                 <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
-                  {tab === 'services' ? services.length : invoices.length}
+                  {services.length}
+                </span>
+              )}
+              {tab === 'invoices' && (
+                <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                  {invoices.length}
                 </span>
               )}
             </button>
@@ -217,6 +224,20 @@ const ClientDetail = ({
           </div>
         ) : (
           <>
+            {/* Checklist Tab */}
+            {activeTab === 'checklist' && (
+              <div className="p-6">
+                <ClientDepartmentChecklist
+                  clientId={client.id}
+                  clientName={client.company_name}
+                  crNumber={client.cr_number}
+                  defaultDeptId={effectiveDeptId}
+                  isAr={isAr}
+                  isManager={isManager}
+                />
+              </div>
+            )}
+
             {/* Services Tab */}
             {activeTab === 'services' && (
               <div className="divide-y divide-gray-50">

@@ -321,3 +321,38 @@ VALUES
   ('liquidation', 'Corporate Services Head', 'رئيس قسم خدمات الشركات والتصفية', 'department_head'),
   ('liquidation', 'Liquidation Officer', 'مسؤول تصفية شركات', 'employee'),
   ('liquidation', 'Public Relations Officer (PRO)', 'مسؤول علاقات حكومية (معقب)', 'employee');
+
+-- ==============================================================================
+-- 6. CLIENT CHECKLISTS TABLE (Stores standard & custom checklists per client & dept)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.client_checklists (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL,
+  department_id TEXT NOT NULL,
+  item_key TEXT,
+  title_en TEXT NOT NULL,
+  title_ar TEXT NOT NULL,
+  category TEXT,
+  sub_items JSONB DEFAULT '[]'::jsonb,
+  is_completed BOOLEAN DEFAULT false,
+  is_custom BOOLEAN DEFAULT false,
+  completed_at TIMESTAMPTZ,
+  completed_by UUID,
+  completed_by_name TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_checklists_client_dept 
+  ON public.client_checklists(client_id, department_id);
+
+ALTER TABLE public.client_checklists ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable all access for authenticated users on client_checklists"
+  ON public.client_checklists
+  FOR ALL
+  TO authenticated
+  USING (true)
+  WITH CHECK (true);
+
