@@ -224,7 +224,7 @@ const DepartmentPerformance = () => {
       });
 
       // Supplement with structured baseline deliverables if low
-      let enrichedServices = matchedServices;
+      let enrichedServices: any[] = matchedServices;
       if (enrichedServices.length < 3) {
         const sampleServicesList = currentDeptObj.services.slice(0, 4).map((svcTitle, idx) => ({
           id: `sample-${deptId}-${idx}`,
@@ -234,6 +234,7 @@ const DepartmentPerformance = () => {
           due_date: new Date(Date.now() + (idx * 3 + 2) * 86400000).toISOString(),
           created_at: new Date(Date.now() - (idx * 5) * 86400000).toISOString(),
           employee_id: allProfiles[0]?.id || 'emp-1',
+          client_id: `cl-${idx}`,
           profiles: {
             id: allProfiles[0]?.id || 'emp-1',
             full_name: allProfiles[idx % (allProfiles.length || 1)]?.full_name || 'Shafnas (Audit Head)',
@@ -638,7 +639,7 @@ const DepartmentPerformance = () => {
                 <ShieldCheck size={12} />
                 <span>
                   {isDirectEmployeeMode() && !hodProfile
-                    ? (isAr ? `إشراف العمليات المباشر: ${selectedDept.nameAr}` : `Direct Operations Lead: ${selectedDept.name}`)
+                    ? (isAr ? `إشراف العمليات المباشر: ${selectedDept.name_ar || selectedDept.nameAr || selectedDept.name}` : `Direct Operations Lead: ${selectedDept.name}`)
                     : `${selectedDept.head_title} (${selectedDept.name})`}
                 </span>
               </div>
@@ -1008,7 +1009,7 @@ const DepartmentPerformance = () => {
             <div className="flex justify-between items-center mb-5 pb-3 border-b border-gray-100">
               <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
                 <Plus size={18} className="text-brand-dark" />
-                {isAr ? `إسناد مهمة جديدة لقسم (${selectedDept.nameAr})` : `Assign Deliverable to ${selectedDept.name}`}
+                {isAr ? `إسناد مهمة جديدة لقسم (${selectedDept.name_ar || selectedDept.nameAr || selectedDept.name})` : `Assign Deliverable to ${selectedDept.name}`}
               </h3>
               <button onClick={() => setShowAssignModal(false)} className="p-2 text-gray-400 hover:text-gray-700 rounded-full cursor-pointer">
                 <X size={18} />

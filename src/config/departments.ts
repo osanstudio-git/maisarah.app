@@ -27,6 +27,8 @@ export interface DepartmentConfig {
   id: string;
   name: string;
   name_ar?: string;
+  nameAr?: string;
+  name_en?: string;
   head_title: string;
   head_title_ar?: string;
   duty: string;
