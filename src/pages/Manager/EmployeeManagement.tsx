@@ -696,7 +696,7 @@ const EmployeeManagement = () => {
         const hrRecords: any[] = JSON.parse(localStorage.getItem('hr_employee_records') || '[]');
         const combined = [...localPlaced, ...hrRecords].filter(emp => emp.email !== 'manager@maisarah.om');
         setEmployees(combined);
-      } catch {}
+      } catch { }
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -858,19 +858,19 @@ const EmployeeManagement = () => {
     const allDepts = getAllDepartments();
     const matched = (rawDept && !rawDept.includes('pending'))
       ? allDepts.find(d =>
-          d.id.toLowerCase() === rawDept ||
-          d.name.toLowerCase() === rawDept ||
-          rawDept.includes(d.id.toLowerCase()) ||
-          rawDept.includes(d.name.toLowerCase()) ||
-          (rawDept.includes('client') && d.id === 'client_success') ||
-          (rawDept.includes('crm') && d.id === 'client_success') ||
-          (rawDept.includes('advis') && d.id === 'business_advisory') ||
-          (rawDept.includes('tax') && d.id === 'tax_vat') ||
-          (rawDept.includes('audit') && d.id === 'audit') ||
-          (rawDept.includes('book') && d.id === 'bookkeeping') ||
-          (rawDept.includes('hr') && d.id === 'internal_support') ||
-          (rawDept.includes('innovat') && d.id === 'innovation_dev')
-        )
+        d.id.toLowerCase() === rawDept ||
+        d.name.toLowerCase() === rawDept ||
+        rawDept.includes(d.id.toLowerCase()) ||
+        rawDept.includes(d.name.toLowerCase()) ||
+        (rawDept.includes('client') && d.id === 'client_success') ||
+        (rawDept.includes('crm') && d.id === 'client_success') ||
+        (rawDept.includes('advis') && d.id === 'business_advisory') ||
+        (rawDept.includes('tax') && d.id === 'tax_vat') ||
+        (rawDept.includes('audit') && d.id === 'audit') ||
+        (rawDept.includes('book') && d.id === 'bookkeeping') ||
+        (rawDept.includes('hr') && d.id === 'internal_support') ||
+        (rawDept.includes('innovat') && d.id === 'innovation_dev')
+      )
       : null;
     const defaultDept = matched ? matched.id : 'audit';
 
@@ -945,17 +945,17 @@ const EmployeeManagement = () => {
     setPlacementError(null);
 
     const tempPassword = 'Welcome@' + Math.floor(1000 + Math.random() * 9000);
-    const targetDeptKey = placementData.dept === 'custom' 
-      ? (placementData.customDept || 'Operations') 
+    const targetDeptKey = placementData.dept === 'custom'
+      ? (placementData.customDept || 'Operations')
       : (placementData.dept === 'Pending Department' ? 'audit' : placementData.dept);
-    
+
     const targetDeptObj = getAllDepartments().find(d => d.id === targetDeptKey);
-    const targetDeptName = targetDeptObj 
-      ? targetDeptObj.name 
+    const targetDeptName = targetDeptObj
+      ? targetDeptObj.name
       : (targetDeptKey === 'tax_vat' ? 'Tax & VAT' : targetDeptKey === 'audit' ? 'Audit' : targetDeptKey === 'bookkeeping' ? 'Bookkeeping' : targetDeptKey === 'internal_support' ? 'Internal Support & Administration' : targetDeptKey === 'client_success' ? 'Client Success' : targetDeptKey === 'innovation_dev' ? 'Innovation & Development' : targetDeptKey === 'business_advisory' ? 'Business Advisory' : targetDeptKey);
-    
-    const finalRole = placementData.role === 'custom' 
-      ? (placementData.customRole || 'Staff Member') 
+
+    const finalRole = placementData.role === 'custom'
+      ? (placementData.customRole || 'Staff Member')
       : (placementData.role === 'Pending Assignment' ? (getJobPositionsByDepartment(targetDeptKey)[0] || 'Senior Auditor') : placementData.role);
 
     // Effective access role (if isHOD is true and accessRole is standard employee, assign department_head; otherwise preserve chosen portal access role)
@@ -1031,7 +1031,7 @@ const EmployeeManagement = () => {
         if (existingEmp?.id) {
           targetEmpId = existingEmp.id;
         }
-      } catch {}
+      } catch { }
 
       const { error: hrErr } = await supabase.from('hr_employees').upsert({
         id: targetEmpId,
@@ -1153,7 +1153,7 @@ const EmployeeManagement = () => {
         subject: isAr
           ? `مرحباً بك في مجموعة ميسرة - تفاصيل التعيين وحسابك بالبوابة الإلكترونية`
           : `Welcome to Maisarah Group - Placement Details & Portal Access`,
-        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;direction:${isAr?'rtl':'ltr'};text-align:${isAr?'right':'left'};font-size:14px;line-height:1.6;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:16px;background:#fff"><div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #f3f4f6"><h2 style="color:#A11212;margin:0;font-size:20px;font-weight:800">${isAr?'مجموعة ميسرة للاستشارات المالية والتدقيق':'Maisarah Financial & Auditing Group'}</h2><p style="color:#6b7280;font-size:12px;margin-top:4px;font-weight:600">${isAr?'إشعار اعتماد التعيين وتفعيل حساب الموظف':'Placement Confirmation & Portal Activation'}</p></div><p style="font-size:15px">${isAr?'عزيزي/عزيزتي':'Dear'} <strong>${activePlacement.name}</strong>,</p><p>${isAr?'يسعدنا انضمامك إلى فريق مجموعة ميسرة. تم اعتماد تعيينك وتفعيل حسابك في بوابة الموظفين.':'We are pleased to welcome you to Maisarah Group. Your placement is approved and your Employee Portal account is active.'}</p><div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:20px 0"><h4 style="margin:0 0 10px;color:#374151;font-size:13px;font-weight:700">${isAr?'تفاصيل التعيين:':'Placement Details:'}</h4><p style="margin:4px 0;font-size:13px"><strong>${isAr?'القسم:':'Department:'}</strong> ${targetDeptName}</p><p style="margin:4px 0;font-size:13px"><strong>${isAr?'المسمى الوظيفي:':'Job Title:'}</strong> ${finalRole}</p><p style="margin:4px 0;font-size:13px"><strong>${isAr?'المشرف:':'Supervisor:'}</strong> ${finalSupervisor}</p></div><div style="background:#fff8f8;border:1px solid #fecaca;border-radius:12px;padding:16px;margin:20px 0"><h4 style="margin:0 0 10px;color:#991b1b;font-size:13px;font-weight:700">${isAr?'بيانات تسجيل الدخول:':'Access Credentials:'}</h4><p style="margin:6px 0;font-size:13px"><strong>${isAr?'رابط البوابة:':'Portal URL:'}</strong> <a href="${portalLoginUrl}" style="color:#A11212;font-weight:bold">${portalLoginUrl}</a></p><p style="margin:6px 0;font-size:13px"><strong>${isAr?'البريد المؤسسي (اسم المستخدم):':'Corporate Email (Username):'}</strong> <span style="font-family:monospace;font-weight:bold;color:#A11212">${cleanEmail}</span></p><p style="margin:6px 0;font-size:13px"><strong>${isAr?'كلمة المرور المؤقتة:':'Temp Password:'}</strong> <span style="font-family:monospace;background:#fff;padding:4px 10px;border-radius:6px;font-weight:bold;color:#111827;border:1px solid #e5e7eb">${tempPassword}</span></p></div><div style="text-align:center;margin:24px 0"><a href="${portalLoginUrl}" style="display:inline-block;background:#A11212;color:#fff;padding:12px 28px;border-radius:10px;font-weight:700;text-decoration:none;font-size:13px">${isAr?'تسجيل الدخول':'Log In to Portal'}</a></div><p style="font-size:12px;color:#6b7280">${isAr?'يرجى تغيير كلمة المرور فور تسجيل الدخول.':'Please change your temporary password on first login.'}</p><div style="border-top:1px solid #f3f4f6;padding-top:16px;color:#6b7280;font-size:12px"><p style="margin:0">${isAr?'مع أطيب التحيات،':'Best Regards,'}</p><p style="margin:2px 0 0;font-weight:700;color:#111827">${isAr?'إدارة التسكين · مجموعة ميسرة':'Operations & Placement · Maisarah Group'}</p></div></div>`
+        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;direction:${isAr ? 'rtl' : 'ltr'};text-align:${isAr ? 'right' : 'left'};font-size:14px;line-height:1.6;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:16px;background:#fff"><div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #f3f4f6"><h2 style="color:#A11212;margin:0;font-size:20px;font-weight:800">${isAr ? 'مجموعة ميسرة للاستشارات المالية والتدقيق' : 'Maisarah Financial & Auditing Group'}</h2><p style="color:#6b7280;font-size:12px;margin-top:4px;font-weight:600">${isAr ? 'إشعار اعتماد التعيين وتفعيل حساب الموظف' : 'Placement Confirmation & Portal Activation'}</p></div><p style="font-size:15px">${isAr ? 'عزيزي/عزيزتي' : 'Dear'} <strong>${activePlacement.name}</strong>,</p><p>${isAr ? 'يسعدنا انضمامك إلى فريق مجموعة ميسرة. تم اعتماد تعيينك وتفعيل حسابك في بوابة الموظفين.' : 'We are pleased to welcome you to Maisarah Group. Your placement is approved and your Employee Portal account is active.'}</p><div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:20px 0"><h4 style="margin:0 0 10px;color:#374151;font-size:13px;font-weight:700">${isAr ? 'تفاصيل التعيين:' : 'Placement Details:'}</h4><p style="margin:4px 0;font-size:13px"><strong>${isAr ? 'القسم:' : 'Department:'}</strong> ${targetDeptName}</p><p style="margin:4px 0;font-size:13px"><strong>${isAr ? 'المسمى الوظيفي:' : 'Job Title:'}</strong> ${finalRole}</p><p style="margin:4px 0;font-size:13px"><strong>${isAr ? 'المشرف:' : 'Supervisor:'}</strong> ${finalSupervisor}</p></div><div style="background:#fff8f8;border:1px solid #fecaca;border-radius:12px;padding:16px;margin:20px 0"><h4 style="margin:0 0 10px;color:#991b1b;font-size:13px;font-weight:700">${isAr ? 'بيانات تسجيل الدخول:' : 'Access Credentials:'}</h4><p style="margin:6px 0;font-size:13px"><strong>${isAr ? 'رابط البوابة:' : 'Portal URL:'}</strong> <a href="${portalLoginUrl}" style="color:#A11212;font-weight:bold">${portalLoginUrl}</a></p><p style="margin:6px 0;font-size:13px"><strong>${isAr ? 'البريد المؤسسي (اسم المستخدم):' : 'Corporate Email (Username):'}</strong> <span style="font-family:monospace;font-weight:bold;color:#A11212">${cleanEmail}</span></p><p style="margin:6px 0;font-size:13px"><strong>${isAr ? 'كلمة المرور المؤقتة:' : 'Temp Password:'}</strong> <span style="font-family:monospace;background:#fff;padding:4px 10px;border-radius:6px;font-weight:bold;color:#111827;border:1px solid #e5e7eb">${tempPassword}</span></p></div><div style="text-align:center;margin:24px 0"><a href="${portalLoginUrl}" style="display:inline-block;background:#A11212;color:#fff;padding:12px 28px;border-radius:10px;font-weight:700;text-decoration:none;font-size:13px">${isAr ? 'تسجيل الدخول' : 'Log In to Portal'}</a></div><p style="font-size:12px;color:#6b7280">${isAr ? 'يرجى تغيير كلمة المرور فور تسجيل الدخول.' : 'Please change your temporary password on first login.'}</p><div style="border-top:1px solid #f3f4f6;padding-top:16px;color:#6b7280;font-size:12px"><p style="margin:0">${isAr ? 'مع أطيب التحيات،' : 'Best Regards,'}</p><p style="margin:2px 0 0;font-weight:700;color:#111827">${isAr ? 'إدارة التسكين · مجموعة ميسرة' : 'Operations & Placement · Maisarah Group'}</p></div></div>`
       };
 
       (async () => {
@@ -1341,10 +1341,12 @@ const EmployeeManagement = () => {
       }
 
       await logActivity(
-        'UPDATE_WORKSPACE_ACCESS',
+        workspaceModalEmployee.id,
+        workspaceModalEmployee.name_en || cleanEmail,
+        'service_updated',
         `Updated workspace access for ${workspaceModalEmployee.name_en || cleanEmail}. Primary: ${workspacePrimaryRole}, Authorized: ${effectiveSecondary.join(', ')}`,
-        'system'
-      );
+        `تم تحديث مساحات العمل للموظف ${workspaceModalEmployee.name_ar || workspaceModalEmployee.name_en || cleanEmail}. الدور الأساسي: ${workspacePrimaryRole}، الصلاحيات: ${effectiveSecondary.join(', ')}`
+      ).catch(() => {});
 
       setWorkspaceSuccessMsg(
         isAr
@@ -1424,9 +1426,9 @@ const EmployeeManagement = () => {
           await Promise.allSettled([
             supabase.from('profiles').upsert(profileUpdate, { onConflict: 'id' }),
             supabase.from('hr_employees').upsert(hrEmployeeData, { onConflict: 'id' }),
-            supabase.from('hr_recruits').update({ 
-              dept: targetDeptName, 
-              role: targetJobTitle, 
+            supabase.from('hr_recruits').update({
+              dept: targetDeptName,
+              role: targetJobTitle,
               name: formData.fullName,
               placement_status: 'placed',
               secondary_roles: effectiveSecondary
@@ -1514,7 +1516,7 @@ const EmployeeManagement = () => {
           'service_updated',
           `Manager updated employee '${formData.fullName}': Role -> '${formData.role}', Dept -> '${targetDeptName}', Position -> '${targetJobTitle}'`,
           `قام المدير بتحديث بيانات الموظف '${formData.fullName}': الصلاحية -> '${formData.role}'، القسم -> '${targetDeptName}'، المسمى -> '${targetJobTitle}'`
-        ).catch(() => {});
+        ).catch(() => { });
 
         // 5. Update local state
         setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? {
@@ -2430,7 +2432,7 @@ const EmployeeManagement = () => {
                     {selectedPlacement.employment_type || 'Experienced'}
                   </span>
                 </div>
-                
+
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-bold text-gray-700 pt-1">
                   <div>
                     <span className="text-gray-400 block text-[9px] uppercase">{isAr ? 'الاسم الكامل:' : 'Full Name:'}</span>
@@ -3208,10 +3210,10 @@ const EmployeeManagement = () => {
                               <span key={sec} className="bg-red-50 text-[#A11212] border border-red-200 text-[10px] font-black px-2 py-0.5 rounded-lg uppercase">
                                 {sec === 'accountant' ? (isAr ? '💼 محاسب' : '💼 Accountant') :
                                   sec === 'crm' ? (isAr ? '🤝 علاقات العملاء' : '🤝 CRM') :
-                                  sec === 'department_head' ? (isAr ? '👑 رئيس قسم' : '👑 HOD') :
-                                  sec === 'hr' ? (isAr ? '📋 موارد بشرية' : '📋 HR') :
-                                  sec === 'manager' ? (isAr ? '🏛️ إدارة تنفيذية' : '🏛️ Management') :
-                                  (isAr ? '👤 موظف' : '👤 Staff')}
+                                    sec === 'department_head' ? (isAr ? '👑 رئيس قسم' : '👑 HOD') :
+                                      sec === 'hr' ? (isAr ? '📋 موارد بشرية' : '📋 HR') :
+                                        sec === 'manager' ? (isAr ? '🏛️ إدارة تنفيذية' : '🏛️ Management') :
+                                          (isAr ? '👤 موظف' : '👤 Staff')}
                               </span>
                             ))
                           ) : (
@@ -3729,20 +3731,19 @@ const EmployeeManagement = () => {
                             setWorkspaceSecondaryRoles(prev => [...prev, ws.id]);
                           }
                         }}
-                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative select-none flex items-start gap-3 ${
-                          isPrimary
-                            ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-400/40'
-                            : isAuthorized
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative select-none flex items-start gap-3 ${isPrimary
+                          ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-400/40'
+                          : isAuthorized
                             ? 'bg-red-50/60 border-red-200 ring-1 ring-[#A11212]/30'
                             : 'bg-white border-gray-200 hover:border-gray-300 opacity-70 hover:opacity-100'
-                        }`}
+                          }`}
                       >
                         <div className="pt-0.5">
                           <input
                             type="checkbox"
                             checked={isAuthorized}
                             disabled={isPrimary}
-                            onChange={() => {}}
+                            onChange={() => { }}
                             className="w-4 h-4 rounded text-[#A11212] accent-[#A11212] cursor-pointer"
                           />
                         </div>
