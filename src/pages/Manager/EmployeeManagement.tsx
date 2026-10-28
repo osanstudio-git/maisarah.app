@@ -519,7 +519,7 @@ const EmployeeManagement = () => {
         let normalizedDept = getNormalizedDepartmentId(rawDept, p.role || hrEmp?.role, hrEmp?.role);
 
         const realPhone = hrEmp?.phone || p.phone || '';
-        const effectivePrimaryRole = p.role || hrEmp?.accessRole || hrEmp?.role || 'employee';
+        const effectivePrimaryRole = p.role || hrEmp?.accessrole || hrEmp?.accessRole || hrEmp?.role || 'employee';
         const secRoles = normalizeSecondaryRoles(
           p.secondary_roles || hrEmp?.secondary_roles,
           effectivePrimaryRole
@@ -579,7 +579,7 @@ const EmployeeManagement = () => {
         if (h.status === 'pending_placement' || h.role === 'Pending Assignment') continue;
         if (h.email && !mapped.some(m => m.id === h.id || (m.email && m.email.toLowerCase() === h.email.toLowerCase()))) {
           let rawDept = h.department_id || h.dept || '';
-          const resolvedAccessRole = h.accessRole || h.role || 'employee';
+          const resolvedAccessRole = h.accessrole || h.accessRole || h.role || 'employee';
           let normalizedDept = getNormalizedDepartmentId(rawDept, resolvedAccessRole, h.role);
 
           const resolvedJobTitle = h.role || (
@@ -1282,24 +1282,18 @@ const EmployeeManagement = () => {
 
       // 1. Direct DB updates
       const profileUpdate: any = {
-        id: workspaceModalEmployee.id,
-        email: cleanEmail,
         role: workspacePrimaryRole,
         secondary_roles: effectiveSecondary
       };
 
       const hrEmployeeUpdate: any = {
-        id: workspaceModalEmployee.id,
-        accessRole: workspacePrimaryRole,
+        accessrole: workspacePrimaryRole,
         secondary_roles: effectiveSecondary
       };
 
       await Promise.allSettled([
-        supabase.from('profiles').update(profileUpdate).eq('id', workspaceModalEmployee.id),
-        supabase.from('hr_employees').update(hrEmployeeUpdate).eq('id', workspaceModalEmployee.id),
-        supabase.from('hr_recruits').update({
-          secondary_roles: effectiveSecondary
-        }).or(`id.eq.${workspaceModalEmployee.id},email.eq.${cleanEmail}`)
+        supabase.from('profiles').update(profileUpdate).or(`id.eq.${workspaceModalEmployee.id},email.eq.${cleanEmail}`),
+        supabase.from('hr_employees').update(hrEmployeeUpdate).or(`id.eq.${workspaceModalEmployee.id},email.eq.${cleanEmail}`)
       ]);
 
       // 2. Background edge function invocation with 3s timeout
@@ -1402,16 +1396,13 @@ const EmployeeManagement = () => {
       if (editingEmployee) {
         // 1. Direct DB updates immediately (profiles, hr_employees, hr_recruits)
         const profileUpdate: any = {
-          id: editingEmployee.id,
-          email: cleanEmail,
           full_name: formData.fullName,
           role: formData.role,
           department_id: formData.department_id,
           secondary_roles: effectiveSecondary
         };
 
-        const hrEmployeeData = {
-          id: editingEmployee.id,
+        const hrEmployeeData: any = {
           full_name: formData.fullName,
           email: cleanEmail,
           phone: formData.phone,
@@ -1419,19 +1410,18 @@ const EmployeeManagement = () => {
           department_id: formData.department_id,
           role: targetJobTitle,
           secondary_roles: effectiveSecondary,
-          accessRole: formData.role
+          accessrole: formData.role
         };
 
         try {
           await Promise.allSettled([
-            supabase.from('profiles').upsert(profileUpdate, { onConflict: 'id' }),
-            supabase.from('hr_employees').upsert(hrEmployeeData, { onConflict: 'id' }),
+            supabase.from('profiles').update(profileUpdate).or(`id.eq.${editingEmployee.id},email.eq.${cleanEmail}`),
+            supabase.from('hr_employees').update(hrEmployeeData).or(`id.eq.${editingEmployee.id},email.eq.${cleanEmail}`),
             supabase.from('hr_recruits').update({
               dept: targetDeptName,
               role: targetJobTitle,
               name: formData.fullName,
-              placement_status: 'placed',
-              secondary_roles: effectiveSecondary
+              placement_status: 'placed'
             }).or(`id.eq.${editingEmployee.id},email.eq.${cleanEmail}`)
           ]);
         } catch (dbErr) {
@@ -1580,6 +1570,9 @@ const EmployeeManagement = () => {
             phone: formData.phone,
             role: targetJobTitle,
             dept: targetDeptName,
+            accessrole: formData.role,
+            department_id: formData.department_id,
+            secondary_roles: effectiveSecondary,
             created_at: new Date().toISOString()
           }, { onConflict: 'id' });
         } catch (hrErr) {
@@ -1668,6 +1661,8 @@ const EmployeeManagement = () => {
         phone: editFormData.phone,
         role: editFormData.accessRole === 'department_head' ? 'Department Head (HOD)' : editFormData.jobTitle,
         dept: deptNames[editFormData.department_id] || 'Audit',
+        accessrole: editFormData.accessRole,
+        department_id: editFormData.department_id,
         employee_type: editFormData.employeeType,
         joined_date: editFormData.joinedDate,
         immediate_supervisor: editFormData.immediateSupervisor,
