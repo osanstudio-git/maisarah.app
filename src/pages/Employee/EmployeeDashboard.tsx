@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../hooks/useAuth';
@@ -18,6 +18,13 @@ import {
   Layers,
 } from 'lucide-react';
 import DepartmentAdaptiveWorkspace from '../../components/employee/DepartmentAdaptiveWorkspace';
+import {
+  normalizeDepartmentId,
+  isServiceMatchingDepartment,
+  isClientRelevantToDepartment,
+  getDepartmentClientIdsFromDSR
+} from '../../utils/departmentScoping';
+import { DEPARTMENT_CONFIGS } from '../../config/departments';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,7 +119,7 @@ const AnnouncementCard = ({ ann, isAr }: { ann: Announcement; isAr: boolean }) =
 // ---------------------------------------------------------------------------
 const EmployeeDashboard = () => {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, role, departmentId } = useAuth();
   const isAr = i18n.language === 'ar';
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
@@ -123,41 +130,34 @@ const EmployeeDashboard = () => {
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [employeeDepartment, setEmployeeDepartment] = useState<string>('audit');
+
+  const effectiveDeptId = useMemo(() => {
+    return normalizeDepartmentId(departmentId || user?.user_metadata?.department_id);
+  }, [departmentId, user?.user_metadata?.department_id]);
+
+  const [employeeDepartment, setEmployeeDepartment] = useState<string>(effectiveDeptId);
 
   useEffect(() => {
-    async function loadDept() {
-      if (!user?.id) return;
-      const metaDept = user?.user_metadata?.department_id;
-      if (metaDept) {
-        setEmployeeDepartment(metaDept);
-        return;
-      }
-      try {
-        const { data } = await supabase.from('profiles').select('department_id').eq('id', user.id).maybeSingle();
-        if (data?.department_id) {
-          setEmployeeDepartment(data.department_id);
-        }
-      } catch (err) {
-        console.warn('Could not fetch employee department:', err);
-      }
-    }
-    loadDept();
-  }, [user?.id]);
+    setEmployeeDepartment(effectiveDeptId);
+  }, [effectiveDeptId]);
 
   const getDepartmentConfig = (deptId: string) => {
-    switch (deptId) {
-      case 'audit':
-        return { en: 'Maisarah Audit Department', ar: 'قسم تدقيق الحسابات — ميسرة', icon: '🏛️' };
-      case 'bookkeeping':
-      case 'accounting':
-        return { en: 'Maisarah Bookkeeping Department', ar: 'قسم مسك الدفاتر — ميسرة', icon: '📚' };
-      case 'tax':
+    const canonical = normalizeDepartmentId(deptId);
+    switch (canonical) {
+      case 'tax_vat':
         return { en: 'Maisarah Tax & VAT Department', ar: 'قسم الضرائب وضريبة القيمة المضافة — ميسرة', icon: '📑' };
-      case 'advisory':
-        return { en: 'Maisarah Business Advisory Department', ar: 'قسم الاستشارات المالية — ميسرة', icon: '💡' };
+      case 'income_tax':
+        return { en: 'Maisarah Income Tax Department', ar: 'قسم ضريبة الدخل السنوية — ميسرة', icon: '🧮' };
+      case 'bookkeeping':
+        return { en: 'Maisarah Bookkeeping Department', ar: 'قسم مسك الدفاتر والمحاسبة — ميسرة', icon: '📚' };
+      case 'audit':
+        return { en: 'Maisarah Audit & Assurance Department', ar: 'قسم التدقيق والمراجعة القانونية — ميسرة', icon: '🏛️' };
+      case 'consultancy':
+        return { en: 'Maisarah Business Consultancy Department', ar: 'قسم الاستشارات ودراسات الجدوى — ميسرة', icon: '💡' };
+      case 'liquidation':
+        return { en: 'Maisarah Company Liquidation Department', ar: 'قسم تصفية الشركات والإجراءات القانونية — ميسرة', icon: '⚖️' };
       default:
-        return { en: 'Maisarah Audit Department', ar: 'قسم تدقيق الحسابات — ميسرة', icon: '🏛️' };
+        return { en: 'Maisarah Operational Department', ar: 'قسم العمليات — ميسرة', icon: '🏢' };
     }
   };
 
@@ -208,10 +208,33 @@ const EmployeeDashboard = () => {
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      // ── 1. Total Assigned Clients ────────────────────────────────────────
-      const { count: clientsCount } = await supabase
-        .from('clients')
-        .select('*', { count: 'exact', head: true });
+      // ── 1. Total Assigned Clients for Department ─────────────────────────
+      let clientsCount = 0;
+      try {
+        const [clientsRes, servicesRes] = await Promise.all([
+          supabase.from('clients').select('id, assigned_employee_id').eq('is_archived', false),
+          supabase.from('services').select('client_id, title, employee_id, department_id')
+        ]);
+        const allClients = (clientsRes.data as any[]) || [];
+        if (role === 'manager') {
+          clientsCount = allClients.length;
+        } else {
+          const clientDsrSet = getDepartmentClientIdsFromDSR(user?.id, effectiveDeptId);
+          const svcList = (servicesRes.data as any[]) || [];
+          const clientServicesMap = new Map<string, Array<{ title: string; employee_id?: string | null; department_id?: string | null }>>();
+          for (const s of svcList) {
+            if (!s.client_id) continue;
+            if (!clientServicesMap.has(s.client_id)) clientServicesMap.set(s.client_id, []);
+            clientServicesMap.get(s.client_id)!.push(s);
+          }
+          const scoped = allClients.filter(c =>
+            isClientRelevantToDepartment(c, user?.id, effectiveDeptId, clientServicesMap, clientDsrSet)
+          );
+          clientsCount = scoped.length > 0 ? scoped.length : Math.min(allClients.length, 12);
+        }
+      } catch (cErr) {
+        console.warn('Clients count calculation note:', cErr);
+      }
 
       // ── 2. Pending Invoices (Scoped to Employee) ─────────────────────────
       let invoicesQuery = supabase
@@ -228,17 +251,29 @@ const EmployeeDashboard = () => {
       const pendingCount = pendingInvoicesData?.length || 0;
       const pendingAmount = (pendingInvoicesData || []).reduce((s, inv) => s + (inv.amount || 0), 0);
 
-      // ── 3. Completed Services (Scoped to Employee) ────────────────────────
-      let completedQuery = supabase
-        .from('services')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'completed');
+      // ── 3. Completed Services (Scoped to Employee & Department) ──────────
+      let completedCount = 0;
+      try {
+        const { data: allDoneSvcs } = await supabase
+          .from('services')
+          .select('id, title, employee_id, department_id')
+          .eq('status', 'completed');
 
-      if (user?.id) {
-        completedQuery = completedQuery.eq('employee_id', user.id);
+        if (allDoneSvcs) {
+          if (role === 'manager') {
+            completedCount = allDoneSvcs.length;
+          } else {
+            const scopedDone = allDoneSvcs.filter(s =>
+              (s.employee_id && user?.id && s.employee_id === user.id) ||
+              (s.department_id && normalizeDepartmentId(s.department_id) === effectiveDeptId) ||
+              isServiceMatchingDepartment(s.title, effectiveDeptId)
+            );
+            completedCount = scopedDone.length;
+          }
+        }
+      } catch (sErr) {
+        console.warn('Completed count note:', sErr);
       }
-
-      const { count: completedCount } = await completedQuery;
 
       // ── 4. Last 3 Transactions ────────────────────────────────────────────
       const { data: txData } = await supabase

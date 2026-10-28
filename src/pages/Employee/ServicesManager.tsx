@@ -8,7 +8,14 @@ import {
   PlayCircle, Search, ChevronDown, AlertCircle, Eye, Trash2, Edit,
   Receipt, DollarSign, FileCheck, ShieldCheck, CheckCheck, FileText
 } from 'lucide-react';
-import { getAllDepartments } from '../../config/departments';
+import { getAllDepartments, DEPARTMENT_CONFIGS } from '../../config/departments';
+import {
+  normalizeDepartmentId,
+  isServiceMatchingDepartment,
+  getDepartmentServicesList,
+  isClientRelevantToDepartment,
+  getDepartmentClientIdsFromDSR
+} from '../../utils/departmentScoping';
 import { getDSREntries, updateDSREntry, addDSREntry, type DSREntry } from '../../utils/dsrSync';
 import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
@@ -24,12 +31,15 @@ interface ServiceRecord {
   due_date: string | null;
   created_at: string;
   client_id: string | null;
+  employee_id?: string | null;
+  department_id?: string | null;
   clients?: { company_name: string } | null;
 }
 
 interface Client {
   id: string;
   company_name: string;
+  assigned_employee_id?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,17 +63,47 @@ const useServiceCatalog = (isAr: boolean) => {
           .select('id, name_ar, name_en, department_id')
           .order('name_en');
 
+        const items: { id: string; name: string; department_id: string }[] = [];
         if (data && data.length > 0) {
-          setCatalog(data.map(d => ({
-            id: d.id,
-            name: isAr ? d.name_ar : d.name_en,
-            department_id: d.department_id || ''
-          })));
-        } else {
-          setCatalog([]);
+          data.forEach(d => {
+            items.push({
+              id: d.id,
+              name: isAr ? (d.name_ar || d.name_en) : (d.name_en || d.name_ar),
+              department_id: normalizeDepartmentId(d.department_id)
+            });
+          });
         }
+
+        // Merge standard department catalog so every department has immediate services available
+        const allDepts = getAllDepartments();
+        for (const dept of allDepts) {
+          const deptServices = getDepartmentServicesList(dept.id);
+          for (const svcName of deptServices) {
+            const exists = items.some(it => it.name.toLowerCase() === svcName.toLowerCase() && it.department_id === dept.id);
+            if (!exists) {
+              items.push({
+                id: `static-${dept.id}-${svcName.toLowerCase().replace(/\s+/g, '-')}`,
+                name: svcName,
+                department_id: dept.id
+              });
+            }
+          }
+        }
+        setCatalog(items);
       } catch {
-        setCatalog([]);
+        const fallbackItems: { id: string; name: string; department_id: string }[] = [];
+        const allDepts = getAllDepartments();
+        for (const dept of allDepts) {
+          const deptServices = getDepartmentServicesList(dept.id);
+          for (const svcName of deptServices) {
+            fallbackItems.push({
+              id: `static-${dept.id}-${svcName.toLowerCase().replace(/\s+/g, '-')}`,
+              name: svcName,
+              department_id: dept.id
+            });
+          }
+        }
+        setCatalog(fallbackItems);
       }
     };
     fetchCatalog();
@@ -90,8 +130,20 @@ const StatusBadge = ({ status, isAr }: { status: string; isAr: boolean }) => {
 // ---------------------------------------------------------------------------
 const ServicesManager = () => {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, role, departmentId } = useAuth();
   const isAr = i18n.language === 'ar';
+  const isManagerOrAdmin = role === 'manager' || role === 'department_head';
+
+  const effectiveDeptId = useMemo(() => {
+    const raw = departmentId || user?.user_metadata?.department_id || 'bookkeeping';
+    const clean = raw.toLowerCase().trim();
+    if (clean === 'accounting') return 'bookkeeping';
+    if (clean === 'tax' || clean === 'vat') return 'tax_vat';
+    if (clean === 'legal') return 'liquidation';
+    if (clean === 'advisory' || clean === 'business_advisory') return 'consultancy';
+    return clean;
+  }, [departmentId, user?.user_metadata?.department_id]);
+
   const catalog = useServiceCatalog(isAr);
 
   const [services, setServices] = useState<ServiceRecord[]>([]);
@@ -111,12 +163,19 @@ const ServicesManager = () => {
     description: '',
     status: 'ongoing',
   });
-  const [selectedDeptId, setSelectedDeptId] = useState('');
+  const [selectedDeptId, setSelectedDeptId] = useState(effectiveDeptId);
   const [useCustomName, setUseCustomName] = useState(false);
   const [viewingService, setViewingService] = useState<ServiceRecord | null>(null);
   const [deletingService, setDeletingService] = useState<ServiceRecord | null>(null);
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+
+  // Keep selectedDeptId synced with employee department
+  useEffect(() => {
+    if (effectiveDeptId) {
+      setSelectedDeptId(effectiveDeptId);
+    }
+  }, [effectiveDeptId]);
 
   // ── DSR & Payment States ──────────────────────────────────────────────────
   const [dsrEntries, setDsrEntries] = useState<DSREntry[]>([]);
@@ -136,36 +195,60 @@ const ServicesManager = () => {
     setDsrEntries(getDSREntries());
   }, []);
 
-  // ── Fetch (Scoped to Logged-in Employee) ───────────────────────────────────
+  // ── Fetch (Scoped to Logged-in Employee & Department) ─────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
     loadDSR();
     try {
       let query = supabase
         .from('services')
-        .select('id, title, status, description, due_date, created_at, client_id, clients(company_name)')
+        .select('id, title, status, description, due_date, created_at, client_id, employee_id, department_id, clients(company_name)')
         .order('created_at', { ascending: false });
-
-      // Scope strictly to this employee's assigned tasks or creations
-      if (user?.id) {
-        query = query.eq('employee_id', user.id);
-      }
 
       const [svcRes, clientRes] = await Promise.all([
         query,
-        supabase.from('clients').select('id, company_name').order('company_name'),
+        supabase.from('clients').select('id, company_name, assigned_employee_id').order('company_name'),
       ]);
-      const formattedServices: ServiceRecord[] = ((svcRes.data as any[]) || []).map(item => ({
+
+      const rawServices: ServiceRecord[] = ((svcRes.data as any[]) || []).map(item => ({
         ...item,
         clients: Array.isArray(item.clients) ? item.clients[0] || null : item.clients || null,
       }));
-      setServices(formattedServices);
-      setClients((clientRes.data as Client[]) || []);
+
+      const allClients: Client[] = ((clientRes.data as any[]) || []);
+
+      if (!isManagerOrAdmin) {
+        // Filter services strictly to this employee's department and assigned tasks
+        const scopedServices = rawServices.filter(s => {
+          if (s.employee_id && user?.id && s.employee_id === user.id) return true;
+          if (s.department_id && normalizeDepartmentId(s.department_id) === effectiveDeptId) return true;
+          if (isServiceMatchingDepartment(s.title, effectiveDeptId)) return true;
+          return false;
+        });
+        setServices(scopedServices);
+
+        // Filter clients list for this employee & department
+        const clientDsrSet = getDepartmentClientIdsFromDSR(user?.id, effectiveDeptId);
+        const clientServicesMap = new Map<string, Array<{ title: string; employee_id?: string | null; department_id?: string | null }>>();
+        for (const s of (svcRes.data as any[]) || []) {
+          if (!s.client_id) continue;
+          if (!clientServicesMap.has(s.client_id)) clientServicesMap.set(s.client_id, []);
+          clientServicesMap.get(s.client_id)!.push(s);
+        }
+
+        const scopedClients = allClients.filter(c =>
+          isClientRelevantToDepartment(c, user?.id, effectiveDeptId, clientServicesMap, clientDsrSet)
+        );
+        setClients(scopedClients.length > 0 ? scopedClients : allClients.slice(0, 15));
+      } else {
+        setServices(rawServices);
+        setClients(allClients);
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Fetch services exception:', err);
     }
     setLoading(false);
-  }, [user?.id, loadDSR]);
+  }, [user?.id, isManagerOrAdmin, effectiveDeptId, loadDSR]);
 
   useEffect(() => {
     fetchData();
@@ -207,6 +290,7 @@ const ServicesManager = () => {
         due_date: formData.due_date || null,
         client_id: formData.client_id || null,
         employee_id: user?.id, // Digital Signature: Tag the employee who created it
+        department_id: selectedDeptId || effectiveDeptId,
       };
 
       if (editingService) {
@@ -452,16 +536,33 @@ const ServicesManager = () => {
       {/* Header */}
       <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isAr ? 'text-right' : 'text-left'}`}>
         <div>
-          <h2 className="text-3xl font-black text-gray-900 flex items-center gap-3 tracking-tight">
-            <Briefcase size={28} className="text-brand-dark" />
-            {isAr ? 'إدارة الخدمات' : 'Services Manager'}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-3xl font-black text-gray-900 flex items-center gap-3 tracking-tight">
+              <Briefcase size={28} className="text-brand-dark" />
+              {isAr ? 'إدارة الخدمات' : 'Services Manager'}
+            </h2>
+            {!isManagerOrAdmin && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-dark/10 text-brand-dark font-bold text-xs rounded-full border border-brand-dark/20">
+                <span className="w-2 h-2 rounded-full bg-brand-dark animate-pulse"></span>
+                {getAllDepartments().find(d => d.id === effectiveDeptId)?.name || effectiveDeptId}
+              </span>
+            )}
+          </div>
           <p className="text-sm text-gray-500 mt-2 font-medium">
-            {isAr ? `${services.length} خدمة مسجّلة` : `${services.length} total services`}
+            {isAr
+              ? !isManagerOrAdmin
+                ? `${services.length} خدمة مخصصة لقسم ${getAllDepartments().find(d => d.id === effectiveDeptId)?.name || ''}`
+                : `${services.length} خدمة مسجّلة`
+              : !isManagerOrAdmin
+                ? `${services.length} services in ${getAllDepartments().find(d => d.id === effectiveDeptId)?.name || 'Department'}`
+                : `${services.length} total services`}
           </p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setSelectedDeptId(effectiveDeptId);
+            setIsModalOpen(true);
+          }}
           className="flex items-center gap-2 px-6 py-3 bg-brand-dark text-white rounded-2xl
             hover:bg-red-800 transition-all text-sm font-black uppercase tracking-widest shadow-xl shadow-red-900/20 active:scale-95"
         >
@@ -739,20 +840,29 @@ const ServicesManager = () => {
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                       {isAr ? 'القسم' : 'Department'}
                     </label>
-                    <div className="relative">
-                      <select
-                        value={selectedDeptId}
-                        onChange={e => setSelectedDeptId(e.target.value)}
-                        className="w-full appearance-none p-2.5 pe-8 border border-gray-200 rounded-xl text-sm
-                          outline-none focus:border-red-700 focus:ring-2 focus:ring-red-700/10 bg-white"
-                      >
-                        <option value="">{isAr ? '-- جميع الأقسام --' : '-- All Departments --'}</option>
-                        {getAllDepartments().map(d => (
-                          <option key={d.id} value={d.id}>{d.name}</option>
-                        ))}
-                      </select>
-                      <ChevronDown size={14} className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    </div>
+                    {!isManagerOrAdmin ? (
+                      <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 flex items-center justify-between">
+                        <span>{getAllDepartments().find(d => d.id === effectiveDeptId)?.name || effectiveDeptId}</span>
+                        <span className="text-[10px] bg-brand-dark/10 text-brand-dark font-bold px-2 py-0.5 rounded-full border border-brand-dark/20">
+                          {isAr ? 'قسمك المخصص' : 'Assigned Dept'}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <select
+                          value={selectedDeptId}
+                          onChange={e => setSelectedDeptId(e.target.value)}
+                          className="w-full appearance-none p-2.5 pe-8 border border-gray-200 rounded-xl text-sm
+                            outline-none focus:border-red-700 focus:ring-2 focus:ring-red-700/10 bg-white"
+                        >
+                          <option value="">{isAr ? '-- جميع الأقسام --' : '-- All Departments --'}</option>
+                          {getAllDepartments().map(d => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      </div>
+                    )}
                   </div>
 
                   {/* Service Name Toggle */}

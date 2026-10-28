@@ -463,3 +463,5 @@ export const isCrossHandoffAllowed = (sourceDeptId: string, targetDeptId: string
   if (!source.allowed_handoff_dept_ids) return false;
   return source.allowed_handoff_dept_ids.includes(targetDeptId);
 };
+
+export const DEPARTMENT_CONFIGS = DEPARTMENTS;

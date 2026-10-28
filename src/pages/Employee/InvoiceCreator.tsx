@@ -86,13 +86,24 @@ const inputCls =
   'w-full p-3 border border-gray-200 rounded-xl text-sm outline-none ' +
   'focus:border-red-700 focus:ring-2 focus:ring-red-700/10 transition-colors bg-white';
 
+import { useMemo } from 'react';
+import {
+  normalizeDepartmentId,
+  isClientRelevantToDepartment,
+  getDepartmentClientIdsFromDSR
+} from '../../utils/departmentScoping';
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 const InvoiceCreator = () => {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, role, departmentId } = useAuth();
   const isAr = i18n.language === 'ar';
+
+  const effectiveDeptId = useMemo(() => {
+    return normalizeDepartmentId(departmentId || user?.user_metadata?.department_id);
+  }, [departmentId, user?.user_metadata?.department_id]);
 
   const [clients, setClients]               = useState<Client[]>([]);
   const [loadingClients, setLoadingClients] = useState(true);
@@ -113,10 +124,33 @@ const InvoiceCreator = () => {
   // ── Data fetching ─────────────────────────────────────────────────────────
   const fetchClients = useCallback(async () => {
     setLoadingClients(true);
-    const { data } = await supabase.from('clients').select('id, company_name').order('company_name');
-    setClients((data as Client[]) || []);
+    try {
+      const [clientsRes, servicesRes] = await Promise.all([
+        supabase.from('clients').select('id, company_name, assigned_employee_id').eq('is_archived', false).order('company_name'),
+        supabase.from('services').select('client_id, title, employee_id, department_id')
+      ]);
+      const allClients = (clientsRes.data as any[]) || [];
+      if (role === 'manager') {
+        setClients(allClients);
+      } else {
+        const clientDsrSet = getDepartmentClientIdsFromDSR(user?.id, effectiveDeptId);
+        const svcList = (servicesRes.data as any[]) || [];
+        const clientServicesMap = new Map<string, Array<{ title: string; employee_id?: string | null; department_id?: string | null }>>();
+        for (const s of svcList) {
+          if (!s.client_id) continue;
+          if (!clientServicesMap.has(s.client_id)) clientServicesMap.set(s.client_id, []);
+          clientServicesMap.get(s.client_id)!.push(s);
+        }
+        const scoped = allClients.filter(c =>
+          isClientRelevantToDepartment(c, user?.id, effectiveDeptId, clientServicesMap, clientDsrSet)
+        );
+        setClients(scoped.length > 0 ? scoped : allClients.slice(0, 15));
+      }
+    } catch {
+      setClients([]);
+    }
     setLoadingClients(false);
-  }, []);
+  }, [role, user?.id, effectiveDeptId]);
 
   const fetchRecentInvoices = useCallback(async () => {
     setLoadingRecent(true);

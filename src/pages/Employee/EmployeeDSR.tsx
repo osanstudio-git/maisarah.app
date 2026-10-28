@@ -14,28 +14,89 @@ import {
 } from '../../utils/dsrSync';
 import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
+import {
+  isClientRelevantToDepartment,
+  getDepartmentClientIdsFromDSR
+} from '../../utils/departmentScoping';
+import { getAllDepartments } from '../../config/departments';
 
-// Standard Service Catalog with standard prices & default official fees
-const SERVICE_CATALOG = [
-  { title: 'VAT FILING 2026 Q2', titleAr: 'إقرار ضريبة القيمة المضافة Q2', defaultAmount: 30, defaultGov: 0 },
-  { title: 'VAT FILING 2026 Q1', titleAr: 'إقرار ضريبة القيمة المضافة Q1', defaultAmount: 25, defaultGov: 0 },
-  { title: 'Feasibility Study', titleAr: 'دراسة جدوى اقتصادية', defaultAmount: 30, defaultGov: 0 },
-  { title: 'Company Liquidation', titleAr: 'تصفية وحل شركات', defaultAmount: 175, defaultGov: 0 },
-  { title: 'Corporate Tax Return', titleAr: 'إقرار ضريبة الدخل السنوي', defaultAmount: 75, defaultGov: 0 },
-  { title: 'Ministry of Labor Attestation', titleAr: 'توثيق وزارة العمل', defaultAmount: 15, defaultGov: 5 },
-  { title: 'Chamber of Commerce Certification', titleAr: 'تصديق غرفة تجارة وصناعة عمان', defaultAmount: 20, defaultGov: 4 },
-  { title: 'Commercial Registration (CR) Amendment', titleAr: 'تعديل السجل التجاري والأنشطة', defaultAmount: 45, defaultGov: 10 },
-  { title: 'Vat Cancellation', titleAr: 'إلغاء التسجيل الضريبي', defaultAmount: 35, defaultGov: 0 },
-  { title: 'Audited Financial Statement', titleAr: 'القوائم المالية المدققة', defaultAmount: 250, defaultGov: 0 },
-  { title: 'Custom Operational Service', titleAr: 'خدمة محاسبية / إدارية مخصصة', defaultAmount: 50, defaultGov: 0 },
-];
+// Department-specific service catalogs with standard pricing
+const DEPARTMENT_SERVICE_MAP: Record<string, Array<{ title: string; titleAr: string; defaultAmount: number; defaultGov: number }>> = {
+  bookkeeping: [
+    { title: 'Bookkeeping (Monthly)', titleAr: 'مسك الدفاتر المحاسبية (شهري)', defaultAmount: 50, defaultGov: 0 },
+    { title: 'Monthly Reconciliation', titleAr: 'التسوية والمطابقة البنكية الشهرية', defaultAmount: 35, defaultGov: 0 },
+    { title: 'Financial Statement Prep', titleAr: 'تجهيز وإعداد القوائم المالية', defaultAmount: 75, defaultGov: 0 },
+    { title: 'Net Wealth Certificate', titleAr: 'شهادة صافي الثروة المعتمدة', defaultAmount: 40, defaultGov: 0 },
+    { title: 'Accounting Consultancy', titleAr: 'استشارات محاسبية وإقفال قيود', defaultAmount: 30, defaultGov: 0 },
+    { title: 'Financial Reports (Merge)', titleAr: 'دمج وتوحيد التقارير المالية', defaultAmount: 45, defaultGov: 0 },
+    { title: 'Custom Operational Service', titleAr: 'خدمة مسك دفاتر مخصصة', defaultAmount: 35, defaultGov: 0 },
+  ],
+  tax_vat: [
+    { title: 'VAT FILING 2026 Q2', titleAr: 'إقرار ضريبة القيمة المضافة Q2', defaultAmount: 30, defaultGov: 0 },
+    { title: 'VAT FILING 2026 Q1', titleAr: 'إقرار ضريبة القيمة المضافة Q1', defaultAmount: 25, defaultGov: 0 },
+    { title: 'Tax Certificate', titleAr: 'استخراج الشهادة الضريبية وبراءة الذمة', defaultAmount: 35, defaultGov: 0 },
+    { title: 'Renew Tax Certificate', titleAr: 'تجديد الشهادة الضريبية', defaultAmount: 25, defaultGov: 0 },
+    { title: 'Vat Cancellation', titleAr: 'إلغاء التسجيل في ضريبة القيمة المضافة', defaultAmount: 35, defaultGov: 0 },
+    { title: 'Tax Objection', titleAr: 'تقديم الاعتراض الضريبي ودراسة الفروقات', defaultAmount: 100, defaultGov: 0 },
+    { title: 'Tax Exemption', titleAr: 'طلب الإعفاء الضريبي', defaultAmount: 50, defaultGov: 0 },
+    { title: 'Custom Operational Service', titleAr: 'خدمة ضريبية مخصصة', defaultAmount: 30, defaultGov: 0 },
+  ],
+  audit: [
+    { title: 'Statutory Audit', titleAr: 'التدقيق القانوني السنوي', defaultAmount: 250, defaultGov: 0 },
+    { title: 'Internal Audit', titleAr: 'التدقيق والرقابة الداخلية', defaultAmount: 180, defaultGov: 0 },
+    { title: 'Financial Statements Audit', titleAr: 'تدقيق ومصادقة القوائم المالية', defaultAmount: 200, defaultGov: 0 },
+    { title: 'KSA Audit', titleAr: 'تدقيق حسابات فروع السعودية', defaultAmount: 300, defaultGov: 0 },
+    { title: 'Fraud Audit', titleAr: 'فحص الاحتيال والمراجعة الجنائية', defaultAmount: 220, defaultGov: 0 },
+    { title: 'Bank Audit', titleAr: 'تدقيق التقارير للأغراض البنكية والتمويل', defaultAmount: 150, defaultGov: 0 },
+    { title: 'Custom Operational Service', titleAr: 'خدمة تدقيق ومراجعة مخصصة', defaultAmount: 100, defaultGov: 0 },
+  ],
+  income_tax: [
+    { title: 'Corporate Tax Return', titleAr: 'إقرار ضريبة الدخل السنوي للشركات', defaultAmount: 75, defaultGov: 0 },
+    { title: 'Tax Card Renewal', titleAr: 'تجديد البطاقة الضريبية السنوية', defaultAmount: 30, defaultGov: 0 },
+    { title: 'P&L Preparation', titleAr: 'إعداد حساب الأرباح والخسائر للضريبة', defaultAmount: 45, defaultGov: 0 },
+    { title: 'Zero Filing (0 Filing)', titleAr: 'تقديم الإقرار الضريبي الصفري', defaultAmount: 25, defaultGov: 0 },
+    { title: 'Custom Operational Service', titleAr: 'خدمة ضريبة دخل مخصصة', defaultAmount: 40, defaultGov: 0 },
+  ],
+  consultancy: [
+    { title: 'Feasibility Study', titleAr: 'دراسة جدوى اقتصادية متكاملة', defaultAmount: 150, defaultGov: 0 },
+    { title: 'Business Plan', titleAr: 'خطة عمل استراتيجية ونموذج أعمال', defaultAmount: 100, defaultGov: 0 },
+    { title: 'Financial Modelling', titleAr: 'النمذجة والتحليل المالي الاستشاري', defaultAmount: 120, defaultGov: 0 },
+    { title: 'Market Survey', titleAr: 'أبحاث ودراسات السوق الميدانية', defaultAmount: 80, defaultGov: 0 },
+    { title: 'Jaheez Program Advisory', titleAr: 'استشارات برنامج جاهز لرواد الأعمال', defaultAmount: 60, defaultGov: 0 },
+    { title: 'Custom Operational Service', titleAr: 'خدمة استشارية وتطوير أعمال مخصصة', defaultAmount: 50, defaultGov: 0 },
+  ],
+  liquidation: [
+    { title: 'Company Liquidation', titleAr: 'تصفية وحل شركات وتعيين المصفي', defaultAmount: 175, defaultGov: 0 },
+    { title: 'CR Cancellation', titleAr: 'إلغاء وشطب السجل التجاري نهائياً', defaultAmount: 75, defaultGov: 10 },
+    { title: 'Tax Clearance Certificate', titleAr: 'استخراج براءة ذمة الضرائب للتصفية', defaultAmount: 50, defaultGov: 0 },
+    { title: 'GOSI Clearance', titleAr: 'براءة ذمة التأمينات الاجتماعية', defaultAmount: 35, defaultGov: 0 },
+    { title: 'Ministry Approvals Tracking', titleAr: 'متابعة موافقات وتصاريح الوزارات', defaultAmount: 45, defaultGov: 5 },
+    { title: 'Custom Operational Service', titleAr: 'خدمة تصفية وإجراءات شركات مخصصة', defaultAmount: 50, defaultGov: 0 },
+  ]
+};
 
 export default function EmployeeDSR() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, role, departmentId } = useAuth();
   const isAr = i18n.language === 'ar';
 
   const employeeName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Staff Member';
+
+  // Determine employee's effective department
+  const effectiveDeptId = useMemo(() => {
+    const raw = departmentId || user?.user_metadata?.department_id || 'bookkeeping';
+    const clean = raw.toLowerCase().trim();
+    if (clean === 'accounting') return 'bookkeeping';
+    if (clean === 'tax' || clean === 'vat') return 'tax_vat';
+    if (clean === 'legal') return 'liquidation';
+    if (clean === 'advisory' || clean === 'business_advisory') return 'consultancy';
+    return clean;
+  }, [departmentId, user?.user_metadata?.department_id]);
+
+  // Catalog strictly tailored to this employee's department
+  const activeServiceCatalog = useMemo(() => {
+    return DEPARTMENT_SERVICE_MAP[effectiveDeptId] || DEPARTMENT_SERVICE_MAP.bookkeeping;
+  }, [effectiveDeptId]);
 
   const [entries, setEntries] = useState<DSREntry[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,37 +119,87 @@ export default function EmployeeDSR() {
   // New Entry Form State
   const [newForm, setNewForm] = useState({
     date: new Date().toISOString().split('T')[0],
-    service: 'VAT FILING 2026 Q2',
+    service: activeServiceCatalog[0]?.title || 'Bookkeeping (Monthly)',
     company_name: '',
     cr_number: '',
-    amount: 30,
-    gov_fee: 0,
+    amount: activeServiceCatalog[0]?.defaultAmount || 50,
+    gov_fee: activeServiceCatalog[0]?.defaultGov || 0,
     status: 'Paid' as 'Paid' | 'Unpaid' | 'Partial',
     payment_date: new Date().toISOString().split('T')[0],
     payment_method: 'Mobile Payment' as DSREntry['payment_method'],
     accountant_note: '',
   });
 
-  // Fetch client list from Supabase for instant CR autofill
+  // Keep newForm service in sync with department catalog
+  useEffect(() => {
+    if (activeServiceCatalog.length > 0) {
+      setNewForm(prev => ({
+        ...prev,
+        service: activeServiceCatalog[0].title,
+        amount: activeServiceCatalog[0].defaultAmount,
+        gov_fee: activeServiceCatalog[0].defaultGov
+      }));
+    }
+  }, [activeServiceCatalog]);
+
+  // Fetch client list from Supabase for instant CR autofill (Scoped to department)
   useEffect(() => {
     async function fetchClients() {
       try {
-        const { data } = await supabase.from('clients').select('id, company_name, cr_number').order('company_name');
-        if (data && data.length > 0) {
-          setClientsList(data);
+        const [clientsRes, servicesRes] = await Promise.all([
+          supabase.from('clients').select('id, company_name, cr_number, assigned_employee_id').order('company_name'),
+          supabase.from('services').select('client_id, title, employee_id, department_id')
+        ]);
+        const all = (clientsRes.data || []);
+        if (role === 'manager') {
+          setClientsList(all);
+        } else {
+          const clientDsrSet = getDepartmentClientIdsFromDSR(user?.id, effectiveDeptId);
+          const svcList = (servicesRes.data as any[]) || [];
+          const clientServicesMap = new Map<string, Array<{ title: string; employee_id?: string | null; department_id?: string | null }>>();
+          for (const s of svcList) {
+            if (!s.client_id) continue;
+            if (!clientServicesMap.has(s.client_id)) clientServicesMap.set(s.client_id, []);
+            clientServicesMap.get(s.client_id)!.push(s);
+          }
+          const scoped = all.filter(c =>
+            isClientRelevantToDepartment(c, user?.id, effectiveDeptId, clientServicesMap, clientDsrSet)
+          );
+          setClientsList(scoped.length > 0 ? scoped : all.slice(0, 15));
         }
       } catch (err) {
         console.warn('Clients fetch note:', err);
       }
     }
     fetchClients();
-  }, []);
+  }, [role, user?.id, effectiveDeptId]);
 
-  // Load DSR entries
+  // Load DSR entries strictly scoped to this employee's department and assigned work
   const loadData = useCallback(() => {
     const all = getDSREntries();
-    setEntries(all);
-  }, []);
+    if (role === 'manager') {
+      setEntries(all);
+    } else {
+      const deptServicesSet = new Set(activeServiceCatalog.map(s => s.title.toLowerCase()));
+      const scoped = all.filter(e => {
+        // Logged by this employee
+        if (e.created_by && user?.id && e.created_by === user.id) return true;
+        if (e.employee_name && employeeName && e.employee_name.toLowerCase() === employeeName.toLowerCase()) return true;
+        // Service belongs to this department's catalog
+        if (e.service && deptServicesSet.has(e.service.toLowerCase())) return true;
+        // Keyword heuristic for legacy department data
+        const svc = (e.service || '').toLowerCase();
+        if (effectiveDeptId === 'bookkeeping' && (svc.includes('book') || svc.includes('reconcil') || svc.includes('statement') || svc.includes('ledger') || svc.includes('report'))) return true;
+        if (effectiveDeptId === 'tax_vat' && (svc.includes('vat') || svc.includes('tax cert') || svc.includes('exemption') || svc.includes('objection'))) return true;
+        if (effectiveDeptId === 'audit' && svc.includes('audit')) return true;
+        if (effectiveDeptId === 'income_tax' && (svc.includes('income tax') || svc.includes('corporate tax') || svc.includes('tax card') || svc.includes('0 filing') || svc.includes('zero filing'))) return true;
+        if (effectiveDeptId === 'consultancy' && (svc.includes('feasibility') || svc.includes('business plan') || svc.includes('consult') || svc.includes('model') || svc.includes('jaheez'))) return true;
+        if (effectiveDeptId === 'liquidation' && (svc.includes('liquidation') || svc.includes('cr cancel') || svc.includes('clearance') || svc.includes('ministry'))) return true;
+        return false;
+      });
+      setEntries(scoped);
+    }
+  }, [role, activeServiceCatalog, user?.id, employeeName, effectiveDeptId]);
 
   useEffect(() => {
     loadData();
@@ -173,7 +284,7 @@ export default function EmployeeDSR() {
 
   // When service is selected in form, auto-fill standard pricing and default gov fee
   const handleServiceSelect = (serviceTitle: string) => {
-    const matched = SERVICE_CATALOG.find(s => s.title === serviceTitle);
+    const matched = activeServiceCatalog.find(s => s.title === serviceTitle);
     setNewForm(prev => ({
       ...prev,
       service: serviceTitle,
@@ -198,6 +309,7 @@ export default function EmployeeDSR() {
       date: newForm.date,
       employee_name: employeeName,
       employee_id: user?.id,
+      department_id: effectiveDeptId,
       service: newForm.service,
       company_name: newForm.company_name,
       cr_number: cleanCR,
@@ -228,11 +340,11 @@ export default function EmployeeDSR() {
     setIsAddModalOpen(false);
     setNewForm({
       date: new Date().toISOString().split('T')[0],
-      service: 'VAT FILING 2026 Q2',
+      service: activeServiceCatalog[0]?.title || 'Bookkeeping (Monthly)',
       company_name: '',
       cr_number: '',
-      amount: 30,
-      gov_fee: 0,
+      amount: activeServiceCatalog[0]?.defaultAmount || 50,
+      gov_fee: activeServiceCatalog[0]?.defaultGov || 0,
       status: 'Paid',
       payment_date: new Date().toISOString().split('T')[0],
       payment_method: 'Mobile Payment',
@@ -739,7 +851,7 @@ export default function EmployeeDSR() {
                     onChange={e => handleServiceSelect(e.target.value)}
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium cursor-pointer"
                   >
-                    {SERVICE_CATALOG.map(s => (
+                    {activeServiceCatalog.map(s => (
                       <option key={s.title} value={s.title}>
                         {isAr ? `${s.titleAr} (${s.defaultAmount} ر.ع)` : `${s.title} (OMR ${s.defaultAmount})`}
                       </option>

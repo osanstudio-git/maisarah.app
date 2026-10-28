@@ -6,6 +6,7 @@ type AuthContextType = {
   session: Session | null;
   user: User | null;
   role: string | null;
+  departmentId: string | null;
   secondaryRoles: string[];
   loading: boolean;
   sessionReady: boolean;
@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
   role: null,
+  departmentId: null,
   secondaryRoles: [],
   loading: true,
   sessionReady: false,
@@ -30,8 +32,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   
-  // Initialize role from localStorage if available to prevent UI flashes
+  // Initialize role and department from localStorage if available to prevent UI flashes
   const [role, setRole] = useState<string | null>(() => localStorage.getItem('app_user_role'));
+  const [departmentId, setDepartmentId] = useState<string | null>(() => localStorage.getItem('app_user_dept'));
   const [secondaryRoles, setSecondaryRoles] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('app_user_secondary_roles') || '[]');
@@ -191,6 +194,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const activeRole = isAuthorized ? cachedRole : primaryRole;
       setRole(activeRole);
       localStorage.setItem('app_user_role', activeRole);
+
+      // Extract and cache department
+      const dept = profileData?.department_id || profileData?.dept || liveUser.user_metadata?.department_id || liveUser.user_metadata?.dept || localStorage.getItem('app_user_dept') || null;
+      if (dept) {
+        setDepartmentId(dept);
+        localStorage.setItem('app_user_dept', dept);
+      }
     } catch (err) {
       console.warn("Notice during user role fetch:", err);
       const fallbackRole = currentUser.user_metadata?.role || localStorage.getItem('app_user_role') || null;
@@ -234,16 +244,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       localStorage.removeItem('app_user_role');
       localStorage.removeItem('app_user_primary_role');
       localStorage.removeItem('app_user_secondary_roles');
+      localStorage.removeItem('app_user_dept');
       setSession(null);
       setUser(null);
       setRole(null);
+      setDepartmentId(null);
       setSecondaryRoles([]);
       window.location.replace('/login');
     }
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, role, secondaryRoles, loading, sessionReady, signOut, switchPortal, setActiveRole }}>
+    <AuthContext.Provider value={{ session, user, role, departmentId, secondaryRoles, loading, sessionReady, signOut, switchPortal, setActiveRole }}>
       {children}
     </AuthContext.Provider>
   );

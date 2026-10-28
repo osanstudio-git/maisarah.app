@@ -27,6 +27,8 @@ import {
   Check
 } from 'lucide-react';
 import { addDSREntry } from '../../utils/dsrSync';
+import { normalizeDepartmentId, isServiceMatchingDepartment } from '../../utils/departmentScoping';
+import { getAllDepartments } from '../../config/departments';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -99,8 +101,12 @@ const COLUMNS = [
 
 export default function Transactions() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, role, departmentId } = useAuth();
   const isAr = i18n.language === 'ar';
+
+  const effectiveDeptId = React.useMemo(() => {
+    return normalizeDepartmentId(departmentId || user?.user_metadata?.department_id);
+  }, [departmentId, user?.user_metadata?.department_id]);
 
   const [tasks, setTasks] = useState<ServiceTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -177,7 +183,15 @@ export default function Transactions() {
 
       const { data, error } = await query;
       if (!error && data) {
-        const formattedTasks: ServiceTask[] = (data as any[]).map((task: any) => {
+        const formattedTasks: ServiceTask[] = (data as any[])
+          .filter((task: any) => {
+            if (role === 'manager') return true;
+            if (task.employee_id && user?.id && task.employee_id === user.id) return true;
+            if (task.department_id && normalizeDepartmentId(task.department_id) === effectiveDeptId) return true;
+            if (isServiceMatchingDepartment(task.title, effectiveDeptId)) return true;
+            return false;
+          })
+          .map((task: any) => {
           const budgetMatch = task.description?.match(/Contract Fee: OMR\s*(\d+(\.\d+)?)/i) || task.description?.match(/Fee: OMR\s*(\d+(\.\d+)?)/i);
           const parsedBudget = budgetMatch ? Number(budgetMatch[1]) : 750;
           return {
@@ -290,6 +304,7 @@ export default function Transactions() {
           date: new Date().toISOString().split('T')[0],
           employee_name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Staff Member',
           employee_id: user?.id,
+          department_id: effectiveDeptId,
           service: task.title,
           company_name: task.clients?.company_name || 'Valued Client',
           client_id: task.client_id || undefined,
@@ -419,6 +434,7 @@ export default function Transactions() {
         date: paymentData.payment_date || new Date().toISOString().split('T')[0],
         employee_name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Staff Member',
         employee_id: user?.id,
+        department_id: effectiveDeptId,
         service: selectedTaskForPayment.title,
         company_name: selectedTaskForPayment.clients?.company_name || 'Valued Client',
         client_id: selectedTaskForPayment.client_id || undefined,

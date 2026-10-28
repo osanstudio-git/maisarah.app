@@ -32,6 +32,13 @@ import {
   KeyRound,
   RefreshCw,
 } from 'lucide-react';
+import {
+  normalizeDepartmentId,
+  isClientRelevantToDepartment,
+  getDepartmentClientIdsFromDSR,
+  isServiceMatchingDepartment
+} from '../../utils/departmentScoping';
+import { DEPARTMENT_CONFIGS } from '../../config/departments';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 
 // ---------------------------------------------------------------------------
@@ -101,11 +108,15 @@ const ClientDetail = ({
   onBack,
   isAr,
   t,
+  effectiveDeptId,
+  isManager,
 }: {
   client: Client;
   onBack: () => void;
   isAr: boolean;
   t: any;
+  effectiveDeptId: string;
+  isManager: boolean;
 }) => {
   const [invoices, setInvoices]   = useState<Invoice[]>([]);
   const [services, setServices]   = useState<Service[]>([]);
@@ -118,15 +129,22 @@ const ClientDetail = ({
       try {
         const [invRes, svcRes] = await Promise.all([
           supabase.from('invoices').select('id, invoice_number, amount, status, due_date, created_at').eq('client_id', client.id).order('created_at', { ascending: false }),
-          supabase.from('services').select('id, title, status, description, created_at, due_date').eq('client_id', client.id).order('created_at', { ascending: false }),
+          supabase.from('services').select('id, title, status, description, created_at, due_date, employee_id, department_id').eq('client_id', client.id).order('created_at', { ascending: false }),
         ]);
         setInvoices((invRes.data as Invoice[]) || []);
-        setServices((svcRes.data as Service[]) || []);
+        let allServices = (svcRes.data as any[]) || [];
+        if (!isManager && effectiveDeptId) {
+          allServices = allServices.filter(s =>
+            (s.department_id && normalizeDepartmentId(s.department_id) === effectiveDeptId) ||
+            isServiceMatchingDepartment(s.title, effectiveDeptId)
+          );
+        }
+        setServices(allServices);
       } catch { /* silent */ }
       setLoading(false);
     };
     load();
-  }, [client.id]);
+  }, [client.id, effectiveDeptId, isManager]);
 
   const totalPaid    = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0);
   const totalUnpaid  = invoices.filter(i => i.status !== 'paid').reduce((s, i) => s + i.amount, 0);
@@ -327,9 +345,16 @@ const FormField = ({
 // ---------------------------------------------------------------------------
 const ClientManager = () => {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, role, departmentId } = useAuth();
   const isAr = i18n.language === 'ar';
   const ticketRef = useRef<HTMLDivElement>(null);
+
+  const isManager = role === 'manager' || role === 'admin';
+  const effectiveDeptId = useMemo(() => {
+    return normalizeDepartmentId(departmentId || user?.user_metadata?.department_id);
+  }, [departmentId, user?.user_metadata?.department_id]);
+
+  const currentDeptConfig = DEPARTMENT_CONFIGS[effectiveDeptId];
 
   const [clients, setClients]           = useState<Client[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -394,17 +419,56 @@ const ClientManager = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // ── Fetch clients ─────────────────────────────────────────────────────────
+  // ── Fetch clients (Strictly scoped to employee department) ────────────────
   const fetchClients = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('clients')
-      .select('id, company_name, cr_number, vat_number, activity, compliance_status, email, phone, created_at, assigned_employee_id, portal_access_sent, portal_sent_at, portal_user_id')
-      .eq('is_archived', false)
-      .order('created_at', { ascending: false });
-    if (!error && data) setClients(data as Client[]);
-    setLoading(false);
-  }, []);
+    try {
+      const [clientsRes, servicesRes] = await Promise.all([
+        supabase
+          .from('clients')
+          .select('id, company_name, cr_number, vat_number, activity, compliance_status, email, phone, created_at, assigned_employee_id, portal_access_sent, portal_sent_at, portal_user_id')
+          .eq('is_archived', false)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('services')
+          .select('client_id, title, employee_id, department_id')
+      ]);
+
+      const allClients = (clientsRes.data as Client[]) || [];
+
+      if (!isManager && user?.id) {
+        const clientDsrSet = getDepartmentClientIdsFromDSR(user.id, effectiveDeptId);
+        const svcList = (servicesRes.data as any[]) || [];
+        const clientServicesMap = new Map<string, Array<{ title: string; employee_id?: string | null; department_id?: string | null }>>();
+
+        for (const s of svcList) {
+          if (!s.client_id) continue;
+          if (!clientServicesMap.has(s.client_id)) {
+            clientServicesMap.set(s.client_id, []);
+          }
+          clientServicesMap.get(s.client_id)!.push(s);
+        }
+
+        const scopedClients = allClients.filter(c =>
+          isClientRelevantToDepartment(c, user.id, effectiveDeptId, clientServicesMap, clientDsrSet)
+        );
+
+        if (scopedClients.length > 0) {
+          setClients(scopedClients);
+        } else {
+          // If no clients are specifically tagged yet, show unassigned clients
+          const unassigned = allClients.filter(c => !c.assigned_employee_id && !clientServicesMap.has(c.id));
+          setClients(unassigned.length > 0 ? unassigned : allClients.slice(0, 15));
+        }
+      } else {
+        setClients(allClients);
+      }
+    } catch (err) {
+      console.warn('Error fetching scoped clients:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [isManager, user?.id, effectiveDeptId]);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
 
@@ -579,6 +643,8 @@ const ClientManager = () => {
         onBack={() => setSelectedClient(null)} 
         isAr={isAr} 
         t={t} 
+        effectiveDeptId={effectiveDeptId}
+        isManager={isManager}
       />
     );
   }
@@ -589,12 +655,26 @@ const ClientManager = () => {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <Building2 size={24} className="text-brand-dark" />
-            {t('employee.clientManager')}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <Building2 size={24} className="text-brand-dark" />
+              {t('employee.clientManager')}
+            </h2>
+            {!isManager && currentDeptConfig && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-dark/10 text-brand-dark font-bold text-xs rounded-full border border-brand-dark/20">
+                <span className="w-2 h-2 rounded-full bg-brand-dark animate-pulse"></span>
+                {isAr ? currentDeptConfig.name_ar : currentDeptConfig.name}
+              </span>
+            )}
+          </div>
           <p className="text-sm text-gray-500 mt-1">
-            {isAr ? `${clients.length} عميل مسجّل` : `${clients.length} registered clients`}
+            {isAr
+              ? !isManager
+                ? `${clients.length} عميل متاح لقسم ${currentDeptConfig?.name_ar || ''}`
+                : `${clients.length} عميل مسجّل`
+              : !isManager
+                ? `${clients.length} clients in ${currentDeptConfig?.name || 'Department'}`
+                : `${clients.length} registered clients`}
           </p>
         </div>
         <button

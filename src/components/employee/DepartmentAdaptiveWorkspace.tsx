@@ -21,13 +21,25 @@ import {
 
 export const DepartmentAdaptiveWorkspace: React.FC = () => {
   const { t, i18n } = useTranslation();
-  const { user, role } = useAuth();
+  const { user, role, departmentId } = useAuth();
   const isAr = i18n.language === 'ar';
+  const isManagerOrAdmin = role === 'manager' || role === 'department_head';
 
   const [departments, setDepartments] = useState<DepartmentConfig[]>(getAllDepartments());
-  const [activeDeptId, setActiveDeptId] = useState<string>('tax_vat');
+  const [activeDeptId, setActiveDeptId] = useState<string>('bookkeeping');
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any | null>(null);
+
+  // Normalize legacy department IDs
+  const normalizeDeptId = (id?: string | null): string => {
+    if (!id) return 'bookkeeping';
+    const clean = id.toLowerCase().trim();
+    if (clean === 'tax' || clean === 'vat') return 'tax_vat';
+    if (clean === 'accounting') return 'bookkeeping';
+    if (clean === 'legal') return 'liquidation';
+    if (clean === 'advisory' || clean === 'business_advisory') return 'consultancy';
+    return clean;
+  };
 
   // Load user assigned department
   useEffect(() => {
@@ -48,12 +60,9 @@ export const DepartmentAdaptiveWorkspace: React.FC = () => {
 
           setUserProfile(profile);
 
-          if (profile?.department_id) {
-            const matchedDept = getDepartmentById(profile.department_id);
-            if (matchedDept) {
-              setActiveDeptId(matchedDept.id);
-            }
-          }
+          const rawDept = profile?.department_id || departmentId || user.user_metadata?.department_id;
+          const targetDept = normalizeDeptId(rawDept);
+          setActiveDeptId(targetDept);
         }
       } catch (err) {
         console.warn('Error fetching employee department context:', err);
@@ -63,7 +72,7 @@ export const DepartmentAdaptiveWorkspace: React.FC = () => {
     };
 
     fetchUserDept();
-  }, [user]);
+  }, [user, departmentId]);
 
   const currentDept = getDepartmentById(activeDeptId) || departments[0];
 
@@ -155,25 +164,35 @@ export const DepartmentAdaptiveWorkspace: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Switcher for Testing / Management */}
-        <div className="flex items-center gap-2 overflow-x-auto">
-          {departments.slice(0, 6).map(d => {
-            const isSelected = d.id === activeDeptId;
-            return (
-              <button
-                key={d.id}
-                onClick={() => setActiveDeptId(d.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
-                  isSelected 
-                    ? 'bg-[#A11212] text-white border-[#A11212] shadow-sm'
-                    : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                }`}
-              >
-                {isAr ? d.name_ar || d.name : d.name}
-              </button>
-            );
-          })}
-        </div>
+        {/* Quick Switcher only for Managers / HODs */}
+        {isManagerOrAdmin ? (
+          <div className="flex items-center gap-2 overflow-x-auto">
+            <span className="text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">
+              {isAr ? 'معاينة الإدارة:' : 'Manager Preview:'}
+            </span>
+            {departments.slice(0, 6).map(d => {
+              const isSelected = d.id === activeDeptId;
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => setActiveDeptId(d.id)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+                    isSelected 
+                      ? 'bg-[#A11212] text-white border-[#A11212] shadow-sm'
+                      : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  {isAr ? d.name_ar || d.name : d.name}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="px-3.5 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs font-bold text-gray-700 flex items-center gap-2 shadow-2xs">
+            <ShieldCheck size={16} className="text-[#A11212]" />
+            <span>{isAr ? 'بوابة القسم التشغيلية المخصصة لك' : 'Assigned Exclusive Workspace'}</span>
+          </div>
+        )}
       </div>
 
       {/* Render the Active Department Cockpit */}
