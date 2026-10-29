@@ -152,7 +152,7 @@ export function getDepartmentClientIdsFromDSR(userId: string | undefined, deptId
 
   for (const entry of entries) {
     let belongs = false;
-    if (userId && entry.created_by === userId) {
+    if (userId && (entry.created_by === userId || entry.employee_id === userId)) {
       belongs = true;
     } else if (entry.department_id && normalizeDepartmentId(entry.department_id) === canonical) {
       belongs = true;

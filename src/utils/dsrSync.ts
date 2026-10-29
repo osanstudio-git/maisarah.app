@@ -5,6 +5,8 @@ export interface DSREntry {
   date: string; // YYYY-MM-DD
   employee_name: string;
   employee_id?: string;
+  created_by?: string;
+  department_id?: string;
   service: string;
   company_name: string;
   client_id?: string;
@@ -386,6 +388,8 @@ export function addDSREntry(entry: Omit<DSREntry, 'id' | 'profit'> & { id?: stri
     date: entry.date || new Date().toISOString().split('T')[0],
     employee_name: entry.employee_name || 'Unassigned',
     employee_id: entry.employee_id,
+    created_by: entry.created_by || entry.employee_id,
+    department_id: entry.department_id,
     service: entry.service || 'General Service',
     company_name: entry.company_name || 'Valued Client',
     client_id: entry.client_id,

@@ -183,7 +183,7 @@ export default function EmployeeDSR() {
       const deptServicesSet = new Set(activeServiceCatalog.map(s => s.title.toLowerCase()));
       const scoped = all.filter(e => {
         // Logged by this employee
-        if (e.created_by && user?.id && e.created_by === user.id) return true;
+        if (user?.id && (e.created_by === user.id || e.employee_id === user.id)) return true;
         if (e.employee_name && employeeName && e.employee_name.toLowerCase() === employeeName.toLowerCase()) return true;
         // Service belongs to this department's catalog
         if (e.service && deptServicesSet.has(e.service.toLowerCase())) return true;
@@ -309,6 +309,7 @@ export default function EmployeeDSR() {
       date: newForm.date,
       employee_name: employeeName,
       employee_id: user?.id,
+      created_by: user?.id,
       department_id: effectiveDeptId,
       service: newForm.service,
       company_name: newForm.company_name,
