@@ -1,29 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Sparkles, 
-  Users, 
-  Calendar, 
-  Megaphone, 
-  Plus, 
-  Edit3, 
-  Trash2, 
-  Award, 
-  ShieldCheck, 
-  Search, 
-  Filter, 
-  CheckCircle2, 
-  Clock, 
-  AlertTriangle, 
-  ExternalLink, 
-  Eye, 
-  Phone, 
-  Mail, 
-  Building2, 
-  QrCode, 
-  RotateCw, 
-  TrendingUp, 
-  Check, 
-  X, 
+import {
+  Sparkles,
+  Users,
+  Calendar,
+  Megaphone,
+  Plus,
+  Edit3,
+  Trash2,
+  Award,
+  ShieldCheck,
+  Search,
+  Filter,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  ExternalLink,
+  Eye,
+  Phone,
+  Mail,
+  Building2,
+  QrCode,
+  RotateCw,
+  TrendingUp,
+  Check,
+  X,
   UserCheck,
   Zap,
   Layers,
@@ -627,7 +627,7 @@ export const BusinessClubAdmin = () => {
 
   // --- Filtered Members ---
   const filteredMembers = members.filter(m => {
-    const matchSearch = 
+    const matchSearch =
       (m.full_name || '').toLowerCase().includes(memberSearch.toLowerCase()) ||
       (m.company_name || '').toLowerCase().includes(memberSearch.toLowerCase()) ||
       (m.membership_number || '').toLowerCase().includes(memberSearch.toLowerCase()) ||
@@ -695,7 +695,7 @@ export const BusinessClubAdmin = () => {
         return (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Card 1: Registered Members */}
-            <div 
+            <div
               onClick={() => setActiveSubTab('members')}
               className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group hover:border-amber-300 relative overflow-hidden"
             >
@@ -724,7 +724,7 @@ export const BusinessClubAdmin = () => {
             </div>
 
             {/* Card 2: Bulletins & Tax Posts Published */}
-            <div 
+            <div
               onClick={() => setActiveSubTab('announcements')}
               className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group hover:border-blue-300 relative overflow-hidden"
             >
@@ -749,7 +749,7 @@ export const BusinessClubAdmin = () => {
             </div>
 
             {/* Card 3: Meetings & Masterclasses Done vs Upcoming (KEY REQUIREMENT!) */}
-            <div 
+            <div
               onClick={() => {
                 setActiveSubTab('events');
                 setEventFilter('done');
@@ -782,7 +782,7 @@ export const BusinessClubAdmin = () => {
             </div>
 
             {/* Card 4: VIP Loyalty Points & Rewards */}
-            <div 
+            <div
               onClick={() => setActiveSubTab('members')}
               className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group hover:border-purple-300 relative overflow-hidden"
             >
@@ -813,11 +813,10 @@ export const BusinessClubAdmin = () => {
       <div className="flex bg-white p-1.5 rounded-2xl border border-gray-200/80 shadow-sm gap-1">
         <button
           onClick={() => setActiveSubTab('members')}
-          className={`flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
-            activeSubTab === 'members'
+          className={`flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeSubTab === 'members'
               ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
               : 'text-gray-600 hover:bg-gray-100'
-          }`}
+            }`}
         >
           <Users className="w-4 h-4" />
           <span>{isAr ? 'دليل الأعضاء ونقاط الولاء' : 'Member Directory & Loyalty'} ({members.length})</span>
@@ -825,11 +824,10 @@ export const BusinessClubAdmin = () => {
 
         <button
           onClick={() => setActiveSubTab('announcements')}
-          className={`flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
-            activeSubTab === 'announcements'
+          className={`flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeSubTab === 'announcements'
               ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
               : 'text-gray-600 hover:bg-gray-100'
-          }`}
+            }`}
         >
           <Megaphone className="w-4 h-4" />
           <span>{isAr ? 'ناشر المحتوى والتعميمات' : 'Content Publisher'} ({announcements.length})</span>
@@ -837,11 +835,10 @@ export const BusinessClubAdmin = () => {
 
         <button
           onClick={() => setActiveSubTab('events')}
-          className={`flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
-            activeSubTab === 'events'
+          className={`flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeSubTab === 'events'
               ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
               : 'text-gray-600 hover:bg-gray-100'
-          }`}
+            }`}
         >
           <Calendar className="w-4 h-4" />
           <span>{isAr ? 'مدير الفعاليات والورش' : 'Event Manager'} ({events.length})</span>
@@ -860,9 +857,8 @@ export const BusinessClubAdmin = () => {
                 value={memberSearch}
                 onChange={(e) => setMemberSearch(e.target.value)}
                 placeholder={isAr ? 'بحث بالاسم، الشركة، أو رقم العضوية...' : 'Search by name, company, MBC ID...'}
-                className={`w-full bg-gray-50 border border-gray-200 rounded-2xl py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark ${
-                  isAr ? 'pr-10 pl-4' : 'pl-10 pr-4'
-                }`}
+                className={`w-full bg-gray-50 border border-gray-200 rounded-2xl py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark ${isAr ? 'pr-10 pl-4' : 'pl-10 pr-4'
+                  }`}
               />
             </div>
 
@@ -945,17 +941,15 @@ export const BusinessClubAdmin = () => {
                           </td>
 
                           <td className="py-3.5 px-4">
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                              isClient ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
-                            }`}>
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${isClient ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                              }`}>
                               {isClient ? (isAr ? 'عميل نشط' : 'Client') : (isAr ? 'فرصة مجانية' : 'Lead')}
                             </span>
                           </td>
 
                           <td className="py-3.5 px-4">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              m.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${m.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
                               {m.status}
                             </span>
                           </td>
@@ -1016,9 +1010,8 @@ export const BusinessClubAdmin = () => {
             {announcements.map((ann) => (
               <div
                 key={ann.id}
-                className={`bg-white rounded-3xl p-5 border shadow-sm space-y-3 transition-all ${
-                  !ann.is_active ? 'opacity-60 bg-gray-50 border-gray-200' : 'border-gray-200/80 hover:shadow-md'
-                }`}
+                className={`bg-white rounded-3xl p-5 border shadow-sm space-y-3 transition-all ${!ann.is_active ? 'opacity-60 bg-gray-50 border-gray-200' : 'border-gray-200/80 hover:shadow-md'
+                  }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1035,9 +1028,8 @@ export const BusinessClubAdmin = () => {
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handleToggleAnnouncementActive(ann)}
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${
-                        ann.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'
-                      }`}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${ann.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'
+                        }`}
                     >
                       {ann.is_active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'معطل' : 'Hidden')}
                     </button>
@@ -1202,39 +1194,39 @@ export const BusinessClubAdmin = () => {
                       </div>
                     </div>
 
-                  <div className="bg-gray-50 p-3 rounded-2xl space-y-1.5 text-xs text-gray-600">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">{isAr ? 'المتحدث:' : 'Speaker:'}</span>
-                      <span className="font-bold text-gray-800">{ev.speaker_name || 'TBA'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">{isAr ? 'الموعد:' : 'Date & Time:'}</span>
-                      <span className="font-bold text-gray-800">
-                        {eventDate.toLocaleDateString()} &bull; {eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">{isAr ? 'الموقع / الرابط:' : 'Location:'}</span>
-                      <span className="font-bold text-gray-800 truncate max-w-[180px]">{ev.location}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                    <div className="flex items-center gap-1.5 text-xs font-black text-gray-700">
-                      <Users className="w-4 h-4 text-brand-dark" />
-                      <span>{rsvpCount} / {ev.max_attendees} {isAr ? 'مسجل' : 'Registered'}</span>
+                    <div className="bg-gray-50 p-3 rounded-2xl space-y-1.5 text-xs text-gray-600">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">{isAr ? 'المتحدث:' : 'Speaker:'}</span>
+                        <span className="font-bold text-gray-800">{ev.speaker_name || 'TBA'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">{isAr ? 'الموعد:' : 'Date & Time:'}</span>
+                        <span className="font-bold text-gray-800">
+                          {eventDate.toLocaleDateString()} &bull; {eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">{isAr ? 'الموقع / الرابط:' : 'Location:'}</span>
+                        <span className="font-bold text-gray-800 truncate max-w-[180px]">{ev.location}</span>
+                      </div>
                     </div>
 
-                    <button
-                      onClick={() => setSelectedEventForRsvps(ev)}
-                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-colors"
-                    >
-                      {isAr ? 'عرض قائمة الحضور' : 'View Attendees'}
-                    </button>
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                      <div className="flex items-center gap-1.5 text-xs font-black text-gray-700">
+                        <Users className="w-4 h-4 text-brand-dark" />
+                        <span>{rsvpCount} / {ev.max_attendees} {isAr ? 'مسجل' : 'Registered'}</span>
+                      </div>
+
+                      <button
+                        onClick={() => setSelectedEventForRsvps(ev)}
+                        className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-colors"
+                      >
+                        {isAr ? 'عرض قائمة الحضور' : 'View Attendees'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </div>
       )}
