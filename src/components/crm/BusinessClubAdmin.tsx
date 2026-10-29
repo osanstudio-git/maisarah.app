@@ -814,8 +814,8 @@ export const BusinessClubAdmin = () => {
         <button
           onClick={() => setActiveSubTab('members')}
           className={`flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeSubTab === 'members'
-              ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
-              : 'text-gray-600 hover:bg-gray-100'
+            ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
+            : 'text-gray-600 hover:bg-gray-100'
             }`}
         >
           <Users className="w-4 h-4" />
@@ -825,8 +825,8 @@ export const BusinessClubAdmin = () => {
         <button
           onClick={() => setActiveSubTab('announcements')}
           className={`flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeSubTab === 'announcements'
-              ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
-              : 'text-gray-600 hover:bg-gray-100'
+            ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
+            : 'text-gray-600 hover:bg-gray-100'
             }`}
         >
           <Megaphone className="w-4 h-4" />
@@ -836,8 +836,8 @@ export const BusinessClubAdmin = () => {
         <button
           onClick={() => setActiveSubTab('events')}
           className={`flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeSubTab === 'events'
-              ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
-              : 'text-gray-600 hover:bg-gray-100'
+            ? 'bg-brand-dark text-white shadow-md shadow-brand-dark/20'
+            : 'text-gray-600 hover:bg-gray-100'
             }`}
         >
           <Calendar className="w-4 h-4" />
