@@ -24,7 +24,10 @@ import {
   ShieldCheck,
   Receipt,
   Filter,
-  Check
+  Check,
+  Kanban,
+  LayoutList,
+  List
 } from 'lucide-react';
 import { addDSREntry } from '../../utils/dsrSync';
 import { normalizeDepartmentId, isServiceMatchingDepartment } from '../../utils/departmentScoping';
@@ -112,6 +115,8 @@ export default function Transactions() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
 
   // Modal States
   const [selectedTaskForPayment, setSelectedTaskForPayment] = useState<ServiceTask | null>(null);
@@ -148,50 +153,61 @@ export default function Transactions() {
   const fetchTasks = useCallback(async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('services')
-        .select(`
-          id,
-          title,
-          status,
-          priority,
-          description,
-          due_date,
-          created_at,
-          client_id,
-          employee_id,
-          department_id,
-          clients (
+      // 1. Fetch services & invoices in parallel without broken foreign-key embedded join
+      const [servicesRes, invoicesRes] = await Promise.all([
+        supabase
+          .from('services')
+          .select(`
             id,
-            company_name,
-            email,
-            phone
-          ),
-          invoices (
-            id,
-            invoice_number,
+            title,
             status,
-            amount
-          )
-        `)
-        .order('created_at', { ascending: false });
+            priority,
+            description,
+            due_date,
+            created_at,
+            client_id,
+            employee_id,
+            department_id,
+            clients (
+              id,
+              company_name,
+              email,
+              phone
+            )
+          `)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('invoices')
+          .select('id, invoice_number, status, amount, service_id, client_id')
+      ]);
 
-      // Scope to the logged-in employee if available
-      if (user?.id) {
-        query = query.or(`employee_id.eq.${user.id},employee_id.is.null`);
+      if (servicesRes.error) {
+        console.warn('Error fetching employee tasks:', servicesRes.error.message);
       }
 
-      const { data, error } = await query;
-      if (!error && data) {
-        const formattedTasks: ServiceTask[] = (data as any[])
-          .filter((task: any) => {
-            if (role === 'manager') return true;
-            if (task.employee_id && user?.id && task.employee_id === user.id) return true;
-            if (task.department_id && normalizeDepartmentId(task.department_id) === effectiveDeptId) return true;
-            if (isServiceMatchingDepartment(task.title, effectiveDeptId)) return true;
-            return false;
-          })
-          .map((task: any) => {
+      const rawServices = servicesRes.data || [];
+      const rawInvoices = invoicesRes.data || [];
+
+      // Map invoices by service_id
+      const invoicesMap = new Map<string, any[]>();
+      rawInvoices.forEach((inv: any) => {
+        if (inv.service_id) {
+          const list = invoicesMap.get(inv.service_id) || [];
+          list.push(inv);
+          invoicesMap.set(inv.service_id, list);
+        }
+      });
+
+      const formattedTasks: ServiceTask[] = (rawServices as any[])
+        .filter((task: any) => {
+          if (role === 'manager' || role === 'admin') return true;
+          if (task.employee_id && user?.id && task.employee_id === user.id) return true;
+          if (!task.employee_id) return true; // Available for staff in this department to claim/start
+          if (task.department_id && normalizeDepartmentId(task.department_id) === effectiveDeptId) return true;
+          if (isServiceMatchingDepartment(task.title, effectiveDeptId)) return true;
+          return false;
+        })
+        .map((task: any) => {
           const budgetMatch = task.description?.match(/Contract Fee: OMR\s*(\d+(\.\d+)?)/i) || task.description?.match(/Fee: OMR\s*(\d+(\.\d+)?)/i);
           const parsedBudget = budgetMatch ? Number(budgetMatch[1]) : 750;
           return {
@@ -200,29 +216,35 @@ export default function Transactions() {
             status: task.status === 'ongoing' ? 'started' : task.status,
             clients: Array.isArray(task.clients)
               ? (task.clients[0] || null)
-              : (task.clients || null)
+              : (task.clients || null),
+            invoices: invoicesMap.get(task.id) || []
           };
         });
-        setTasks(formattedTasks);
-      } else if (error) {
-        console.warn('Error fetching employee tasks:', error.message);
-      }
+
+      setTasks(formattedTasks);
     } catch (err) {
       console.error('Fetch tasks exception:', err);
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, role, effectiveDeptId]);
 
   useEffect(() => {
     fetchTasks();
 
-    // Supabase Realtime Subscription for Task Updates
+    // Supabase Realtime Subscription for Task Updates & Invoices
     const channel = supabase
       .channel('employee-tasks-live-channel')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'services' },
+        () => {
+          fetchTasks();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'invoices' },
         () => {
           fetchTasks();
         }
@@ -302,6 +324,8 @@ export default function Transactions() {
         addDSREntry({
           id: `dsr-task-${task.id}`,
           date: new Date().toISOString().split('T')[0],
+          payment_date: new Date().toISOString().split('T')[0],
+          payment_method: 'Bank transfer',
           employee_name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Staff Member',
           employee_id: user?.id,
           department_id: effectiveDeptId,
@@ -488,7 +512,10 @@ export default function Transactions() {
       (task.clients?.company_name || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter;
-    return matchesSearch && matchesPriority;
+    const matchesStatus = statusFilter === 'all' || 
+      (statusFilter === 'started' ? (task.status === 'started' || task.status === 'ongoing') : task.status === statusFilter);
+
+    return matchesSearch && matchesPriority && matchesStatus;
   });
 
   return (
@@ -542,9 +569,9 @@ export default function Transactions() {
           </div>
         </div>
 
-        {/* Quick Search & Priority Filters */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-6 border-t border-gray-100">
-          <div className="relative w-full sm:w-80">
+        {/* Quick Search, Filters & View Toggle */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mt-8 pt-6 border-t border-gray-100">
+          <div className="relative w-full md:w-80">
             <Search size={16} className="absolute start-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -555,7 +582,21 @@ export default function Transactions() {
             />
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="bg-white border border-gray-200 rounded-2xl px-4 py-2.5 text-xs font-bold text-gray-700 focus:outline-none focus:border-[#A11212]"
+            >
+              <option value="all">{isAr ? 'جميع المراحل' : 'All Stages'}</option>
+              <option value="pending">{isAr ? 'قيد الانتظار' : 'Pending Start'}</option>
+              <option value="started">{isAr ? 'قيد التنفيذ' : 'In Progress'}</option>
+              <option value="under_review">{isAr ? 'قيد المراجعة' : 'Under Review'}</option>
+              <option value="completed">{isAr ? 'مكتملة' : 'Completed'}</option>
+            </select>
+
+            {/* Priority Filter */}
             <select
               value={priorityFilter}
               onChange={e => setPriorityFilter(e.target.value)}
@@ -567,11 +608,31 @@ export default function Transactions() {
               <option value="medium">{isAr ? 'أولوية متوسطة' : 'Medium'}</option>
               <option value="low">{isAr ? 'أولوية منخفضة' : 'Low'}</option>
             </select>
+
+            {/* View Mode Toggle */}
+            <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200">
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all ${viewMode === 'kanban' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'}`}
+                title={isAr ? 'عرض الأعمدة (كانبان)' : 'Kanban Board View'}
+              >
+                <Kanban size={14} />
+                <span>{isAr ? 'كانبان' : 'Board'}</span>
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'}`}
+                title={isAr ? 'عرض القائمة / الجدول' : 'List View'}
+              >
+                <LayoutList size={14} />
+                <span>{isAr ? 'قائمة' : 'List'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── KANBAN TASK BOARD ──────────────────────────────────────────── */}
+      {/* ── MAIN TASK VIEWS (KANBAN OR LIST) ─────────────────────────── */}
       {loading ? (
         <div className="flex justify-center items-center h-64 bg-white rounded-3xl border border-gray-100">
           <div className="flex flex-col items-center gap-3">
@@ -579,7 +640,184 @@ export default function Transactions() {
             <p className="text-xs font-bold text-gray-400">{isAr ? 'جاري تحميل المهام...' : 'Loading tasks...'}</p>
           </div>
         </div>
+      ) : viewMode === 'list' ? (
+        /* ── LIST VIEW TABLE ────────────────────────────────────────── */
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+            <div className="flex items-center gap-2">
+              <Briefcase size={18} className="text-[#A11212]" />
+              <h3 className="font-black text-sm text-gray-900">
+                {isAr ? 'قائمة المهام والمعاملات المفتوحة' : 'Tasks & Deliverables Directory'}
+              </h3>
+            </div>
+            <span className="text-xs font-bold text-gray-500">
+              {filteredTasks.length} {isAr ? 'معاملة مسجلة' : 'tasks recorded'}
+            </span>
+          </div>
+
+          {filteredTasks.length === 0 ? (
+            <div className="h-48 flex flex-col items-center justify-center text-center p-6 text-gray-400">
+              <Briefcase size={32} className="opacity-20 mb-2" />
+              <p className="text-sm font-bold text-gray-600">
+                {isAr ? 'لا توجد مهام تطابق معايير البحث' : 'No tasks match current search criteria'}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {isAr ? 'تأكد من اختيار المرحلة أو الأولوية المناسبة أو قم بإعادة ضبط الفلتر' : 'Try resetting your filter or searching for another client name'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-start text-xs">
+                <thead>
+                  <tr className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-black uppercase text-gray-400 tracking-wider">
+                    <th className="py-3.5 px-5 text-start">{isAr ? 'المعاملة والخدمة' : 'Task / Service'}</th>
+                    <th className="py-3.5 px-5 text-start">{isAr ? 'العميل المستفيد' : 'Client Company'}</th>
+                    <th className="py-3.5 px-5 text-start">{isAr ? 'المرحلة الحالية' : 'Stage / Status'}</th>
+                    <th className="py-3.5 px-5 text-start">{isAr ? 'الأولوية' : 'Priority'}</th>
+                    <th className="py-3.5 px-5 text-start">{isAr ? 'تاريخ التسليم' : 'Due Date'}</th>
+                    <th className="py-3.5 px-5 text-start">{isAr ? 'الميزانية / الفاتورة' : 'Fee (OMR)'}</th>
+                    <th className="py-3.5 px-5 text-end">{isAr ? 'إجراءات الإنجاز' : 'Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredTasks.map(task => {
+                    const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'completed';
+                    const isStarting = isProcessingAction === task.id;
+
+                    const colInfo = COLUMNS.find(c => {
+                      if (c.key === 'started') return task.status === 'started' || task.status === 'ongoing';
+                      return c.key === task.status;
+                    }) || COLUMNS[0];
+
+                    return (
+                      <tr key={task.id} className="hover:bg-gray-50/70 transition-colors group">
+                        {/* Title & Desc */}
+                        <td className="py-4 px-5">
+                          <div className="space-y-1">
+                            <p className="font-black text-sm text-gray-900 group-hover:text-[#A11212] transition-colors">
+                              {task.title}
+                            </p>
+                            {task.description && (
+                              <p className="text-[11px] text-gray-500 font-medium line-clamp-1 max-w-xs">
+                                {task.description}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Client */}
+                        <td className="py-4 px-5">
+                          {task.clients?.company_name ? (
+                            <div className="flex items-center gap-1.5 font-bold text-gray-800">
+                              <Building2 size={14} className="text-[#A11212] shrink-0" />
+                              <span className="truncate max-w-[150px]">{task.clients.company_name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 font-medium">{isAr ? 'بدون عميل محدد' : 'General Client'}</span>
+                          )}
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-4 px-5">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black ${colInfo.badgeCls}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${colInfo.color}`} />
+                            {isAr ? colInfo.label_ar : colInfo.label_en}
+                          </span>
+                        </td>
+
+                        {/* Priority */}
+                        <td className="py-4 px-5">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                            task.priority === 'urgent' || task.priority === 'high'
+                              ? 'bg-red-100 text-red-700'
+                              : task.priority === 'medium'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {task.priority || 'medium'}
+                          </span>
+                        </td>
+
+                        {/* Due Date */}
+                        <td className="py-4 px-5">
+                          {task.due_date ? (
+                            <span className={`flex items-center gap-1 font-mono font-bold ${isOverdue ? 'text-red-600 font-black' : 'text-gray-600'}`}>
+                              <Calendar size={13} className="shrink-0" />
+                              {task.due_date}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 font-mono">—</span>
+                          )}
+                        </td>
+
+                        {/* Budget */}
+                        <td className="py-4 px-5">
+                          <span className="font-mono font-black text-gray-900 text-xs">
+                            {(task.budget || 0).toFixed(3)}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-4 px-5 text-end">
+                          <div className="flex items-center justify-end gap-2">
+                            {task.status === 'pending' && (
+                              <button
+                                onClick={() => handleStartTask(task)}
+                                disabled={isStarting}
+                                className="flex items-center gap-1 bg-[#A11212] hover:bg-[#800e0e] text-white px-3 py-1.5 rounded-xl text-xs font-black transition-all shadow-xs disabled:opacity-50"
+                              >
+                                <PlayCircle size={13} />
+                                <span>{isStarting ? (isAr ? 'جاري البدء...' : 'Starting...') : (isAr ? 'بدء العمل' : 'Start')}</span>
+                              </button>
+                            )}
+
+                            {(task.status === 'started' || task.status === 'ongoing') && (
+                              <>
+                                <button
+                                  onClick={() => setSelectedTaskForPayment(task)}
+                                  className="flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-black transition-colors"
+                                >
+                                  <Receipt size={13} />
+                                  <span>{isAr ? 'تسجيل دفعة' : 'Payment'}</span>
+                                </button>
+                                <button
+                                  onClick={() => handleUpdateStatus(task.id, 'under_review')}
+                                  className="flex items-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-3 py-1.5 rounded-xl text-xs font-black transition-colors"
+                                >
+                                  <Send size={13} />
+                                  <span>{isAr ? 'للمراجعة' : 'Review'}</span>
+                                </button>
+                              </>
+                            )}
+
+                            {task.status === 'under_review' && (
+                              <button
+                                onClick={() => handleUpdateStatus(task.id, 'completed')}
+                                className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-black transition-colors"
+                              >
+                                <CheckCircle2 size={13} />
+                                <span>{isAr ? 'اعتماد الإنجاز' : 'Complete'}</span>
+                              </button>
+                            )}
+
+                            {task.status === 'completed' && (
+                              <span className="flex items-center gap-1 text-emerald-600 font-black text-xs">
+                                <CheckCircle2 size={14} />
+                                {isAr ? 'مكتملة' : 'Completed'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       ) : (
+        /* ── KANBAN BOARD VIEW ────────────────────────────────────────── */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {COLUMNS.map(col => {
             const columnTasks = filteredTasks.filter(t => {

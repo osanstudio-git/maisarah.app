@@ -341,16 +341,24 @@ const ClientDetail = ({
 // Sub-component: Form Field Helper
 // ---------------------------------------------------------------------------
 const FormField = ({
-  label, name, required = false, type = 'text', placeholder = '', value, onChange, autoComplete = 'off'
+  label, name, required = false, type = 'text', placeholder = '', value, onChange, autoComplete = 'off',
+  maxLength, inputMode, hint, isMono = false
 }: {
   label: string; name: string; required?: boolean; type?: string; placeholder?: string;
   value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   autoComplete?: string;
+  maxLength?: number;
+  inputMode?: 'numeric' | 'text' | 'tel' | 'email' | 'url' | 'search' | 'decimal';
+  hint?: string;
+  isMono?: boolean;
 }) => (
   <div>
-    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-      {label} {required && <span className="text-red-500">*</span>}
-    </label>
+    <div className="flex items-center justify-between mb-1.5">
+      <label className="block text-sm font-semibold text-gray-700">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      {hint && <span className="text-[11px] text-gray-400 font-mono font-medium">{hint}</span>}
+    </div>
     <input
       type={type}
       name={name}
@@ -359,7 +367,9 @@ const FormField = ({
       onChange={onChange}
       placeholder={placeholder}
       autoComplete={autoComplete}
-      className="w-full p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-700 focus:ring-2 focus:ring-red-700/10 transition-colors bg-white"
+      maxLength={maxLength}
+      inputMode={inputMode}
+      className={`w-full p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-700 focus:ring-2 focus:ring-red-700/10 transition-colors bg-white ${isMono ? 'font-mono' : ''}`}
     />
   </div>
 );
@@ -458,7 +468,14 @@ const ClientManager = () => {
   const [initialTaskTitle, setInitialTaskTitle] = useState('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === 'cr_number') {
+      // Oman Commercial Registration (CR) is strictly 7 digits
+      const sanitized = value.replace(/\D/g, '').slice(0, 7);
+      setFormData(prev => ({ ...prev, [name]: sanitized }));
+      return;
+    }
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
 
@@ -563,6 +580,15 @@ const ClientManager = () => {
     let createdTicket = null;
 
     try {
+      const trimmedCR = formData.cr_number?.trim() || '';
+      if (trimmedCR && trimmedCR.length !== 7) {
+        throw new Error(
+          isAr
+            ? 'رقم السجل التجاري (CR) يجب أن يتكون من 7 أرقام بالضبط (مثال: 1234567)'
+            : 'CR Number must be exactly 7 digits (e.g. 1234567)'
+        );
+      }
+
       if (editingClient) {
         const payload: any = {
           company_name:       formData.company_name.trim(),
@@ -1211,11 +1237,15 @@ const ClientManager = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <FormField 
-                    label={t('employee.crNumber')} 
+                    label={isAr ? 'رقم السجل التجاري (7 أرقام)' : 'CR Number (7 digits)'} 
                     name="cr_number" 
                     value={formData.cr_number}
                     onChange={handleInputChange}
-                    placeholder="1234567" 
+                    placeholder="1234567"
+                    maxLength={7}
+                    inputMode="numeric"
+                    isMono={true}
+                    hint={formData.cr_number ? `${formData.cr_number.length}/7` : '7 digits'}
                   />
                   <FormField 
                     label={t('employee.vatNumber')} 
@@ -1236,19 +1266,29 @@ const ClientManager = () => {
 
                 {/* Compliance Status */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    {isAr ? 'حالة الامتثال' : 'Compliance Status'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-semibold text-gray-700">
+                      {isAr ? 'حالة الامتثال القانوني والضريبي' : 'Compliance Status'}
+                    </label>
+                    <span className="text-[11px] text-gray-400">
+                      {isAr ? 'الوضع النظامي للعميل' : 'Regulatory Standing'}
+                    </span>
+                  </div>
                   <select
                     value={formData.compliance_status}
                     onChange={e => setFormData({ ...formData, compliance_status: e.target.value })}
                     className="w-full p-2.5 border border-gray-200 rounded-xl text-sm outline-none
-                      focus:border-red-700 focus:ring-2 focus:ring-red-700/10 bg-white transition"
+                      focus:border-red-700 focus:ring-2 focus:ring-red-700/10 bg-white transition font-medium"
                   >
-                    <option value="Active">Active</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Suspended">Suspended</option>
+                    <option value="Active">{isAr ? 'نشط (Active) - مستوفٍ للشروط والوثائق' : 'Active (Fully Compliant)'}</option>
+                    <option value="Pending">{isAr ? 'قيد المراجعة (Pending) - متطلبات أو تجديد معلق' : 'Pending (Under Review / Renewal Required)'}</option>
+                    <option value="Suspended">{isAr ? 'موقوف (Suspended) - غير ممتثل أو مجمد' : 'Suspended (Non-compliant / Frozen)'}</option>
                   </select>
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    {isAr 
+                      ? 'يوضح التزام العميل بالتراخيص، السجل التجاري، والإقرارات الضريبية لدى الجهات الرسمية.'
+                      : 'Reflects the company\'s legal, commercial registration, and tax filing standing with official authorities.'}
+                  </p>
                 </div>
 
                 {/* Direct Deliverable Assignment */}

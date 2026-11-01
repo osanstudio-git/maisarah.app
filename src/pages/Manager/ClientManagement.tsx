@@ -1473,8 +1473,10 @@ const ClientManagement = () => {
                     <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'رقم السجل التجاري (CR)' : 'CR Number (7 digits)'}</label>
                     <input
                       type="text"
+                      maxLength={7}
+                      inputMode="numeric"
                       value={newClientForm.cr_number}
-                      onChange={(e) => setNewClientForm({ ...newClientForm, cr_number: e.target.value })}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, cr_number: e.target.value.replace(/\D/g, '').slice(0, 7) })}
                       placeholder="1527047"
                       className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark"
                     />

@@ -75,39 +75,79 @@ export default function EmployeeHR() {
       const liveList: LeaveRequest[] = [];
 
       // 1. Fetch from Supabase
-      const { data: dbLeaves } = await supabase
+      const { data: dbLeaves, error: dbErr } = await supabase
         .from('hr_leave_requests')
-        .select('*');
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (dbErr) {
+        console.error('Error fetching hr_leave_requests:', dbErr);
+      }
 
       if (dbLeaves && dbLeaves.length > 0) {
         dbLeaves.forEach((leave: any) => {
-          const isMine = (leave.employee_name && leave.employee_name.toLowerCase() === employeeName.toLowerCase()) ||
-            (user?.id && leave.employee_id === user.id);
+          const isMine = user?.id ? leave.employee_id === user.id : true;
           if (isMine) {
             liveList.push({
-              id: leave.id.toString().slice(0, 8),
-              employeeName: leave.employee_name || employeeName,
-              type: leave.leave_type || 'Annual Leave',
+              id: leave.id.toString(),
+              employeeName: employeeName,
+              type: leave.type || 'Annual Leave',
               startDate: leave.start_date || '',
               endDate: leave.end_date || '',
-              days: leave.days || 1,
-              managerApproval: leave.status === 'approved' ? 'Approved' : leave.status === 'rejected' ? 'Rejected' : 'Pending',
-              hrApproval: leave.status === 'approved' ? 'Approved' : leave.status === 'rejected' ? 'Rejected' : 'Pending',
-              notes: leave.reason || ''
+              days: Number(leave.days || 1),
+              managerApproval: leave.manager_approval || 'Pending',
+              hrApproval: leave.hr_approval || 'Pending',
+              notes: leave.notes || ''
             });
           }
         });
       }
 
-      // 2. Merge with local storage fallback
+      // 2. Auto-sync any previously stuck requests from local storage directly to DB
       const savedLeaves = localStorage.getItem('hr_leave_requests');
-      if (savedLeaves) {
-        const localLeaves = JSON.parse(savedLeaves) as LeaveRequest[];
-        localLeaves.filter(l => l.employeeName === employeeName).forEach(local => {
-          if (!liveList.some(l => l.id === local.id)) {
-            liveList.push(local);
+      if (savedLeaves && user?.id) {
+        try {
+          const localLeaves = JSON.parse(savedLeaves) as LeaveRequest[];
+          for (const local of localLeaves) {
+            const alreadyInDb = liveList.some(
+              l => l.startDate === local.startDate && l.endDate === local.endDate && l.type === local.type
+            );
+            if (!alreadyInDb && local.startDate && local.endDate) {
+              const { data: inserted, error: insErr } = await supabase
+                .from('hr_leave_requests')
+                .insert([{
+                  employee_id: user.id,
+                  type: local.type || 'Annual Leave',
+                  start_date: local.startDate,
+                  end_date: local.endDate,
+                  days: Number(local.days) || 1,
+                  manager_approval: local.managerApproval || 'Pending',
+                  hr_approval: local.hrApproval || 'Pending',
+                  notes: local.notes || null
+                }])
+                .select()
+                .maybeSingle();
+
+              if (!insErr && inserted) {
+                liveList.unshift({
+                  id: inserted.id.toString(),
+                  employeeName: employeeName,
+                  type: inserted.type,
+                  startDate: inserted.start_date,
+                  endDate: inserted.end_date,
+                  days: Number(inserted.days),
+                  managerApproval: inserted.manager_approval || 'Pending',
+                  hrApproval: inserted.hr_approval || 'Pending',
+                  notes: inserted.notes || ''
+                });
+              }
+            }
           }
-        });
+          // Clean up local storage once migrated to live database
+          localStorage.removeItem('hr_leave_requests');
+        } catch (syncErr) {
+          console.warn('Sync local leaves warning:', syncErr);
+        }
       }
 
       setLeaveRequests(liveList);
@@ -204,55 +244,65 @@ export default function EmployeeHR() {
     e.preventDefault();
     if (!leaveForm.startDate || !leaveForm.endDate) return;
 
-    const newRequestId = `LR-${Math.floor(100 + Math.random() * 900)}`;
-
-    const newRequest: LeaveRequest = {
-      id: newRequestId,
-      employeeName: employeeName,
-      type: leaveForm.type,
-      startDate: leaveForm.startDate,
-      endDate: leaveForm.endDate,
-      days: Number(leaveForm.days),
-      managerApproval: 'Pending',
-      hrApproval: 'Pending',
-      notes: leaveForm.notes
-    };
-
-    // 1. Write to Supabase if session available
-    try {
-      if (user?.id) {
-        await supabase.from('hr_leave_requests').insert([{
-          employee_id: user.id,
-          employee_name: employeeName,
-          leave_type: leaveForm.type,
-          start_date: leaveForm.startDate,
-          end_date: leaveForm.endDate,
-          days: Number(leaveForm.days),
-          reason: leaveForm.notes,
-          status: 'pending'
-        }]);
-      }
-    } catch (err) {
-      console.error('Failed to submit leave to DB:', err);
+    if (!user?.id) {
+      alert(isAr ? 'يرجى تسجيل الدخول لتقديم طلب الإجازة.' : 'Please log in to submit a leave request.');
+      return;
     }
 
-    // 2. Save locally as fallback
-    const allSavedLeaves = localStorage.getItem('hr_leave_requests')
-      ? JSON.parse(localStorage.getItem('hr_leave_requests')!) as LeaveRequest[]
-      : [];
-    const nextLeaves = [newRequest, ...allSavedLeaves];
-    localStorage.setItem('hr_leave_requests', JSON.stringify(nextLeaves));
-    setLeaveRequests(prev => [newRequest, ...prev]);
+    try {
+      const dbPayload = {
+        employee_id: user.id,
+        type: leaveForm.type,
+        start_date: leaveForm.startDate,
+        end_date: leaveForm.endDate,
+        days: Number(leaveForm.days) || 1,
+        manager_approval: 'Pending',
+        hr_approval: 'Pending',
+        notes: leaveForm.notes?.trim() || null
+      };
 
-    // Reset Form
-    setLeaveForm({
-      type: 'Annual Leave',
-      startDate: '',
-      endDate: '',
-      days: 1,
-      notes: ''
-    });
-    alert(isAr ? 'تم تقديم طلب الإجازة بنجاح لرئيس القسم!' : 'Leave request successfully submitted to HOD!');
+      const { data: inserted, error: insertErr } = await supabase
+        .from('hr_leave_requests')
+        .insert([dbPayload])
+        .select()
+        .single();
+
+      if (insertErr) {
+        console.error('Failed to submit leave to DB:', insertErr);
+        alert(isAr ? `خطأ أثناء إرسال طلب الإجازة: ${insertErr.message}` : `Database error: ${insertErr.message}`);
+        return;
+      }
+
+      if (inserted) {
+        setLeaveRequests(prev => [
+          {
+            id: inserted.id.toString(),
+            employeeName: employeeName,
+            type: inserted.type,
+            startDate: inserted.start_date,
+            endDate: inserted.end_date,
+            days: Number(inserted.days),
+            managerApproval: inserted.manager_approval || 'Pending',
+            hrApproval: inserted.hr_approval || 'Pending',
+            notes: inserted.notes || ''
+          },
+          ...prev.filter(p => p.id !== inserted.id.toString())
+        ]);
+      }
+
+      // Reset Form
+      setLeaveForm({
+        type: 'Annual Leave',
+        startDate: '',
+        endDate: '',
+        days: 1,
+        notes: ''
+      });
+      alert(isAr ? 'تم تقديم طلب الإجازة بنجاح للإدارة التنفيذية وقسم الموارد البشرية!' : 'Leave request submitted successfully to Management & HR!');
+    } catch (err: any) {
+      console.error('Failed to submit leave to DB:', err);
+      alert(err.message || 'Error submitting leave request');
+    }
   };
 
   // --- Actions: Download PDF Payslip ---

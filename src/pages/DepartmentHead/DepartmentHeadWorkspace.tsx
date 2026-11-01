@@ -796,10 +796,10 @@ const DepartmentHeadWorkspace = () => {
     try {
       await supabase
         .from('hr_leave_requests')
-        .update({ managerApproval: action, status: action === 'Approved' ? 'Pending HR' : 'Rejected' })
+        .update({ manager_approval: action })
         .eq('id', id);
 
-      setHodLeaveRequests(prev => prev.map(r => r.id === id ? { ...r, managerApproval: action } : r));
+      setHodLeaveRequests(prev => prev.map(r => r.id === id ? { ...r, manager_approval: action, managerApproval: action } : r));
       alert(action === 'Approved' 
         ? (isAr ? 'تمت الموافقة المبدئية وتحويل الطلب إلى الموارد البشرية (HR)' : 'Leave authorized by HOD and forwarded to HR!') 
         : (isAr ? 'تم رفض طلب الإجازة.' : 'Leave request rejected by HOD.'));
@@ -884,7 +884,7 @@ const DepartmentHeadWorkspace = () => {
     try {
       const selectedEmp = personnel.find(p => p.id === assignJobForm.employeeId) || personnel[0];
       const validClientId = isValidUUID(assignJobNotif.ref_id) ? assignJobNotif.ref_id : null;
-      const validHodId = isValidUUID(user?.id) ? user.id : null;
+      const validHodId = user?.id && isValidUUID(user.id) ? user.id : null;
       const validEmpId = isValidUUID(selectedEmp?.id) ? selectedEmp.id : null;
 
       // Insert into client_jobs table

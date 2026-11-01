@@ -1,354 +1,430 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { 
   Briefcase, 
-  Clock, 
-  CreditCard, 
-  Wallet, 
+  TrendingUp, 
+  PiggyBank, 
   ChevronDown, 
   FileText, 
-  Upload, 
-  PlusCircle, 
-  BarChart2, 
+  Search, 
+  CreditCard, 
+  Clock, 
+  MoreVertical, 
+  CheckCircle2, 
   AlertCircle,
-  ArrowLeft,
-  Bell,
-  CheckCheck,
-  X,
-  Receipt
+  Bell, 
+  CheckCheck, 
+  X, 
+  Receipt,
+  ArrowUpRight,
+  ArrowDownRight,
+  Calendar,
+  Layers,
+  Building2,
+  ExternalLink,
+  Download,
+  PlusCircle,
+  RefreshCw,
+  Wallet,
+  Check
 } from 'lucide-react';
-import { 
-  PieChart, 
-  Pie, 
-  Cell, 
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip
-} from 'recharts';
+import { getDSREntries, fetchCloudDSREntries, type DSREntry } from '../../utils/dsrSync';
+import { DEPARTMENTS } from '../../config/departments';
 
-// --- Types ---
-interface Metrics {
-  activeProjects: number;
-  dueInvoicesSum: number;
-  dueInvoicesCount: number;
-  expensesMonth: number;
-  cashFlow: number;
+// --- Interfaces ---
+interface InvoiceRecord {
+  id: string;
+  invoice_number: string;
+  client_name?: string;
+  amount: number;
+  status: string;
+  created_at: string;
+  due_date?: string;
+  department?: string;
+  notes?: string;
 }
 
-interface InvoiceMetrics {
-  totalRevenue: number;     // sum of ALL invoice amounts
-  paidSum: number;          // sum of invoices where status='paid'
-  unpaidSum: number;        // sum of invoices where status='unpaid' OR 'overdue'
-  monthlyIncome: number;    // sum of paid invoices created in current calendar month
-  paidCount: number;
-  unpaidCount: number;
-  totalCount: number;
-  paidRatio: number;        // 0-100 percentage
+interface ServiceRecord {
+  id: string;
+  title: string;
+  department_id?: string;
+  price?: number;
+  status?: string;
+  client_name?: string;
+  created_at: string;
 }
 
-const formatOMR = (val: number) =>
-  new Intl.NumberFormat('en-OM', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(val);
+interface OrderItem {
+  id: string;
+  orderId: string;
+  client: string;
+  service: string;
+  department: string;
+  price: number;
+  dateStr: string;
+  timeStr: string;
+  status: 'Completed' | 'Pending' | 'In Progress';
+  rawType: 'invoice' | 'service' | 'dsr';
+}
 
-// --- Mock Data ---
-const getMockProjects = (isAr: boolean) => [
-  {
-    id: 1,
-    title: isAr ? 'مشروع مجمع فلل الموالح' : 'Al Mawaleh Villas Complex',
-    image: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&q=80&w=400',
-    progress: 65,
-    budget: 58200,
-    cost: 28000,
-    profit: 17500, // positive
-  },
-  {
-    id: 2,
-    title: isAr ? 'مشروع طريق الباطنة' : 'Al Batinah Road Project',
-    image: 'https://images.unsplash.com/photo-1541888081622-1cb425026217?auto=format&fit=crop&q=80&w=400',
-    progress: 45,
-    budget: 22000,
-    cost: 19300,
-    profit: -2700, // negative
-  },
-  {
-    id: 3,
-    title: isAr ? 'مشروع تشييد مبنى تجاري' : 'Commercial Building Project',
-    image: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&q=80&w=400',
-    progress: 80,
-    budget: 86500,
-    cost: 39000,
-    profit: 47500,
-  }
-];
+const formatOMR = (val: number, decimals = 2) =>
+  new Intl.NumberFormat('en-OM', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(val);
 
-const getRecentDocs = (isAr: boolean) => [
-  { id: 1, title: isAr ? 'عقد مشروع فلل الموالح' : 'Mawaleh Villas Contract' },
-  { id: 2, title: isAr ? 'فاتورة مواد - مشروع طريق' : 'Materials Invoice - Road Project' },
-  { id: 3, title: isAr ? 'كشف حساب عميل' : 'Client Account Statement' },
-];
-
-const getUpcomingPayments = (isAr: boolean) => [
-  {
-    id: 1,
-    title: isAr ? 'وزارة الإسكان' : 'Ministry of Housing',
-    amount: 18500,
-    date: isAr ? '25 مارس 2025' : '25 March 2025',
-    logo: 'MOH'
-  },
-  {
-    id: 2,
-    title: isAr ? 'شركة الباطنة للتجارة' : 'Al Batinah Trading Co.',
-    amount: 12800,
-    date: isAr ? '31 مارس 2025' : '31 March 2025',
-    logo: 'ABT'
-  }
-];
-
-const expensesData = [
-  { name: 'عمالة', nameEn: 'Labor', value: 40, color: '#A11212' },
-  { name: 'مواد', nameEn: 'Materials', value: 35, color: '#CD3333' },
-  { name: 'معدات', nameEn: 'Equipment', value: 15, color: '#4CAF50' },
-  { name: 'أخرى', nameEn: 'Others', value: 10, color: '#9E9E9E' },
-];
-
-const revenueData = [
-  { month: 'يناير', monthEn: 'Jan', rev: 15000, exp: 12000 },
-  { month: 'فبراير', monthEn: 'Feb', rev: 25000, exp: 18000 },
-  { month: 'مارس', monthEn: 'Mar', rev: 28000, exp: 20000 },
-  { month: 'أبريل', monthEn: 'Apr', rev: 35000, exp: 22000 },
-  { month: 'مايو', monthEn: 'May', rev: 40000, exp: 28000 },
-  { month: 'يونيو', monthEn: 'Jun', rev: 50000, exp: 35000 },
-];
-
-const AccountantDashboard = () => {
+export default function AccountantDashboard() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
 
-  // Legacy metrics (for existing UI sections)
-  const [metrics, setMetrics] = useState<Metrics>({
-    activeProjects: 5,
-    dueInvoicesSum: 0,
-    dueInvoicesCount: 0,
-    expensesMonth: 12300,
-    cashFlow: 0,
-  });
-
-  // New real invoice KPIs
-  const [invoiceMetrics, setInvoiceMetrics] = useState<InvoiceMetrics>({
-    totalRevenue: 0,
-    paidSum: 0,
-    unpaidSum: 0,
-    monthlyIncome: 0,
-    paidCount: 0,
-    unpaidCount: 0,
-    totalCount: 0,
-    paidRatio: 0,
-  });
-
   const [loading, setLoading] = useState(true);
+  const [selectedDept, setSelectedDept] = useState<string>('all');
+  const [timePeriod, setTimePeriod] = useState<'year' | 'month' | 'last6'>('year');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'date' | 'price' | 'status'>('date');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Completed' | 'Pending'>('all');
+  const [activeMonthIdx, setActiveMonthIdx] = useState<number>(6); // Default July (index 6) matching reference UI
+
+  // Data States
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
+  const [services, setServices] = useState<ServiceRecord[]>([]);
+  const [dsrList, setDsrList] = useState<DSREntry[]>([]);
   const [pendingPayroll, setPendingPayroll] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [showPayrollQueue, setShowPayrollQueue] = useState(false);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('accountant_pending_payroll');
-    if (saved) {
-      setPendingPayroll(JSON.parse(saved));
-    }
-  }, []);
-
-  const handleDisbursePayroll = (recordId: string) => {
-    const paidList = localStorage.getItem('accountant_paid_payroll_ids')
-      ? JSON.parse(localStorage.getItem('accountant_paid_payroll_ids')!) as string[]
-      : [];
-    
-    if (!paidList.includes(recordId)) {
-      paidList.push(recordId);
-      localStorage.setItem('accountant_paid_payroll_ids', JSON.stringify(paidList));
-    }
-
-    const updated = pendingPayroll.map(r => r.id === recordId ? { ...r, status: 'Paid' } : r);
-    setPendingPayroll(updated);
-    localStorage.setItem('accountant_pending_payroll', JSON.stringify(updated));
-
-    // Also deduct expense from accountant metrics to show disbursement
-    const payrollItem = pendingPayroll.find(r => r.id === recordId);
-    if (payrollItem) {
-      const allowancesSum = payrollItem.allowances.transport + payrollItem.allowances.housing + payrollItem.allowances.other;
-      const netPay = payrollItem.basicSalary + allowancesSum + payrollItem.overtime + payrollItem.incentives + payrollItem.bonuses - payrollItem.deductions;
-      
-      setMetrics(prev => ({
-        ...prev,
-        expensesMonth: prev.expensesMonth + netPay
-      }));
-    }
-
-    alert('Salary successfully disbursed to employee bank account!');
-  };
-
-  const fetchMetrics = useCallback(async (isSilent = false) => {
+  // ── Fetch All Financial Data ───────────────────────────────────────────────
+  const fetchAllData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
-      const { data: invoices, error } = await supabase
-        .from('invoices')
-        .select('amount, status, created_at');
+      const [invRes, srvRes, dsrCloud, notifRes] = await Promise.all([
+        supabase.from('invoices').select('*').order('created_at', { ascending: false }),
+        supabase.from('services').select('*').order('created_at', { ascending: false }).limit(40),
+        fetchCloudDSREntries().catch(() => getDSREntries()),
+        supabase.from('notifications').select('*').eq('role', 'accountant').order('created_at', { ascending: false })
+      ]);
 
-      if (error) throw error;
+      setInvoices((invRes.data as InvoiceRecord[]) || []);
+      setServices((srvRes.data as ServiceRecord[]) || []);
+      setDsrList(dsrCloud || getDSREntries());
+      setNotifications(notifRes.data || []);
 
-      const now = new Date();
-      const currentYear  = now.getFullYear();
-      const currentMonth = now.getMonth(); // 0-indexed
-
-      let totalRevenue  = 0;
-      let paidSum       = 0;
-      let unpaidSum     = 0;
-      let monthlyIncome = 0;
-      let paidCount     = 0;
-      let unpaidCount   = 0;
-
-      (invoices || []).forEach(inv => {
-        const amount = parseFloat(inv.amount) || 0;
-        totalRevenue += amount;
-
-        if (inv.status === 'paid') {
-          paidSum += amount;
-          paidCount++;
-          const created = new Date(inv.created_at);
-          if (created.getFullYear() === currentYear && created.getMonth() === currentMonth) {
-            monthlyIncome += amount;
-          }
-        } else {
-          unpaidSum += amount;
-          unpaidCount++;
-        }
-      });
-
-      const totalCount = paidCount + unpaidCount;
-      const paidRatio  = totalCount > 0 ? Math.round((paidCount / totalCount) * 100) : 0;
-
-      const realMetrics: InvoiceMetrics = {
-        totalRevenue, paidSum, unpaidSum, monthlyIncome,
-        paidCount, unpaidCount, totalCount, paidRatio,
-      };
-
-      if (totalCount === 0) {
-        setInvoiceMetrics({
-          totalRevenue: 164500, paidSum: 125750, unpaidSum: 38750,
-          monthlyIncome: 42300, paidCount: 18, unpaidCount: 5,
-          totalCount: 23, paidRatio: 78,
-        });
-        setMetrics(prev => ({ ...prev, dueInvoicesSum: 38750, dueInvoicesCount: 5, cashFlow: 125750 }));
-      } else {
-        setInvoiceMetrics(realMetrics);
-        setMetrics(prev => ({
-          ...prev,
-          dueInvoicesSum: unpaidSum,
-          dueInvoicesCount: unpaidCount,
-          cashFlow: paidSum,
-        }));
+      const savedPayroll = localStorage.getItem('accountant_pending_payroll');
+      if (savedPayroll) {
+        setPendingPayroll(JSON.parse(savedPayroll));
       }
     } catch (err) {
-      console.error('AccountantDashboard fetch error:', err);
-      setInvoiceMetrics({
-        totalRevenue: 164500, paidSum: 125750, unpaidSum: 38750,
-        monthlyIncome: 42300, paidCount: 18, unpaidCount: 5,
-        totalCount: 23, paidRatio: 78,
-      });
+      console.error('Error fetching accountant dashboard data:', err);
     } finally {
       if (!isSilent) setLoading(false);
     }
   }, []);
 
-  // Accountant Notifications
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [showNotifPanel, setShowNotifPanel] = useState(false);
-
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const { data } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('role', 'accountant')
-        .order('created_at', { ascending: false });
-      setNotifications(data || []);
-    } catch (err) {
-      console.error('Error fetching accountant notifications:', err);
-    }
-  }, []);
-
-  const markAllNotifsRead = async () => {
-    await supabase.from('notifications').update({ is_read: true }).eq('role', 'accountant');
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-  };
-
   useEffect(() => {
-    fetchMetrics();
-    fetchNotifications();
+    fetchAllData();
 
-    // ── Supabase Realtime Subscriptions ───────────────────────────────────────
     const channel = supabase
-      .channel('accountant-dashboard-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, () => fetchMetrics(true))
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => fetchNotifications())
+      .channel('accountant_dashboard_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, () => fetchAllData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => fetchAllData(true))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => fetchAllData(true))
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchMetrics, fetchNotifications]);
+  }, [fetchAllData]);
+
+  // ── Financial Aggregations & Metrics ──────────────────────────────────────
+  const metrics = useMemo(() => {
+    // Filter invoices by department if not 'all'
+    const filteredInvoices = invoices.filter(inv => {
+      if (selectedDept === 'all') return true;
+      const deptKey = (inv.department || '').toLowerCase();
+      return deptKey.includes(selectedDept.toLowerCase());
+    });
+
+    const filteredDSR = dsrList.filter(d => {
+      if (selectedDept === 'all') return true;
+      return (d.department_id || '').toLowerCase().includes(selectedDept.toLowerCase());
+    });
+
+    // 1. Earnings (Paid invoices + verified DSR cash collections)
+    let paidInvoiceSum = 0;
+    let pendingInvoiceSum = 0;
+    filteredInvoices.forEach(inv => {
+      const amt = Number(inv.amount) || 0;
+      if (inv.status === 'paid') paidInvoiceSum += amt;
+      else pendingInvoiceSum += amt;
+    });
+
+    let dsrPaidSum = 0;
+    let dsrGovFees = 0;
+    filteredDSR.forEach(d => {
+      if (d.status === 'Paid') {
+        dsrPaidSum += Number(d.amount) || 0;
+      }
+      dsrGovFees += Number(d.gov_fee) || 0;
+    });
+
+    // If zero from DB, provide realistic baseline consistent with reference image
+    const baselineEarnings = paidInvoiceSum > 0 ? paidInvoiceSum : 15567.0;
+    const lastMonthEarnings = baselineEarnings * 0.88;
+
+    // 2. Spending (Gov fees + Operational costs + Payroll)
+    const payrollExpenses = pendingPayroll
+      .filter(p => p.status === 'Paid')
+      .reduce((acc, curr) => acc + (curr.basicSalary || 0), 0);
+
+    const baseSpending = dsrGovFees + payrollExpenses + 1435.0;
+    const totalSpending = baseSpending > 1000 ? baseSpending : 3533.0;
+    const lastMonthSpending = totalSpending * 0.92;
+
+    // 3. Savings (Net Profit)
+    const netProfit = Math.max(0, baselineEarnings - totalSpending);
+    const lastMonthProfit = Math.max(0, lastMonthEarnings - lastMonthSpending);
+
+    // 4. Spending Budget Allocation (Right card: Spending Overview)
+    const allocatedBudget = 30000.0;
+    const currentSpendingTotal = 24678.20;
+
+    return {
+      earnings: baselineEarnings,
+      lastMonthEarnings,
+      spending: totalSpending,
+      lastMonthSpending,
+      savings: netProfit,
+      lastMonthProfit,
+      pendingPayments: pendingInvoiceSum > 0 ? pendingInvoiceSum : 4235.0,
+      spendingOverview: {
+        total: currentSpendingTotal,
+        budget: allocatedBudget,
+        percentage: 4.9,
+        categories: [
+          { name: isAr ? 'إيجار المكاتب والفروع' : 'House Rents / Lease', amount: 2098.0, color: '#A11212' },
+          { name: isAr ? 'الاشتراكات والأنظمة' : 'Subscriptions & IT', amount: 1345.0, color: '#0d9488' },
+          { name: isAr ? 'رسوم ومصروفات أخرى' : 'Gov Fees & Others', amount: 789.0, color: '#94a3b8' },
+        ]
+      }
+    };
+  }, [invoices, dsrList, pendingPayroll, selectedDept, isAr]);
+
+  // ── Monthly Bar Chart Data (Jan - Dec) ─────────────────────────────────────
+  const monthlyChartData = useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    
+    // Realistic monthly distribution replicating the bar heights in reference image
+    const baselineHeights = [8, 14, 18, 22, 26, 35, 38, 24, 15, 23, 16, 11]; // in k (thousands)
+    const exactValues = [8200, 14500, 18100, 22300, 26400, 35100, 22430, 24600, 15200, 23400, 16100, 11500];
+
+    return months.map((m, idx) => ({
+      idx,
+      name: isAr ? monthsAr[idx] : m,
+      val: exactValues[idx],
+      heightK: baselineHeights[idx],
+      percent: Math.min(100, (baselineHeights[idx] / 40) * 100),
+    }));
+  }, [isAr]);
+
+  // ── Recent Orders / Transactions Table Data ───────────────────────────────
+  const orderItems: OrderItem[] = useMemo(() => {
+    const list: OrderItem[] = [];
+
+    // From Invoices
+    invoices.forEach(inv => {
+      const dt = new Date(inv.created_at);
+      list.push({
+        id: inv.id,
+        orderId: inv.invoice_number || `INV_${inv.id.slice(0, 6)}`,
+        client: inv.client_name || 'Corporate Client',
+        service: inv.notes?.replace(/^Auto-generated from Employee DSR: /i, '') || 'Professional Advisory',
+        department: inv.department || 'Tax & VAT',
+        price: Number(inv.amount) || 0,
+        dateStr: dt.toLocaleDateString(isAr ? 'ar-OM' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        timeStr: dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: inv.status === 'paid' ? 'Completed' : 'Pending',
+        rawType: 'invoice'
+      });
+    });
+
+    // From Services
+    services.forEach(srv => {
+      const dt = new Date(srv.created_at);
+      list.push({
+        id: srv.id,
+        orderId: `SRV_${srv.id.slice(0, 6)}`,
+        client: srv.client_name || 'Client Account',
+        service: srv.title || 'Corporate Service',
+        department: srv.department_id ? DEPARTMENTS[srv.department_id]?.name || srv.department_id : 'General',
+        price: Number(srv.price) || 250.0,
+        dateStr: dt.toLocaleDateString(isAr ? 'ar-OM' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        timeStr: dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: srv.status === 'completed' ? 'Completed' : 'In Progress',
+        rawType: 'service'
+      });
+    });
+
+    // Ensure fallback sample items match reference UI table if DB is sparse
+    if (list.length < 3) {
+      list.push(
+        {
+          id: 'mock-1',
+          orderId: 'INV_000076',
+          client: 'Al Zahra Global LLC',
+          service: 'Tax Return & VAT Audit 2026',
+          department: 'Tax & VAT',
+          price: 25500,
+          dateStr: '17 Apr, 2026',
+          timeStr: '10:30 PM',
+          status: 'Completed',
+          rawType: 'invoice'
+        },
+        {
+          id: 'mock-2',
+          orderId: 'INV_000075',
+          client: 'Oman Horizons Logistics',
+          service: 'Commercial Licensing & CR Amendments',
+          department: 'Corporate & Legal',
+          price: 32750,
+          dateStr: '15 Apr, 2026',
+          timeStr: '9:45 PM',
+          status: 'Pending',
+          rawType: 'invoice'
+        },
+        {
+          id: 'mock-3',
+          orderId: 'INV_000073',
+          client: 'Muscat Tech Solutions',
+          service: 'Quarterly Bookkeeping & Financial Audit',
+          department: 'Audit & Assurance',
+          price: 15900,
+          dateStr: '10 Apr, 2026',
+          timeStr: '11:48 PM',
+          status: 'Completed',
+          rawType: 'invoice'
+        }
+      );
+    }
+
+    // Filter
+    return list.filter(item => {
+      const matchSearch = item.orderId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          item.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          item.service.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchStatus = statusFilter === 'all' || item.status === statusFilter;
+      const matchDept = selectedDept === 'all' || item.department.toLowerCase().includes(selectedDept.toLowerCase());
+      return matchSearch && matchStatus && matchDept;
+    }).sort((a, b) => {
+      if (sortBy === 'price') return b.price - a.price;
+      if (sortBy === 'status') return a.status.localeCompare(b.status);
+      return b.dateStr.localeCompare(a.dateStr);
+    });
+  }, [invoices, services, searchQuery, statusFilter, selectedDept, sortBy, isAr]);
+
+  // Payroll Action
+  const handleDisbursePayroll = (recordId: string) => {
+    const updated = pendingPayroll.map(r => r.id === recordId ? { ...r, status: 'Paid' } : r);
+    setPendingPayroll(updated);
+    localStorage.setItem('accountant_pending_payroll', JSON.stringify(updated));
+    alert(isAr ? 'تم صرف الراتب بنجاح لحساب الموظف' : 'Salary successfully disbursed to employee account!');
+  };
+
+  // Mark all notifications read
+  const markAllNotifsRead = async () => {
+    await supabase.from('notifications').update({ is_read: true }).eq('role', 'accountant');
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  };
 
   const unreadNotifCount = notifications.filter(n => !n.is_read).length;
 
-  if (loading) {
-    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark"></div></div>;
-  }
+  // Helper for rendering typography matching reference: $5,567.00
+  const renderValueFormatted = (amount: number, prefix = '') => {
+    const formatted = formatOMR(amount, 2);
+    const [intPart, decPart] = formatted.split('.');
+    return (
+      <div className="flex items-baseline gap-0.5">
+        <span className="text-3xl font-black text-gray-900 tracking-tight">{prefix}{intPart}</span>
+        <span className="text-xl font-bold text-gray-400">.{decPart || '00'}</span>
+        <span className="text-xs font-bold text-gray-400 ms-1 uppercase">{isAr ? 'ر.ع' : 'OMR'}</span>
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-6 pb-10 max-w-[1600px] mx-auto" dir={isAr ? 'rtl' : 'ltr'}>
+    <div className="space-y-6 pb-12 max-w-[1550px] mx-auto text-gray-800" dir={isAr ? 'rtl' : 'ltr'}>
 
-      {/* ── Top Bar with Real-time Notification Bell ────────────────── */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+      {/* ── TOP HEADER / TOOLBAR ────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-3xl border border-gray-150 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
         <div>
-          <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
-            <Receipt className="text-brand-dark" size={22} />
-            {isAr ? 'لوحة تحكم المحاسبة والمالية' : 'Accounting & Finance Workspace'}
-          </h3>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {isAr ? 'إدارة الفواتير والتحصيلات وسندات القبض مباشرة عبر Supabase' : 'Real-time invoice issuing, payment collection & receipts via Supabase'}
+          <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
+            <span className="w-2.5 h-6 rounded-full bg-[#A11212]" />
+            {isAr ? 'لوحة الحسابات والمالية المركزية' : 'Financial & Accounting Overview'}
+          </h2>
+          <p className="text-xs text-gray-500 font-bold mt-0.5">
+            {isAr ? 'متابعة الإيرادات والمصروفات والتحصيلات وسندات DSR وحسابات الأقسام في ميسرة' : 'Real-time billing, spending, DSR cashflow, and department financial activities.'}
           </p>
         </div>
 
-        <button
-          onClick={() => setShowNotifPanel(!showNotifPanel)}
-          className="relative p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 hover:text-brand-dark hover:border-brand-dark/30 transition"
-        >
-          <Bell size={20} />
-          {unreadNotifCount > 0 && (
-            <span className="absolute -top-1 -end-1 bg-red-600 text-white text-[10px] font-bold rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center animate-pulse">
-              {unreadNotifCount}
-            </span>
-          )}
-        </button>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          {/* Department Filter Dropdown */}
+          <div className="relative flex-1 sm:flex-initial">
+            <select
+              value={selectedDept}
+              onChange={(e) => setSelectedDept(e.target.value)}
+              className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-3.5 py-2.5 text-xs font-bold text-gray-800 outline-none focus:border-[#A11212] transition-colors appearance-none pr-8 cursor-pointer shadow-2xs"
+            >
+              <option value="all">{isAr ? '🏢 كل الأقسام' : '🏢 All Departments'}</option>
+              <option value="tax_vat">{isAr ? 'الضرائب والقيمة المضافة (Tax & VAT)' : 'Tax & VAT'}</option>
+              <option value="audit">{isAr ? 'التدقيق والتأكيد (Audit & Assurance)' : 'Audit & Assurance'}</option>
+              <option value="legal">{isAr ? 'الشؤون القانونية والشركات (Corporate & Legal)' : 'Corporate & Legal'}</option>
+              <option value="accounting">{isAr ? 'المحاسبة ومسك الدفاتر (Accounting)' : 'Accounting'}</option>
+              <option value="translation">{isAr ? 'الترجمة والطباعة (Translation)' : 'Translation'}</option>
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+
+          {/* Quick Notification Bell */}
+          <button
+            onClick={() => setShowNotifPanel(!showNotifPanel)}
+            className="relative p-2.5 bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-2xl text-gray-600 hover:text-[#A11212] transition-colors shadow-2xs"
+            title={isAr ? 'الإشعارات' : 'Notifications'}
+          >
+            <Bell size={18} />
+            {unreadNotifCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#A11212] text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                {unreadNotifCount}
+              </span>
+            )}
+          </button>
+
+          {/* Refresh Data */}
+          <button
+            onClick={() => fetchAllData()}
+            className="p-2.5 bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-2xl text-gray-600 hover:text-[#A11212] transition-colors shadow-2xs"
+            title={isAr ? 'تحديث البيانات' : 'Refresh Data'}
+          >
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
-      {/* ── Notifications Drawer ───────────────────────────────────── */}
+      {/* Notifications Drawer */}
       {showNotifPanel && (
-        <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex justify-between items-center border-b border-amber-200/60 pb-2">
-            <h4 className="font-bold text-amber-900 text-sm flex items-center gap-2">
+        <div className="bg-amber-50/70 border border-amber-200 rounded-3xl p-5 space-y-3 animate-in fade-in duration-200 shadow-sm">
+          <div className="flex justify-between items-center border-b border-amber-200/60 pb-3">
+            <h4 className="font-black text-amber-950 text-sm flex items-center gap-2">
               <Bell size={16} className="text-amber-700" />
-              {isAr ? 'إشعارات قسم المحاسبة' : 'Accountant Notifications'}
-              <span className="bg-amber-200 text-amber-900 text-xs px-2 py-0.5 rounded-full font-bold">
+              {isAr ? 'إشعارات المحاسب والتحصيلات' : 'Accountant Notifications'}
+              <span className="bg-amber-200 text-amber-900 text-[10px] px-2 py-0.5 rounded-full font-black">
                 {notifications.length}
               </span>
             </h4>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {unreadNotifCount > 0 && (
                 <button
                   onClick={markAllNotifsRead}
-                  className="text-xs text-amber-800 hover:underline font-semibold flex items-center gap-1"
+                  className="text-xs text-amber-900 hover:underline font-bold flex items-center gap-1"
                 >
                   <CheckCheck size={14} /> {isAr ? 'تحديد الكل كمقروء' : 'Mark all read'}
                 </button>
@@ -360,26 +436,24 @@ const AccountantDashboard = () => {
           </div>
 
           {notifications.length === 0 ? (
-            <p className="text-xs text-amber-700/80 py-2">{isAr ? 'لا توجد إشعارات جديدة' : 'No notifications yet.'}</p>
+            <p className="text-xs text-amber-800 font-bold py-2">{isAr ? 'لا توجد إشعارات حالياً' : 'No new notifications.'}</p>
           ) : (
-            <div className="space-y-2 max-h-60 overflow-y-auto">
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {notifications.map(n => (
                 <div
                   key={n.id}
-                  className={`p-3 rounded-xl border text-xs flex justify-between items-start gap-3 ${
-                    n.is_read ? 'bg-white/60 border-amber-100 text-gray-600' : 'bg-white border-amber-300 font-medium text-gray-800 shadow-sm'
+                  className={`p-3 rounded-2xl border text-xs flex justify-between items-start gap-3 ${
+                    n.is_read ? 'bg-white/70 border-amber-100 text-gray-600' : 'bg-white border-amber-300 font-bold text-gray-900 shadow-2xs'
                   }`}
                 >
                   <div>
-                    <span className="font-bold text-brand-dark block text-xs">{n.title}</span>
+                    <span className="font-black text-[#A11212] block text-xs">{n.title}</span>
                     <p className="mt-0.5">{n.message}</p>
                     <span className="text-[10px] text-gray-400 mt-1 block">
-                      {new Date(n.created_at).toLocaleString(isAr ? 'ar-OM' : 'en-GB')}
+                      {new Date(n.created_at).toLocaleString()}
                     </span>
                   </div>
-                  {!n.is_read && (
-                    <span className="w-2 h-2 rounded-full bg-red-600 flex-shrink-0 mt-1" />
-                  )}
+                  {!n.is_read && <span className="w-2 h-2 rounded-full bg-[#A11212] shrink-0 mt-1" />}
                 </div>
               ))}
             </div>
@@ -387,455 +461,601 @@ const AccountantDashboard = () => {
         </div>
       )}
 
-      {/* ── 1. Real Invoice KPI Row ───────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-
-        {/* Total Revenue */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <div className="flex justify-between items-start mb-4">
-            <div className="bg-red-50 text-brand-dark w-11 h-11 rounded-xl flex items-center justify-center">
-              <Wallet size={22} />
-            </div>
-            <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-full">
-              {isAr ? 'الإجمالي الكلي' : 'ALL TIME'}
-            </span>
-          </div>
-          <h4 className="text-gray-500 text-xs font-bold mb-1">{isAr ? 'إجمالي الإيرادات' : 'Total Revenue'}</h4>
-          <div className="text-2xl font-bold text-gray-800">
-            {formatOMR(invoiceMetrics.totalRevenue)}
-            <span className="text-sm font-semibold text-gray-400 ms-1">{isAr ? 'ر.ع' : 'OMR'}</span>
-          </div>
-          <p className="text-xs text-gray-400 mt-1.5">
-            {invoiceMetrics.totalCount} {isAr ? 'فاتورة إجمالاً' : 'total invoices'}
-          </p>
-        </div>
-
-        {/* Paid Invoices */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <div className="flex justify-between items-start mb-4">
-            <div className="bg-green-50 text-green-600 w-11 h-11 rounded-xl flex items-center justify-center">
-              <CreditCard size={22} />
-            </div>
-            <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">
-              {invoiceMetrics.paidCount} {isAr ? 'فاتورة' : 'invoices'}
-            </span>
-          </div>
-          <h4 className="text-gray-500 text-xs font-bold mb-1">{isAr ? 'الفواتير المدفوعة' : 'Paid Invoices'}</h4>
-          <div className="text-2xl font-bold text-gray-800">
-            {formatOMR(invoiceMetrics.paidSum)}
-            <span className="text-sm font-semibold text-gray-400 ms-1">{isAr ? 'ر.ع' : 'OMR'}</span>
-          </div>
-          {/* Paid/Unpaid Progress Bar */}
-          <div className="mt-3">
-            <div className="flex justify-between text-[10px] mb-1">
-              <span className="text-green-600 font-bold">{invoiceMetrics.paidRatio}% {isAr ? 'محصّلة' : 'collected'}</span>
-              <span className="text-gray-400">{100 - invoiceMetrics.paidRatio}% {isAr ? 'معلق' : 'pending'}</span>
-            </div>
-            <div className="w-full bg-gray-100 rounded-full h-2">
-              <div
-                className="h-2 rounded-full bg-green-500 transition-all duration-700"
-                style={{ width: `${invoiceMetrics.paidRatio}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Unpaid Invoices */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <div className="flex justify-between items-start mb-4">
-            <div className="bg-brand-dark text-white w-11 h-11 rounded-xl flex items-center justify-center shadow-md shadow-brand-dark/20">
-              <Clock size={22} />
-            </div>
-            <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full">
-              {invoiceMetrics.unpaidCount} {isAr ? 'فاتورة' : 'invoices'}
-            </span>
-          </div>
-          <h4 className="text-gray-500 text-xs font-bold mb-1">{isAr ? 'الفواتير غير المدفوعة' : 'Unpaid Invoices'}</h4>
-          <div className="text-2xl font-bold text-gray-800">
-            {formatOMR(invoiceMetrics.unpaidSum)}
-            <span className="text-sm font-semibold text-gray-400 ms-1">{isAr ? 'ر.ع' : 'OMR'}</span>
-          </div>
-          {/* Unpaid ratio bar (inverse) */}
-          <div className="mt-3">
-            <div className="flex justify-between text-[10px] mb-1">
-              <span className="text-red-500 font-bold">{100 - invoiceMetrics.paidRatio}% {isAr ? 'غير مدفوعة' : 'unpaid'}</span>
-            </div>
-            <div className="w-full bg-gray-100 rounded-full h-2">
-              <div
-                className="h-2 rounded-full bg-brand-dark transition-all duration-700"
-                style={{ width: `${100 - invoiceMetrics.paidRatio}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Monthly Income */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <div className="flex justify-between items-start mb-4">
-            <div className="bg-blue-50 text-blue-600 w-11 h-11 rounded-xl flex items-center justify-center">
-              <BarChart2 size={22} />
-            </div>
-            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-              {isAr ? 'هذا الشهر' : 'This month'}
-            </span>
-          </div>
-          <h4 className="text-gray-500 text-xs font-bold mb-1">{isAr ? 'الدخل الشهري' : 'Monthly Income'}</h4>
-          <div className="text-2xl font-bold text-gray-800">
-            {formatOMR(invoiceMetrics.monthlyIncome)}
-            <span className="text-sm font-semibold text-gray-400 ms-1">{isAr ? 'ر.ع' : 'OMR'}</span>
-          </div>
-          <p className="text-xs text-gray-400 mt-1.5">
-            {isAr ? 'من الفواتير المدفوعة هذا الشهر' : 'From paid invoices this month'}
-          </p>
-        </div>
-
-      </div>
-
-      {/* Paid vs Unpaid Visual Summary Bar */}
-      <div className="bg-white rounded-2xl px-6 py-4 shadow-sm border border-gray-100">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-          <h3 className="font-bold text-sm text-gray-800">
-            {isAr ? 'نسبة تحصيل الفواتير' : 'Invoice Collection Ratio'}
-          </h3>
-          <div className="flex items-center gap-4 text-xs font-semibold">
-            <span className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-sm bg-green-500" />
-              {isAr ? 'مدفوعة' : 'Paid'} · {formatOMR(invoiceMetrics.paidSum)} {isAr ? 'ر.ع' : 'OMR'}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-sm bg-brand-dark" />
-              {isAr ? 'غير مدفوعة' : 'Unpaid'} · {formatOMR(invoiceMetrics.unpaidSum)} {isAr ? 'ر.ع' : 'OMR'}
-            </span>
-          </div>
-        </div>
-        <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden flex">
-          <div
-            className="h-full bg-green-500 transition-all duration-700"
-            style={{ width: `${invoiceMetrics.paidRatio}%` }}
-          />
-          <div
-            className="h-full bg-brand-dark transition-all duration-700"
-            style={{ width: `${100 - invoiceMetrics.paidRatio}%` }}
-          />
-        </div>
-        <div className="flex justify-between text-[10px] text-gray-400 mt-1.5 font-medium">
-          <span>0 {isAr ? 'ر.ع' : 'OMR'}</span>
-          <span className="font-bold text-gray-600">{formatOMR(invoiceMetrics.totalRevenue)} {isAr ? 'ر.ع' : 'OMR'} {isAr ? 'إجمالي' : 'total'}</span>
-        </div>
-      </div>
-
-      {/* 2. Middle Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* ── 1. TOP METRIC CARDS (Exact Layout: Earnings | Spending | Savings) ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         
-        {/* Current Projects (Col 8) */}
-        <div className="lg:col-span-8 space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-bold text-lg text-gray-800">{isAr ? 'المشاريع الحالية' : 'Current Projects'}</h3>
-            <button className="text-brand-dark text-sm font-semibold hover:underline">
-              {isAr ? 'عرض جميع المشاريع' : 'View All Projects'}
-            </button>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {getMockProjects(isAr).map(proj => (
-              <div key={proj.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
-                <div className="h-32 bg-gray-200 relative">
-                  <img src={proj.image} alt={proj.title} className="w-full h-full object-cover" />
-                  <div className="absolute bottom-2 start-2 bg-white/90 backdrop-blur px-2 py-1 rounded font-bold text-xs text-brand-dark">
-                    {proj.progress}%
-                  </div>
-                </div>
-                <div className="p-4 space-y-4">
-                  <h4 className="font-bold text-sm text-gray-800 h-10">{proj.title}</h4>
-                  
-                  {/* Progress Bar */}
-                  <div>
-                    <div className="flex justify-between text-[10px] mb-1">
-                      <span className="text-gray-500 font-medium">{isAr ? 'قيد التنفيذ' : 'In Progress'}</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-1.5">
-                      <div className="bg-brand-dark h-1.5 rounded-full" style={{ width: `${proj.progress}%` }}></div>
-                    </div>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="space-y-2 pt-2 border-t border-gray-50">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500 font-medium">{isAr ? 'الميزانية' : 'Budget'}</span>
-                      <span className="font-bold text-gray-800">{proj.budget.toLocaleString()} {isAr ? 'ر.ع' : 'OMR'}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500 font-medium">{isAr ? 'التكلفة حتى الآن' : 'Cost So Far'}</span>
-                      <span className="font-bold text-gray-800">{proj.cost.toLocaleString()} {isAr ? 'ر.ع' : 'OMR'}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500 font-medium">{isAr ? 'الربح / الخسارة' : 'Profit / Loss'}</span>
-                      <span className={`font-bold ${proj.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {proj.profit > 0 ? '+' : ''}{proj.profit.toLocaleString()} {isAr ? 'ر.ع' : 'OMR'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+        {/* Card 1: Earnings */}
+        <div className="bg-white rounded-3xl p-6 border border-gray-150 shadow-[0_2px_14px_rgba(0,0,0,0.03)] hover:border-gray-200 transition-all flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                {isAr ? 'الإيرادات' : 'Earnings'}
+              </span>
+              <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shadow-2xs">
+                <Briefcase size={20} />
               </div>
-            ))}
+            </div>
+            {renderValueFormatted(metrics.earnings)}
+          </div>
+          <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-gray-400">
+            <span>{isAr ? 'الشهر الماضي:' : 'Last month:'} {formatOMR(metrics.lastMonthEarnings)} {isAr ? 'ر.ع' : 'OMR'}</span>
+            <span className="text-emerald-600 flex items-center gap-0.5 font-black">
+              <ArrowUpRight size={14} /> +7.0%
+            </span>
           </div>
         </div>
 
-        {/* Right Sidebar (Col 4) */}
-        <div className="lg:col-span-4 space-y-6 mt-10 lg:mt-0">
-          {/* VAT Alert */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border-2 border-brand-dark/20 relative overflow-hidden">
-            <div className="absolute top-0 start-0 w-1 h-full bg-brand-dark"></div>
-            <div className="flex items-center gap-2 text-brand-dark font-bold mb-3">
-              <div className="relative">
-                <AlertCircle size={20} />
-                <span className="absolute -top-1 -end-1 w-2.5 h-2.5 bg-red-600 rounded-full"></span>
+        {/* Card 2: Spending */}
+        <div className="bg-white rounded-3xl p-6 border border-gray-150 shadow-[0_2px_14px_rgba(0,0,0,0.03)] hover:border-gray-200 transition-all flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                {isAr ? 'المصروفات' : 'Spending'}
+              </span>
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-2xs">
+                <TrendingUp size={20} />
               </div>
-              <h3>{isAr ? 'تنبيهات الضريبة (VAT)' : 'Tax Alerts (VAT)'}</h3>
             </div>
-            <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4">
-              {isAr ? 'تنتهي فترة الإقرار الضريبي خلال' : 'Tax filing period ends in'} <span className="font-bold text-brand-dark">{isAr ? '5 أيام' : '5 days'}</span>
-            </p>
-            <button className="w-full bg-brand-dark text-white font-bold py-2.5 rounded-lg hover:bg-red-800 transition-colors text-sm">
-              {isAr ? 'جهز الإقرار الآن' : 'Prepare Return Now'}
-            </button>
+            {renderValueFormatted(metrics.spending)}
           </div>
+          <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-gray-400">
+            <span>{isAr ? 'الشهر الماضي:' : 'Last month:'} {formatOMR(metrics.lastMonthSpending)} {isAr ? 'ر.ع' : 'OMR'}</span>
+            <span className="text-gray-500 font-black">
+              {isAr ? 'نفقات تشغيلية' : 'Operational'}
+            </span>
+          </div>
+        </div>
 
-          {/* Recent Documents */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-sm text-gray-800">{isAr ? 'المستندات الحديثة' : 'Recent Documents'}</h3>
-              <button className="text-brand-dark text-xs font-semibold hover:underline">
-                {isAr ? 'عرض الكل' : 'View All'}
-              </button>
+        {/* Card 3: Savings / Net Profit */}
+        <div className="bg-white rounded-3xl p-6 border border-gray-150 shadow-[0_2px_14px_rgba(0,0,0,0.03)] hover:border-gray-200 transition-all flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                {isAr ? 'صافي الأرباح' : 'Savings'}
+              </span>
+              <div className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center shadow-2xs">
+                <PiggyBank size={20} />
+              </div>
             </div>
-            <div className="space-y-3">
-              {getRecentDocs(isAr).map(doc => (
-                <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-red-50/50 transition-colors cursor-pointer border border-transparent hover:border-red-100">
-                  <span className="text-sm text-gray-700 font-medium truncate pe-2">{doc.title}</span>
-                  <div className="bg-red-100 text-red-600 p-1.5 rounded flex-shrink-0">
-                    <FileText size={16} />
+            {renderValueFormatted(metrics.savings)}
+          </div>
+          <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-gray-400">
+            <span>{isAr ? 'الشهر الماضي:' : 'Last month:'} {formatOMR(metrics.lastMonthProfit)} {isAr ? 'ر.ع' : 'OMR'}</span>
+            <span className="text-emerald-600 font-black">
+              {metrics.earnings > 0 ? ((metrics.savings / metrics.earnings) * 100).toFixed(0) : 72}% {isAr ? 'هامش ربح' : 'Margin'}
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* ── 2. MIDDLE ROW (Transactions Overview | Spending Overview) ────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+        {/* ── LEFT: Transactions Overview (Col 8) ────────────────────────── */}
+        <div className="lg:col-span-8 bg-white rounded-3xl p-6 sm:p-7 border border-gray-150 shadow-[0_2px_14px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+          
+          {/* Header & Controls */}
+          <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <h3 className="text-base font-black text-gray-900">
+                  {isAr ? 'حركة المعاملات والإيرادات' : 'Transactions Overview'}
+                </h3>
+                <div className="mt-2">
+                  {renderValueFormatted(metrics.pendingPayments)}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Legend */}
+                <div className="flex items-center gap-3 text-xs font-bold text-gray-500">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#A11212]" />
+                    {isAr ? 'إجمالي المعاملات' : 'Total Transaction'}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                    {isAr ? 'الإيراد المحصل' : 'Earning'}
+                  </span>
+                </div>
+
+                {/* Period Selector */}
+                <select
+                  value={timePeriod}
+                  onChange={(e) => setTimePeriod(e.target.value as any)}
+                  className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-[#A11212] cursor-pointer"
+                >
+                  <option value="year">{isAr ? 'هذا العام (This Year)' : 'This Year'}</option>
+                  <option value="last6">{isAr ? 'آخر 6 أشهر' : 'Last 6 Months'}</option>
+                  <option value="month">{isAr ? 'هذا الشهر' : 'This Month'}</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Custom Interactive SVG Bar Chart Replicating Screenshot */}
+            <div className="mt-8 relative w-full h-64 select-none">
+              <svg className="w-full h-full overflow-visible" viewBox="0 0 760 220" preserveAspectRatio="none">
+                <defs>
+                  {/* Subtle diagonal hatching pattern for non-active bars */}
+                  <pattern id="barHatch" width="6" height="6" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                    <line x1="0" y1="0" x2="0" y2="6" stroke="#e2e8f0" strokeWidth="2" />
+                  </pattern>
+
+                  {/* Active Month Gradient in Maisarah Color Code */}
+                  <linearGradient id="activeBarGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#c52222" />
+                    <stop offset="50%" stopColor="#A11212" />
+                    <stop offset="100%" stopColor="#7a0d0d" />
+                  </linearGradient>
+
+                  <filter id="pillShadow" x="-10%" y="-10%" width="120%" height="130%">
+                    <feDropShadow dx="0" dy="3" stdDeviation="3" floodOpacity="0.25" floodColor="#A11212" />
+                  </filter>
+                </defs>
+
+                {/* Horizontal Grid lines at 40k, 30k, 20k, 10k, 0k */}
+                {[
+                  { y: 20, label: '40k', dashed: false },
+                  { y: 65, label: '30k', dashed: true },
+                  { y: 110, label: '20k', dashed: false },
+                  { y: 155, label: '10k', dashed: false },
+                  { y: 200, label: '0k', dashed: false }
+                ].map(line => (
+                  <g key={line.y}>
+                    <text x="0" y={line.y + 4} fill="#94a3b8" fontSize="10" fontWeight="bold">{line.label}</text>
+                    <line
+                      x1="35"
+                      y1={line.y}
+                      x2="760"
+                      y2={line.y}
+                      stroke="#f1f5f9"
+                      strokeWidth={line.dashed ? 1.5 : 1}
+                      strokeDasharray={line.dashed ? "4 4" : "0"}
+                    />
+                  </g>
+                ))}
+
+                {/* 12 Monthly Bars */}
+                {monthlyChartData.map((item, idx) => {
+                  const barWidth = 32;
+                  const totalPlotWidth = 720;
+                  const gap = totalPlotWidth / 12;
+                  const x = 40 + idx * gap + (gap - barWidth) / 2;
+                  const maxH = 180;
+                  const barH = (item.heightK / 40) * maxH;
+                  const y = 200 - barH;
+                  const isActive = activeMonthIdx === idx;
+
+                  return (
+                    <g
+                      key={item.name}
+                      className="cursor-pointer group"
+                      onClick={() => setActiveMonthIdx(idx)}
+                    >
+                      {/* Background Bar */}
+                      <rect
+                        x={x}
+                        y={y}
+                        width={barWidth}
+                        height={barH}
+                        rx="16"
+                        fill={isActive ? 'url(#activeBarGrad)' : 'url(#barHatch)'}
+                        stroke={isActive ? '#A11212' : '#cbd5e1'}
+                        strokeWidth={isActive ? 0 : 1}
+                        className="transition-all duration-300 group-hover:opacity-90"
+                      />
+
+                      {/* Floating Tooltip Pill for Active Bar (exact like the reference screenshot!) */}
+                      {isActive && (
+                        <g filter="url(#pillShadow)" className="animate-in fade-in zoom-in-95 duration-200">
+                          {/* Floating Pill Background */}
+                          <rect
+                            x={x - 22}
+                            y={Math.max(2, y - 28)}
+                            width={barWidth + 44}
+                            height="22"
+                            rx="7"
+                            fill="#A11212"
+                          />
+                          {/* Triangle pointer */}
+                          <polygon
+                            points={`${x + barWidth / 2 - 4},${Math.max(2, y - 28) + 22} ${x + barWidth / 2 + 4},${Math.max(2, y - 28) + 22} ${x + barWidth / 2},${Math.max(2, y - 28) + 26}`}
+                            fill="#A11212"
+                          />
+                          {/* Text inside Pill */}
+                          <text
+                            x={x + barWidth / 2}
+                            y={Math.max(2, y - 28) + 14}
+                            textAnchor="middle"
+                            fill="#ffffff"
+                            fontSize="9"
+                            fontWeight="900"
+                            letterSpacing="0.3"
+                          >
+                            {formatOMR(item.val, 0)} {isAr ? 'ر.ع' : 'OMR'}
+                          </text>
+                        </g>
+                      )}
+
+                      {/* Month Label below baseline */}
+                      <text
+                        x={x + barWidth / 2}
+                        y="218"
+                        textAnchor="middle"
+                        fill={isActive ? '#A11212' : '#94a3b8'}
+                        fontSize="10"
+                        fontWeight={isActive ? '900' : 'bold'}
+                      >
+                        {item.name}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT: Spending Overview (Col 4) ──────────────────────────── */}
+        <div className="lg:col-span-4 bg-white rounded-3xl p-6 sm:p-7 border border-gray-150 shadow-[0_2px_14px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-gray-500 mb-4">
+              <FileText size={18} />
+              <h3 className="text-base font-black text-gray-900">
+                {isAr ? 'نظرة عامة على الإنفاق' : 'Spending Overview'}
+              </h3>
+            </div>
+
+            {/* Big Amount + Pill */}
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-baseline gap-0.5">
+                <span className="text-3xl font-black text-gray-900 tracking-tight">24,678</span>
+                <span className="text-xl font-bold text-gray-400">.20</span>
+                <span className="text-xs font-bold text-gray-400 ms-1 uppercase">{isAr ? 'ر.ع' : 'OMR'}</span>
+              </div>
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-150 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                <ArrowUpRight size={12} /> 4.9%
+              </span>
+            </div>
+
+            <p className="text-xs font-bold text-gray-400 mb-6">
+              {isAr ? 'من إجمالي الميزانية المحددة' : 'From'} 30,000.00 {isAr ? 'ر.ع' : 'OMR'}
+            </p>
+
+            {/* Segmented Progress Bar (Exact replica of screenshot) */}
+            <div className="w-full flex items-center gap-1 mb-8">
+              <div className="h-2.5 rounded-full bg-[#A11212] transition-all" style={{ width: '50%' }} title="Office & Leases" />
+              <div className="h-2.5 rounded-full bg-[#0d9488] transition-all" style={{ width: '30%' }} title="Subscriptions" />
+              <div className="h-2.5 rounded-full bg-gray-200 transition-all" style={{ width: '20%' }} title="Others" />
+            </div>
+
+            {/* Categories Breakdown List */}
+            <div className="space-y-4">
+              {metrics.spendingOverview.categories.map((cat, i) => (
+                <div key={i} className="flex justify-between items-center text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-3 h-3 rounded-md" style={{ backgroundColor: cat.color }} />
+                    <span className="font-bold text-gray-700">{cat.name}</span>
                   </div>
+                  <span className="font-mono font-black text-gray-900">
+                    {formatOMR(cat.amount)} {isAr ? 'ر.ع' : 'OMR'}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
+
+          <div className="pt-6 border-t border-gray-100 mt-6">
+            <Link
+              to="/accountant/expenses"
+              className="text-xs font-black text-[#A11212] hover:underline flex items-center justify-between"
+            >
+              <span>{isAr ? 'إدارة وتسجيل المصروفات اليومية' : 'Manage & Track All Expenses'}</span>
+              <ExternalLink size={14} />
+            </Link>
+          </div>
         </div>
+
       </div>
 
-      {/* 3. Bottom Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Expenses Donut */}
-        <div className="lg:col-span-3 bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-sm text-gray-800">{isAr ? 'نظرة على المصروفات' : 'Expenses Overview'}</h3>
-            <button className="text-xs text-gray-400 flex items-center font-medium hover:text-gray-600">
-              {isAr ? 'هذا الشهر' : 'This Month'} <ChevronDown size={14} className="ms-1" />
-            </button>
+      {/* ── 3. BOTTOM ROW (Card Details & DSR | Recent Orders Table) ─────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+        {/* ── LEFT: Card Details & DSR Cashflow Vault (Col 4) ─────────────── */}
+        <div className="lg:col-span-4 bg-white rounded-3xl p-6 sm:p-7 border border-gray-150 shadow-[0_2px_14px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+          <div>
+            <h3 className="text-base font-black text-gray-900 mb-5">
+              {isAr ? 'تفاصيل الحساب والبطاقة' : 'Card Details'}
+            </h3>
+
+            {/* Miniature Digital Corporate Card */}
+            <div className="relative w-full rounded-2xl p-5 shadow-lg overflow-hidden text-white bg-gradient-to-br from-[#730b0b] via-[#911212] to-[#5a0808] border border-white/20 mb-6">
+              {/* Background watermark */}
+              <div className="absolute right-3 top-3 opacity-10 text-4xl font-black select-none pointer-events-none">
+                MAISARAH
+              </div>
+
+              <div className="flex items-center gap-3 mb-4">
+                {/* Chip Icon */}
+                <div className="w-9 h-7 rounded-md bg-gradient-to-tr from-amber-300 via-yellow-100 to-amber-400 border border-amber-500/60 p-1 flex flex-col justify-around shadow-inner">
+                  <div className="h-0.5 bg-amber-700/40 rounded-full" />
+                  <div className="h-0.5 bg-amber-700/40 rounded-full" />
+                  <div className="h-0.5 bg-amber-700/40 rounded-full" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold text-white/70 uppercase">Maisarah Treasury Vault</div>
+                  <div className="text-base font-black text-white leading-tight">738,738.00 <span className="text-xs font-bold text-white/70">OMR</span></div>
+                </div>
+              </div>
+
+              {/* Card Number */}
+              <div className="font-mono text-sm tracking-widest text-white/90 font-bold mb-3">
+                6263 7678 6226 0880
+              </div>
+
+              {/* Expire & CVV */}
+              <div className="flex justify-between items-center text-[10px] font-bold text-white/70 pt-2 border-t border-white/10">
+                <div>
+                  <span className="block text-[8px] uppercase tracking-wider text-white/50">{isAr ? 'تاريخ الانتهاء' : 'Expire Date'}</span>
+                  <span className="font-mono text-white text-xs">09/29</span>
+                </div>
+                <div>
+                  <span className="block text-[8px] uppercase tracking-wider text-white/50">CVV</span>
+                  <span className="font-mono text-white text-xs">999</span>
+                </div>
+                <div>
+                  <span className="bg-white/20 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase">Corporate</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Daily Transaction Limit (Equalizer vertical bars soundwave visual!) */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-gray-500">
+                  {isAr ? 'حد المعاملات اليومي (DSR)' : 'Daily Transaction Limit'}
+                </span>
+                <span className="text-xs font-black text-gray-900">24%</span>
+              </div>
+
+              {/* Soundwave equalizer pill bars */}
+              <div className="flex items-center gap-1.5 h-6">
+                {Array.from({ length: 20 }).map((_, idx) => {
+                  const isActive = idx < 5; // 24% approx 5 bars
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex-1 rounded-full transition-all ${
+                        isActive ? 'bg-[#A11212]' : 'bg-gray-150'
+                      }`}
+                      style={{ height: `${isActive ? 18 + (idx % 3) * 4 : 14}px` }}
+                    />
+                  );
+                })}
+              </div>
+
+              <div className="flex justify-between items-center text-xs font-bold text-gray-400 pt-1">
+                <span className="font-mono text-gray-800">2,678.89 {isAr ? 'ر.ع' : 'OMR'}</span>
+                <span>{isAr ? 'من 6,000.00 ر.ع' : 'of 6,000.00 OMR'}</span>
+              </div>
+            </div>
           </div>
-          
-          <div className="h-48 flex-1 flex items-center justify-center relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={expensesData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {expensesData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+
+          <div className="pt-5 border-t border-gray-100 mt-6 flex justify-between items-center">
+            <Link
+              to="/accountant/dsr"
+              className="text-xs font-black text-[#A11212] hover:underline flex items-center gap-1"
+            >
+              <span>{isAr ? 'سجل المقبوضات اليومية (DSR)' : 'Daily Sales Register (DSR)'}</span>
+              <ExternalLink size={13} />
+            </Link>
+            <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+              {isAr ? 'مستقر' : 'Cleared'}
+            </span>
+          </div>
+        </div>
+
+        {/* ── RIGHT: Recent Orders / Invoices Table (Col 8) ─────────────────── */}
+        <div className="lg:col-span-8 bg-white rounded-3xl p-6 sm:p-7 border border-gray-150 shadow-[0_2px_14px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+          <div>
+            {/* Header with Search and Sort */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
+              <h3 className="text-base font-black text-gray-900">
+                {isAr ? 'الطلبات والفواتير الأخيرة' : 'Recent orders'}
+              </h3>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                {/* Search */}
+                <div className="relative flex-1 sm:w-56">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={isAr ? 'بحث بالطلب أو العميل...' : 'Search...'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-1.5 text-xs font-bold text-gray-800 outline-none focus:border-[#A11212] transition-colors"
+                  />
+                </div>
+
+                {/* Sort By Dropdown */}
+                <div className="relative">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-[#A11212] cursor-pointer"
+                  >
+                    <option value="date">{isAr ? 'ترتيب: التاريخ' : 'Sort by: Date'}</option>
+                    <option value="price">{isAr ? 'ترتيب: المبلغ' : 'Sort by: Price'}</option>
+                    <option value="status">{isAr ? 'ترتيب: الحالة' : 'Sort by: Status'}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto rounded-2xl border border-gray-150">
+              <table className="w-full text-start text-xs">
+                <thead className="bg-gray-50/70 border-b border-gray-150 text-[11px] font-bold text-gray-500">
+                  <tr>
+                    <th className="py-3 px-3 text-center w-8">
+                      <input type="checkbox" className="rounded accent-[#A11212]" />
+                    </th>
+                    <th className="py-3 px-3 text-start">{isAr ? 'رقم الطلب' : 'Order ID'}</th>
+                    <th className="py-3 px-3 text-start">{isAr ? 'المبلغ' : 'Price'}</th>
+                    <th className="py-3 px-3 text-start">{isAr ? 'التاريخ' : 'Date'}</th>
+                    <th className="py-3 px-3 text-start">{isAr ? 'الوقت والقسم' : 'Time'}</th>
+                    <th className="py-3 px-3 text-start">{isAr ? 'الحالة' : 'Status'}</th>
+                    <th className="py-3 px-2 text-center w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {orderItems.slice(0, 5).map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50/70 transition-colors">
+                      <td className="py-3.5 px-3 text-center">
+                        <input type="checkbox" className="rounded accent-[#A11212]" />
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <span className="font-mono font-bold text-gray-900 block">{item.orderId}</span>
+                        <span className="text-[10px] text-gray-400 font-bold truncate max-w-[160px] block">
+                          {item.client}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3 font-mono font-black text-gray-900">
+                        {formatOMR(item.price)} {isAr ? 'ر.ع' : 'OMR'}
+                      </td>
+                      <td className="py-3.5 px-3 font-medium text-gray-600">
+                        {item.dateStr}
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <span className="text-gray-700 block">{item.timeStr}</span>
+                        <span className="text-[10px] text-gray-400 block">{item.department}</span>
+                      </td>
+                      <td className="py-3.5 px-3">
+                        {item.status === 'Completed' ? (
+                          <span className="inline-flex items-center gap-1.5 font-bold text-xs text-emerald-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                            {isAr ? 'مكتمل' : 'Completed'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 font-bold text-xs text-red-500">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            {isAr ? 'معلق' : 'Pending'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-2 text-center text-gray-400 hover:text-gray-700 cursor-pointer">
+                        <MoreVertical size={14} />
+                      </td>
+                    </tr>
                   ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(value) => `${value}%`}
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
 
-          <div className="grid grid-cols-2 gap-y-3 mt-4">
-            {expensesData.map(item => (
-              <div key={item.name} className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }}></span>
-                <span className="text-xs text-gray-600 font-medium">{isAr ? item.name : item.nameEn}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Revenue Line Chart */}
-        <div className="lg:col-span-4 bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-sm text-gray-800">{isAr ? 'الإيرادات مقابل المصروفات' : 'Revenue vs Expenses'}</h3>
-            <button className="text-xs text-gray-400 flex items-center font-medium hover:text-gray-600">
-              {isAr ? 'أخر 6 أشهر' : 'Last 6 Months'} <ChevronDown size={14} className="ms-1" />
-            </button>
-          </div>
-
-          <div className="h-48 flex-1 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={revenueData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                <XAxis dataKey={isAr ? 'month' : 'monthEn'} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} dy={10} />
-                <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(val) => `${val/1000}K`} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
-                />
-                <Line type="monotone" dataKey="rev" name={isAr ? 'الإيرادات' : 'Revenue'} stroke="#A11212" strokeWidth={2} dot={{ r: 3, fill: '#A11212' }} activeDot={{ r: 5 }} />
-                <Line type="monotone" dataKey="exp" name={isAr ? 'المصروفات' : 'Expenses'} stroke="#1f2937" strokeWidth={2} dot={{ r: 3, fill: '#1f2937' }} activeDot={{ r: 5 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          
-          <div className="flex justify-center gap-6 mt-4 pt-4 border-t border-gray-50">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-brand-dark"></span>
-              <span className="text-xs text-gray-600 font-medium">{isAr ? 'الإيرادات' : 'Revenue'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-gray-800"></span>
-              <span className="text-xs text-gray-600 font-medium">{isAr ? 'المصروفات' : 'Expenses'}</span>
+                  {orderItems.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-gray-400 italic font-bold">
+                        {isAr ? 'لا توجد فواتير أو معاملات مطابقة للبحث' : 'No orders or invoices found.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
 
-        {/* Upcoming Payments */}
-        <div className="lg:col-span-3 bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <div className="flex justify-between items-center mb-5">
-            <h3 className="font-bold text-sm text-gray-800">{isAr ? 'الدفعات القادمة' : 'Upcoming Payments'}</h3>
-            <button className="text-brand-dark text-xs font-semibold hover:underline">
-              {isAr ? 'عرض الكل' : 'View All'}
-            </button>
-          </div>
-          
-          <div className="space-y-4">
-            {getUpcomingPayments(isAr).map(payment => (
-              <div key={payment.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-xl hover:bg-red-50/30 transition-colors border border-transparent hover:border-red-100/50">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center font-bold text-xs text-gray-600 shadow-sm">
-                    {payment.logo}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-gray-800">{payment.title}</h4>
-                    <p className="text-xs text-gray-400 font-medium mt-1">{payment.date}</p>
-                  </div>
-                </div>
-                <div className="font-bold text-sm text-brand-dark">
-                  {payment.amount.toLocaleString()} {isAr ? 'ر.ع' : 'OMR'}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="lg:col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <h3 className="font-bold text-sm text-gray-800 mb-5 text-center">{isAr ? 'إجراءات سريعة' : 'Quick Actions'}</h3>
-          <div className="grid grid-cols-2 gap-3 h-full pb-6">
-            <button className="flex flex-col items-center justify-center gap-2 bg-gray-50 hover:bg-brand-dark hover:text-white text-gray-600 rounded-xl transition-colors p-3 border border-transparent hover:border-brand-dark group">
-              <PlusCircle size={20} className="text-brand-dark group-hover:text-white" />
-              <span className="text-xs font-bold">{isAr ? 'مشروع جديد' : 'New Project'}</span>
-            </button>
-            <button className="flex flex-col items-center justify-center gap-2 bg-gray-50 hover:bg-brand-dark hover:text-white text-gray-600 rounded-xl transition-colors p-3 border border-transparent hover:border-brand-dark group">
-              <Upload size={20} className="text-brand-dark group-hover:text-white" />
-              <span className="text-xs font-bold">{isAr ? 'رفع مستند' : 'Upload Doc'}</span>
-            </button>
-            <button className="flex flex-col items-center justify-center gap-2 bg-gray-50 hover:bg-brand-dark hover:text-white text-gray-600 rounded-xl transition-colors p-3 border border-transparent hover:border-brand-dark group">
-              <CreditCard size={20} className="text-brand-dark group-hover:text-white" />
-              <span className="text-xs font-bold">{isAr ? 'مصروف جديد' : 'New Expense'}</span>
-            </button>
-            <button className="flex flex-col items-center justify-center gap-2 bg-gray-50 hover:bg-brand-dark hover:text-white text-gray-600 rounded-xl transition-colors p-3 border border-transparent hover:border-brand-dark group">
-              <BarChart2 size={20} className="text-brand-dark group-hover:text-white" />
-              <span className="text-xs font-bold">{isAr ? 'تقرير مالي' : 'Finance Report'}</span>
-            </button>
+          <div className="pt-4 mt-3 flex justify-between items-center text-xs font-bold text-gray-400">
+            <span>{isAr ? `إظهار ${Math.min(5, orderItems.length)} من ${orderItems.length} معاملة` : `Showing ${Math.min(5, orderItems.length)} of ${orderItems.length} transactions`}</span>
+            <Link to="/accountant/invoices" className="text-[#A11212] hover:underline font-black flex items-center gap-1">
+              <span>{isAr ? 'عرض كل الفواتير والتحصيلات' : 'View All Invoices'}</span>
+              <ExternalLink size={12} />
+            </Link>
           </div>
         </div>
 
       </div>
 
-      {/* ── 4. Approved Salary Payroll Queue (To be Paid) ────────────────── */}
-      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-4 mt-6">
-        <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
-          <CreditCard className="text-brand-dark" size={22} />
-          {isAr ? 'رواتب الموظفين المعتمدة للصرف ("بانتظار الصرف")' : 'Approved Staff Payroll Queue ("To be Paid")'}
-        </h3>
-        <p className="text-xs text-gray-500 font-bold">
-          {isAr ? 'قائمة كشوف الرواتب المعتمدة من الإدارة بانتظار صرف المحاسب' : 'Payroll batches authorized by Executive Management requiring final bank release.'}
-        </p>
+      {/* ── 4. APPROVED STAFF PAYROLL DISBURSEMENT QUEUE (Collapsible Tab) ─────── */}
+      <div className="bg-white rounded-3xl border border-gray-150 p-6 shadow-[0_2px_14px_rgba(0,0,0,0.03)]">
+        <div className="flex justify-between items-center cursor-pointer" onClick={() => setShowPayrollQueue(!showPayrollQueue)}>
+          <div>
+            <h3 className="font-black text-gray-900 text-sm flex items-center gap-2">
+              <CreditCard className="text-[#A11212]" size={18} />
+              {isAr ? 'طابور صرف رواتب الموظفين المعتمدة' : 'Approved Staff Payroll Queue ("To be Paid")'}
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#A11212]/10 text-[#A11212]">
+                {pendingPayroll.filter(p => p.status !== 'Paid').length} {isAr ? 'بانتظار الصرف' : 'Pending'}
+              </span>
+            </h3>
+            <p className="text-xs text-gray-400 font-bold mt-0.5">
+              {isAr ? 'صرف مستحقات الموظفين المعتمدة نهائياً من الإدارة العامة' : 'Execute final bank salary disbursals approved by executive management.'}
+            </p>
+          </div>
+          <ChevronDown size={18} className={`text-gray-400 transition-transform ${showPayrollQueue ? 'rotate-180' : ''}`} />
+        </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-gray-100">
-          <table className="w-full text-start">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الموظف' : 'Employee'}</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'القسم والمنصب' : 'Department & Role'}</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الراتب الأساسي' : 'Basic Salary'}</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'البدلات' : 'Allowances'}</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'صافي المستحق' : 'Net Payable'}</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الحالة' : 'Status'}</th>
-                <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الإجراء' : 'Action'}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
-              {pendingPayroll.map(r => {
-                const allowancesSum = r.allowances.transport + r.allowances.housing + r.allowances.other;
-                const netPay = r.basicSalary + allowancesSum + r.overtime + r.incentives + r.bonuses - r.deductions;
-                return (
-                  <tr key={r.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4">
-                      <p className="font-black text-sm text-gray-900">{r.employeeName}</p>
-                      <p className="text-[9px] text-gray-400 font-bold">{r.id}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-xs font-bold text-gray-800">{r.dept}</p>
-                      <p className="text-[9px] text-gray-400 font-bold">{r.role}</p>
-                    </td>
-                    <td className="px-6 py-4 text-xs font-bold text-gray-700">{r.basicSalary} {isAr ? 'ر.ع' : 'OMR'}</td>
-                    <td className="px-6 py-4 text-xs font-bold text-gray-700">{allowancesSum} {isAr ? 'ر.ع' : 'OMR'}</td>
-                    <td className="px-6 py-4 text-xs font-black text-brand-dark">{netPay} {isAr ? 'ر.ع' : 'OMR'}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${
-                        r.status === 'Paid' ? 'bg-green-50 text-green-700 border-green-150' : 'bg-red-50 text-red-700 border-red-150'
-                      }`}>
-                        {r.status === 'Paid' ? (isAr ? 'تم الصرف' : 'Paid') : (isAr ? 'بانتظار الصرف' : 'Pending')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {r.status !== 'Paid' ? (
-                        <button
-                          onClick={() => handleDisbursePayroll(r.id)}
-                          className="bg-brand-dark text-white text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors shadow-sm"
-                        >
-                          {isAr ? 'صرف الراتب' : 'Disburse'}
-                        </button>
-                      ) : (
-                        <span className="text-[10px] text-gray-400 font-bold italic">{isAr ? 'تم التحويل' : 'Disbursed'}</span>
-                      )}
+        {showPayrollQueue && (
+          <div className="mt-5 overflow-x-auto rounded-2xl border border-gray-150">
+            <table className="w-full text-start text-xs">
+              <thead className="bg-gray-50 border-b border-gray-150 text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                <tr>
+                  <th className="py-3 px-4 text-start">{isAr ? 'الموظف' : 'Employee'}</th>
+                  <th className="py-3 px-4 text-start">{isAr ? 'القسم' : 'Department'}</th>
+                  <th className="py-3 px-4 text-start">{isAr ? 'الأساسي' : 'Basic'}</th>
+                  <th className="py-3 px-4 text-start">{isAr ? 'البدلات' : 'Allowances'}</th>
+                  <th className="py-3 px-4 text-start">{isAr ? 'الصافي' : 'Net'}</th>
+                  <th className="py-3 px-4 text-start">{isAr ? 'الحالة' : 'Status'}</th>
+                  <th className="py-3 px-4 text-end">{isAr ? 'الإجراء' : 'Action'}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {pendingPayroll.map(r => {
+                  const allowancesSum = r.allowances ? (r.allowances.transport + r.allowances.housing + r.allowances.other) : 0;
+                  const netPay = (r.basicSalary || 0) + allowancesSum + (r.overtime || 0) + (r.incentives || 0) + (r.bonuses || 0) - (r.deductions || 0);
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="py-3 px-4">
+                        <span className="font-black text-gray-900 block">{r.employeeName}</span>
+                        <span className="text-[10px] text-gray-400 font-mono">{r.id}</span>
+                      </td>
+                      <td className="py-3 px-4 font-bold text-gray-700">{r.dept}</td>
+                      <td className="py-3 px-4 font-mono">{r.basicSalary} OMR</td>
+                      <td className="py-3 px-4 font-mono">{allowancesSum} OMR</td>
+                      <td className="py-3 px-4 font-mono font-black text-[#A11212]">{netPay} OMR</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                          r.status === 'Paid' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                        }`}>
+                          {r.status === 'Paid' ? (isAr ? 'تم الصرف' : 'Paid') : (isAr ? 'بانتظار الصرف' : 'Pending')}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-end">
+                        {r.status !== 'Paid' ? (
+                          <button
+                            onClick={() => handleDisbursePayroll(r.id)}
+                            className="bg-[#A11212] text-white text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl hover:bg-[#800e0e] transition-colors shadow-2xs"
+                          >
+                            {isAr ? 'صرف الراتب' : 'Disburse'}
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 font-bold text-xs italic">{isAr ? 'تم التحويل' : 'Disbursed'}</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {pendingPayroll.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-6 text-center text-gray-400 italic font-bold">
+                      {isAr ? 'لا توجد كشوف رواتب معتمدة في طابور الصرف حالياً' : 'No approved payroll batches in the queue.'}
                     </td>
                   </tr>
-                );
-              })}
-              {pendingPayroll.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="text-center p-8 text-gray-400 italic">
-                    {isAr ? 'لا توجد كشوف رواتب معتمدة في طابور الصرف حالياً.' : 'No approved salary sheets in "To be Paid" queue.'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
     </div>
   );
-};
+}
 
-export default AccountantDashboard;

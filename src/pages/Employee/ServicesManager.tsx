@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTranslation } from 'react-i18next';
 import { logActivity } from '../../lib/activityLogger';
 import {
-  Briefcase, Plus, X, CheckCircle2, Clock, AlertTriangle,
+  Briefcase, Plus, PlusCircle, X, CheckCircle2, Clock, AlertTriangle,
   PlayCircle, Search, ChevronDown, AlertCircle, Eye, Trash2, Edit,
   Receipt, DollarSign, FileCheck, ShieldCheck, CheckCheck, FileText
 } from 'lucide-react';
@@ -308,11 +308,23 @@ const ServicesManager = () => {
         setFormMsg({ type: 'ok', text: isAr ? 'تم تحديث الخدمة بنجاح' : 'Service updated successfully' });
         setServices(prev => prev.map(s => s.id === editingService.id ? { ...s, ...payload, clients: clients.find(c => c.id === payload.client_id) ? { company_name: clients.find(c => c.id === payload.client_id)!.company_name } : null } : s));
       } else {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('services')
           .insert([payload])
           .select('id, title, status, description, due_date, created_at, client_id, clients(company_name)')
-          .single();
+          .maybeSingle();
+
+        // Safe retry if employee_id foreign key constraint fails
+        if (error && (error.message?.includes('foreign key') || (error as any).code === '23503')) {
+          delete payload.employee_id;
+          const retry = await supabase
+            .from('services')
+            .insert([payload])
+            .select('id, title, status, description, due_date, created_at, client_id, clients(company_name)')
+            .maybeSingle();
+          data = retry.data;
+          error = retry.error;
+        }
 
         if (error) throw error;
 
