@@ -10,7 +10,7 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabaseClient';
 import {
-  getDSREntries, saveDSREntries, addDSREntry, updateDSREntry, deleteDSREntry, syncDSRToCloud, type DSREntry
+  getDSREntries, saveDSREntries, addDSREntry, updateDSREntry, deleteDSREntry, syncDSRToCloud, fetchCloudDSREntries, type DSREntry
 } from '../../utils/dsrSync';
 import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
@@ -184,43 +184,66 @@ export default function EmployeeDSR() {
     fetchClients();
   }, [role, user?.id, effectiveDeptId]);
 
-  // Load DSR entries strictly scoped to this employee's department and assigned work
-  const loadData = useCallback(() => {
-    const all = getDSREntries();
+  // Helper to scope entries to department
+  const scopeEntries = useCallback((all: DSREntry[]) => {
     if (role === 'manager') {
-      setEntries(all);
-    } else {
-      const deptServicesSet = new Set(activeServiceCatalog.map(s => s.title.toLowerCase()));
-      const scoped = all.filter(e => {
-        // Logged by this employee
-        if (user?.id && (e.created_by === user.id || e.employee_id === user.id)) return true;
-        if (e.employee_name && employeeName && e.employee_name.toLowerCase() === employeeName.toLowerCase()) return true;
-        // Service belongs to this department's catalog
-        if (e.service && deptServicesSet.has(e.service.toLowerCase())) return true;
-        // Keyword heuristic for legacy department data
-        const svc = (e.service || '').toLowerCase();
-        if (effectiveDeptId === 'bookkeeping' && (svc.includes('book') || svc.includes('reconcil') || svc.includes('statement') || svc.includes('ledger') || svc.includes('report'))) return true;
-        if (effectiveDeptId === 'tax_vat' && (svc.includes('vat') || svc.includes('tax cert') || svc.includes('exemption') || svc.includes('objection'))) return true;
-        if (effectiveDeptId === 'audit' && svc.includes('audit')) return true;
-        if (effectiveDeptId === 'income_tax' && (svc.includes('income tax') || svc.includes('corporate tax') || svc.includes('tax card') || svc.includes('0 filing') || svc.includes('zero filing'))) return true;
-        if (effectiveDeptId === 'consultancy' && (svc.includes('feasibility') || svc.includes('business plan') || svc.includes('consult') || svc.includes('model') || svc.includes('jaheez'))) return true;
-        if (effectiveDeptId === 'liquidation' && (svc.includes('liquidation') || svc.includes('cr cancel') || svc.includes('clearance') || svc.includes('ministry'))) return true;
-        return false;
-      });
-      setEntries(scoped);
+      return all;
     }
+    const deptServicesSet = new Set(activeServiceCatalog.map(s => s.title.toLowerCase()));
+    return all.filter(e => {
+      // Logged by this employee
+      if (user?.id && (e.created_by === user.id || e.employee_id === user.id)) return true;
+      if (e.employee_name && employeeName && e.employee_name.toLowerCase() === employeeName.toLowerCase()) return true;
+      // Service belongs to this department's catalog
+      if (e.service && deptServicesSet.has(e.service.toLowerCase())) return true;
+      // Keyword heuristic for legacy department data
+      const svc = (e.service || '').toLowerCase();
+      if (effectiveDeptId === 'bookkeeping' && (svc.includes('book') || svc.includes('reconcil') || svc.includes('statement') || svc.includes('ledger') || svc.includes('report'))) return true;
+      if (effectiveDeptId === 'tax_vat' && (svc.includes('vat') || svc.includes('tax cert') || svc.includes('exemption') || svc.includes('objection'))) return true;
+      if (effectiveDeptId === 'audit' && svc.includes('audit')) return true;
+      if (effectiveDeptId === 'income_tax' && (svc.includes('income tax') || svc.includes('corporate tax') || svc.includes('tax card') || svc.includes('0 filing') || svc.includes('zero filing'))) return true;
+      if (effectiveDeptId === 'consultancy' && (svc.includes('feasibility') || svc.includes('business plan') || svc.includes('consult') || svc.includes('model') || svc.includes('jaheez'))) return true;
+      if (effectiveDeptId === 'liquidation' && (svc.includes('liquidation') || svc.includes('cr cancel') || svc.includes('clearance') || svc.includes('ministry'))) return true;
+      return false;
+    });
   }, [role, activeServiceCatalog, user?.id, employeeName, effectiveDeptId]);
+
+  // Load DSR entries strictly scoped to this employee's department and assigned work
+  const loadData = useCallback(async () => {
+    const allLocal = getDSREntries();
+    setEntries(scopeEntries(allLocal));
+
+    try {
+      const allCloud = await fetchCloudDSREntries();
+      setEntries(scopeEntries(allCloud));
+    } catch (err) {
+      console.warn('Cloud DSR sync notice in EmployeeDSR:', err);
+    }
+  }, [scopeEntries]);
 
   useEffect(() => {
     loadData();
-    const handleUpdate = () => loadData();
+    const handleUpdate = () => {
+      const fresh = getDSREntries();
+      setEntries(scopeEntries(fresh));
+    };
     window.addEventListener('maisarah_dsr_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
+
+    // Live Supabase Postgres Realtime sync
+    const channel = supabase
+      .channel('dsr_employee_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dsr_entries' }, () => {
+        loadData();
+      })
+      .subscribe();
+
     return () => {
       window.removeEventListener('maisarah_dsr_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
+      supabase.removeChannel(channel);
     };
-  }, [loadData]);
+  }, [loadData, scopeEntries]);
 
   // Unique service titles for filter
   const uniqueServices = useMemo(() => {

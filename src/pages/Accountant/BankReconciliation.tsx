@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
-  getDSREntries, updateDSREntry, addDSREntry, type DSREntry
+  getDSREntries, updateDSREntry, addDSREntry, fetchCloudDSREntries, type DSREntry
 } from '../../utils/dsrSync';
 
 export interface BankTransaction {
@@ -54,15 +54,21 @@ export default function BankReconciliation() {
     company_name: '',
     service: 'VAT / Tax Advisory',
     cr_number: '',
-    employee_name: 'Shafnas',
+    employee_name: '',
     amount: 0,
     gov_fee: 0,
   });
 
-  // Load DSR Data
-  const loadDSR = () => {
+  // Load DSR Data (local + live Supabase)
+  const loadDSR = async () => {
     const data = getDSREntries();
     setDsrEntries(data);
+    try {
+      const cloud = await fetchCloudDSREntries();
+      setDsrEntries(cloud);
+    } catch {
+      // ignore
+    }
   };
 
   useEffect(() => {

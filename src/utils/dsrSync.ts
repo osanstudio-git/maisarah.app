@@ -38,351 +38,165 @@ export interface DSREntry {
 
 const STORAGE_KEY = 'maisarah_dsr_entries_v1';
 
-// Seed data from the real user DSR spreadsheet
-const INITIAL_DSR_SEED: DSREntry[] = [
-  {
-    id: 'dsr-001',
-    date: '2026-07-30',
-    employee_name: 'Yousuf',
-    service: 'VAT Q2',
-    company_name: 'JABAL AL HADEED TRADING',
-    cr_number: 'OM1100244153',
-    amount: 30.000,
-    gov_fee: 0.000,
-    profit: 30.000,
-    status: 'Paid',
-    payment_date: '2026-08-04',
-    payment_method: 'Mobile Payment',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-002',
-    date: '2026-07-28',
-    employee_name: 'Yousuf',
-    service: 'VAT Q2',
-    company_name: 'ALDAWAHI',
-    cr_number: '',
-    amount: 25.000,
-    gov_fee: 0.000,
-    profit: 25.000,
-    status: 'Paid',
-    payment_date: '2026-08-05',
-    payment_method: 'Mobile Payment',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-003',
-    date: '2026-08-06',
-    employee_name: 'Yousuf',
-    service: 'VAT',
-    company_name: 'إطلال الخليج الحديثة ش م م',
-    cr_number: '1108366',
-    amount: 75.000,
-    gov_fee: 0.000,
-    profit: 75.000,
-    status: 'Paid',
-    payment_date: '2026-08-06',
-    payment_method: 'POS',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-004',
-    date: '2026-08-02',
-    employee_name: 'Shahad',
-    service: 'Liquidation',
-    company_name: 'Salah faroq(salah faroq)',
-    cr_number: '1475532',
-    amount: 175.000,
-    gov_fee: 0.000,
-    profit: 175.000,
-    status: 'Paid',
-    payment_date: '2026-08-02',
-    payment_method: 'Mobile Payment',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-005',
-    date: '2026-08-02',
-    employee_name: 'Shahad',
-    service: 'Festability study',
-    company_name: 'abduarhman',
-    cr_number: '1663800',
-    amount: 30.000,
-    gov_fee: 0.000,
-    profit: 30.000,
-    status: 'Paid',
-    payment_date: '2026-08-02',
-    payment_method: 'Mobile Payment',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-006',
-    date: '2026-08-02',
-    employee_name: 'Shahad',
-    service: 'Festability study',
-    company_name: 'suvaid',
-    cr_number: '1604222',
-    amount: 25.000,
-    gov_fee: 0.000,
-    profit: 25.000,
-    status: 'Unpaid',
-    payment_date: '',
-    payment_method: '',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-007',
-    date: '2026-08-02',
-    employee_name: 'Shahad',
-    service: 'Festability study',
-    company_name: 'suvaid',
-    cr_number: '1668010',
-    amount: 25.000,
-    gov_fee: 0.000,
-    profit: 25.000,
-    status: 'Unpaid',
-    payment_date: '',
-    payment_method: '',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-008',
-    date: '2026-08-02',
-    employee_name: 'Shahad',
-    service: 'Festability study',
-    company_name: 'suvaid',
-    cr_number: '1667952',
-    amount: 25.000,
-    gov_fee: 0.000,
-    profit: 25.000,
-    status: 'Unpaid',
-    payment_date: '',
-    payment_method: '',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-009',
-    date: '2026-08-03',
-    employee_name: 'Shahad',
-    service: 'Minstry of labor',
-    company_name: 'sohaila',
-    cr_number: '1615163',
-    amount: 5.000,
-    gov_fee: 0.000,
-    profit: 5.000,
-    status: 'Paid',
-    payment_date: '2026-08-04',
-    payment_method: 'Mobile Payment',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-010',
-    date: '2026-08-04',
-    employee_name: 'Shahad',
-    service: 'Festability study',
-    company_name: 'shafnaas',
-    cr_number: '1666825',
-    amount: 30.000,
-    gov_fee: 0.000,
-    profit: 30.000,
-    status: 'Paid',
-    payment_date: '2026-08-05',
-    payment_method: 'Bank transfer',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-011',
-    date: '2026-07-27',
-    employee_name: 'Shafnas',
-    service: 'VAT FILING 2026 Q2',
-    company_name: 'JAY PRAKASH INTERNATIONAL TRADING & CONT EST SPC',
-    cr_number: '1527047',
-    amount: 10.000,
-    gov_fee: 0.000,
-    profit: 10.000,
-    status: 'Paid',
-    payment_date: '2026-08-01',
-    payment_method: 'Mobile Payment',
-    accountant_note: '',
-    invoice_issued: true,
-    invoice_number: 'INV-2026-8801',
-    receipt_number: 'REC-2026-8801',
-  },
-  {
-    id: 'dsr-012',
-    date: '2026-07-26',
-    employee_name: 'Shafnas',
-    service: 'VAT FILING 2026 Q2',
-    company_name: 'GEO MATICS',
-    cr_number: '1310264',
-    amount: 25.000,
-    gov_fee: 0.000,
-    profit: 25.000,
-    status: 'Paid',
-    payment_date: '2026-08-03',
-    payment_method: 'Cash',
-    accountant_note: '',
-    invoice_issued: true,
-    invoice_number: 'INV-2026-8802',
-    receipt_number: 'REC-2026-8802',
-  },
-  {
-    id: 'dsr-013',
-    date: '2026-08-02',
-    employee_name: 'Shafnas',
-    service: 'VAT FILING 2026 Q2',
-    company_name: 'WEST POINT INTERNATIONAL',
-    cr_number: '1454687',
-    amount: 15.000,
-    gov_fee: 0.000,
-    profit: 15.000,
-    status: 'Paid',
-    payment_date: '2026-08-05',
-    payment_method: 'POS',
-    accountant_note: 'change the invoice amount 20 to 15',
-    invoice_issued: true,
-    invoice_number: 'INV-2026-8803',
-    receipt_number: 'REC-2026-8803',
-  },
-  {
-    id: 'dsr-014',
-    date: '2026-08-04',
-    employee_name: 'Shafnas',
-    service: 'Vat Cancellation',
-    company_name: 'SALIM MOHSIN AND PARTNER',
-    cr_number: '1355875',
-    amount: 25.000,
-    gov_fee: 0.000,
-    profit: 25.000,
-    status: 'Paid',
-    payment_date: '2026-08-04',
-    payment_method: 'POS',
-    accountant_note: '',
-    invoice_issued: true,
-    invoice_number: 'INV-2026-8804',
-    receipt_number: 'REC-2026-8804',
-  },
-  {
-    id: 'dsr-015',
-    date: '2026-08-04',
-    employee_name: 'Shafnas',
-    service: 'VAT FILING 2026 Q2',
-    company_name: 'Alpha Union Trading Company LLC',
-    cr_number: '1600462',
-    amount: 25.000,
-    gov_fee: 0.000,
-    profit: 25.000,
-    status: 'Paid',
-    payment_date: '2026-08-04',
-    payment_method: 'Bank transfer',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-016',
-    date: '2026-07-29',
-    employee_name: 'Shafnas',
-    service: 'VAT FILING 2026 Q2',
-    company_name: 'Quality services and trading',
-    cr_number: '1592723',
-    amount: 10.000,
-    gov_fee: 0.000,
-    profit: 10.000,
-    status: 'Paid',
-    payment_date: '2026-08-04',
-    payment_method: 'Bank transfer',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-017',
-    date: '2026-07-15',
-    employee_name: 'Shafnas',
-    service: 'Income tax and Vat Filing',
-    company_name: 'Urban Crew Investment',
-    cr_number: '1452206',
-    amount: 75.000,
-    gov_fee: 0.000,
-    profit: 75.000,
-    status: 'Partial',
-    payment_date: '2026-08-06',
-    payment_method: 'POS',
-    accountant_note: '50 to 150, he paid 75 only, at the end of the month balance',
-    invoice_issued: true,
-    invoice_number: 'INV-2026-8805',
-    receipt_number: 'REC-2026-8805',
-  },
-  {
-    id: 'dsr-018',
-    date: '2026-08-03',
-    employee_name: 'Azhaar',
-    service: 'KSA Audit',
-    company_name: 'Osbic(Ayoob)',
-    cr_number: '1454255',
-    amount: 60.000,
-    gov_fee: 4.000,
-    profit: 56.000,
-    status: 'Paid',
-    payment_date: '2026-08-05',
-    payment_method: 'Mobile Payment',
-    accountant_note: '',
-    invoice_issued: false,
-  },
-  {
-    id: 'dsr-019',
-    date: '2026-09-10',
-    employee_name: 'Shafnas',
-    service: 'Tax & VAT',
-    company_name: 'Thanveer (OSBIC)',
-    cr_number: '1454255',
-    amount: 350.000,
-    gov_fee: 0.000,
-    profit: 350.000,
-    status: 'Unpaid',
-    payment_date: '',
-    payment_method: '',
-    accountant_note: 'Accepted from Quote #QT-2026-7418',
-    invoice_issued: false,
-  }
-];
+// Known dummy / test seed identifiers to permanently purge
+const DUMMY_SEED_IDS = new Set([
+  'dsr-001', 'dsr-002', 'dsr-003', 'dsr-004', 'dsr-005',
+  'dsr-006', 'dsr-007', 'dsr-008', 'dsr-009', 'dsr-010',
+  'dsr-011', 'dsr-012', 'dsr-013', 'dsr-014', 'dsr-015',
+  'dsr-016', 'dsr-017', 'dsr-018', 'dsr-019'
+]);
 
+const DUMMY_SEED_COMPANIES = new Set([
+  'jabal al hadeed trading',
+  'aldawahi',
+  'إطلال الخليج الحديثة ش م م',
+  'salah faroq ali al madhani',
+  'abduarhman al shanfari',
+  'quality services and trading llc',
+  'al amal al mutamayez trading',
+  'barka oasis projects',
+  'royal horizon investments',
+  'sohar logistics hub spc',
+  'al raha advanced healthcare',
+  'al majd fast transport llc',
+  'summit trading & contracting',
+  'jay prakash international trading & cont est spc',
+  'geo matics',
+  'west point international',
+  'salim mohsin and partner',
+  'thanveer (osbic)'
+]);
+
+export function isDummyDSREntry(entry: any): boolean {
+  if (!entry) return true;
+  if (typeof entry.id === 'string') {
+    if (DUMMY_SEED_IDS.has(entry.id)) return true;
+    if (/^dsr-0\d{2}$/.test(entry.id)) return true;
+  }
+  if (entry.company_name && DUMMY_SEED_COMPANIES.has(String(entry.company_name).trim().toLowerCase())) {
+    return true;
+  }
+  return false;
+}
+
+// Initial DSR seed is strictly empty - no hardcoded dummy data
+const INITIAL_DSR_SEED: DSREntry[] = [];
+
+/**
+ * Get non-dummy DSR entries from local storage and purge any legacy mock seeds
+ */
 export function getDSREntries(): DSREntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_DSR_SEED));
-      return INITIAL_DSR_SEED;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_DSR_SEED));
-      return INITIAL_DSR_SEED;
+    if (!Array.isArray(parsed)) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+      return [];
     }
-    return parsed;
+    // Filter out dummy seed records from legacy browser caches
+    const cleaned = parsed.filter(e => !isDummyDSREntry(e));
+    if (cleaned.length !== parsed.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+      try {
+        window.dispatchEvent(new CustomEvent('maisarah_dsr_updated', { detail: cleaned }));
+      } catch {
+        // ignore
+      }
+    }
+    return cleaned;
   } catch {
-    return INITIAL_DSR_SEED;
+    return [];
   }
 }
 
+/**
+ * Save entries to local storage and trigger global sync event
+ */
 export function saveDSREntries(entries: DSREntry[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-    window.dispatchEvent(new CustomEvent('maisarah_dsr_updated', { detail: entries }));
+    const validOnly = entries.filter(e => !isDummyDSREntry(e));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(validOnly));
+    window.dispatchEvent(new CustomEvent('maisarah_dsr_updated', { detail: validOnly }));
   } catch (e) {
     console.error('Failed to save DSR entries:', e);
   }
 }
 
+/**
+ * Fetch real live DSR entries directly from Supabase and synchronize with local storage
+ */
+export async function fetchCloudDSREntries(): Promise<DSREntry[]> {
+  try {
+    const { data, error } = await supabase
+      .from('dsr_entries')
+      .select('*')
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.warn('Error fetching cloud DSR entries:', error.message);
+      return getDSREntries();
+    }
+
+    if (data && Array.isArray(data)) {
+      const cloudEntries: DSREntry[] = data
+        .filter((row: any) => !isDummyDSREntry(row))
+        .map((row: any) => ({
+          id: row.id,
+          date: row.date || (row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+          employee_name: row.employee_name || 'Staff Member',
+          employee_id: row.employee_id,
+          department_id: row.department_id,
+          service: row.service_name || 'Professional Service',
+          company_name: row.company_name || 'Valued Client',
+          client_id: row.client_id,
+          cr_number: row.cr_number || '',
+          amount: Number(row.amount || 0),
+          gov_fee: Number(row.gov_fee || 0),
+          profit: Number(row.profit !== undefined ? row.profit : (Number(row.amount || 0) - Number(row.gov_fee || 0))),
+          status: row.status || 'Paid',
+          work_status: row.work_status || 'Completed',
+          payment_terms: row.payment_terms || 'Full Upfront',
+          total_agreed_amount: Number(row.total_agreed_amount || row.amount || 0),
+          paid_amount: Number(row.paid_amount || (row.status === 'Paid' ? row.amount : 0)),
+          remaining_balance: Number(row.remaining_balance || 0),
+          installment_number: row.installment_number || '',
+          payment_date: row.payment_date || row.date || '',
+          payment_method: row.payment_method || '',
+          accountant_note: row.accountant_note || '',
+          invoice_issued: Boolean(row.invoice_issued),
+          invoice_number: row.invoice_number || '',
+          receipt_number: row.receipt_number || '',
+          payment_reference: row.payment_reference || '',
+          verified_by_accountant: Boolean(row.verified_by_accountant),
+          reconciled: Boolean(row.reconciled),
+          bank_reference: row.bank_reference || '',
+          bank_name: row.bank_name || '',
+          created_at: row.created_at,
+        }));
+
+      // Merge with non-dummy local entries that might be unsynced
+      const local = getDSREntries();
+      const cloudIds = new Set(cloudEntries.map(e => e.id));
+      const nonCloudLocal = local.filter(e => !cloudIds.has(e.id) && !isDummyDSREntry(e));
+      const merged = [...cloudEntries, ...nonCloudLocal];
+      saveDSREntries(merged);
+      return merged;
+    }
+
+    return getDSREntries();
+  } catch (err) {
+    console.warn('fetchCloudDSREntries error:', err);
+    return getDSREntries();
+  }
+}
+
+/**
+ * Add a new DSR entry locally and sync to cloud
+ */
 export function addDSREntry(entry: Omit<DSREntry, 'id' | 'profit'> & { id?: string; profit?: number }): DSREntry {
   const current = getDSREntries();
   const amt = Number(entry.amount || 0);
@@ -395,7 +209,7 @@ export function addDSREntry(entry: Omit<DSREntry, 'id' | 'profit'> & { id?: stri
   const newEntry: DSREntry = {
     id: entry.id || `dsr-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     date: entry.date || new Date().toISOString().split('T')[0],
-    employee_name: entry.employee_name || 'Unassigned',
+    employee_name: entry.employee_name || 'Staff Member',
     employee_id: entry.employee_id,
     created_by: entry.created_by || entry.employee_id,
     department_id: entry.department_id,
@@ -420,11 +234,16 @@ export function addDSREntry(entry: Omit<DSREntry, 'id' | 'profit'> & { id?: stri
     invoice_number: entry.invoice_number,
     receipt_number: entry.receipt_number,
     payment_reference: entry.payment_reference,
+    verified_by_accountant: entry.verified_by_accountant || false,
     created_at: new Date().toISOString(),
   };
 
-  // Check if duplicate already exists by company & service
-  const existingIdx = current.findIndex(e => 
+  if (isDummyDSREntry(newEntry)) {
+    return newEntry;
+  }
+
+  // Deduplicate if matching unverified unpaid task
+  const existingIdx = current.findIndex(e =>
     e.company_name.toLowerCase() === newEntry.company_name.toLowerCase() &&
     e.service.toLowerCase() === newEntry.service.toLowerCase() &&
     e.status === 'Unpaid'
@@ -439,9 +258,20 @@ export function addDSREntry(entry: Omit<DSREntry, 'id' | 'profit'> & { id?: stri
   }
 
   saveDSREntries(updated);
+
+  // Sync to Supabase in the background
+  try {
+    syncDSRToCloud(newEntry);
+  } catch (err) {
+    console.warn('addDSREntry cloud sync caught:', err);
+  }
+
   return newEntry;
 }
 
+/**
+ * Update an existing DSR entry locally and sync to Supabase
+ */
 export function updateDSREntry(id: string, patch: Partial<DSREntry>): DSREntry | null {
   const current = getDSREntries();
   const idx = current.findIndex(e => e.id === id);
@@ -469,9 +299,37 @@ export function updateDSREntry(id: string, patch: Partial<DSREntry>): DSREntry |
   const next = [...current];
   next[idx] = updatedEntry;
   saveDSREntries(next);
+
+  // If this entry exists in Supabase (valid UUID), sync the update
+  if (id && !id.startsWith('dsr-')) {
+    const cloudUpdate: any = {};
+    if (patch.verified_by_accountant !== undefined) cloudUpdate.verified_by_accountant = patch.verified_by_accountant;
+    if (patch.invoice_issued !== undefined) cloudUpdate.invoice_issued = patch.invoice_issued;
+    if (patch.invoice_number !== undefined) cloudUpdate.invoice_number = patch.invoice_number;
+    if (patch.receipt_number !== undefined) cloudUpdate.receipt_number = patch.receipt_number;
+    if (patch.accountant_note !== undefined) cloudUpdate.accountant_note = patch.accountant_note;
+    if (patch.gov_fee !== undefined) cloudUpdate.gov_fee = patch.gov_fee;
+    if (patch.amount !== undefined) cloudUpdate.amount = patch.amount;
+    if (patch.status !== undefined) cloudUpdate.status = patch.status;
+    if (patch.payment_method !== undefined) cloudUpdate.payment_method = patch.payment_method;
+    if (patch.payment_date !== undefined) cloudUpdate.payment_date = patch.payment_date;
+    cloudUpdate.profit = updatedProfit;
+
+    supabase
+      .from('dsr_entries')
+      .update(cloudUpdate)
+      .eq('id', id)
+      .then(({ error }) => {
+        if (error) console.warn('Supabase DSR update notice:', error.message);
+      });
+  }
+
   return updatedEntry;
 }
 
+/**
+ * Auto-create a DSR entry when a task or service is assigned
+ */
 export function autoCreateDSREntryFromTask(params: {
   serviceTitle: string;
   companyName: string;
@@ -479,6 +337,7 @@ export function autoCreateDSREntryFromTask(params: {
   clientId?: string;
   employeeName: string;
   employeeId?: string;
+  departmentId?: string;
   amount?: number;
   govFee?: number;
   date?: string;
@@ -492,6 +351,7 @@ export function autoCreateDSREntryFromTask(params: {
     date: dateStr,
     employee_name: params.employeeName || 'Staff Member',
     employee_id: params.employeeId,
+    department_id: params.departmentId,
     service: params.serviceTitle || 'Professional Accounting Service',
     company_name: params.companyName || 'Valued Corporate Client',
     client_id: params.clientId,
@@ -512,28 +372,6 @@ export function autoCreateDSREntryFromTask(params: {
     verified_by_accountant: false
   });
 
-  // Async sync to Supabase with real schema columns
-  try {
-    const cloudPayload: any = {
-      gov_fee: gov,
-      profit: amt - gov,
-      verified_by_accountant: false,
-      invoice_issued: false,
-      accountant_note: `Auto-created from task: ${params.serviceTitle || ''}`
-    };
-    if (params.clientId) cloudPayload.client_id = params.clientId;
-    if (params.employeeId) cloudPayload.employee_id = params.employeeId;
-
-    supabase
-      .from('dsr_entries')
-      .insert([cloudPayload])
-      .then(({ error }) => {
-        if (error) console.warn('Supabase DSR auto-sync notice:', error.message);
-      });
-  } catch (err) {
-    console.warn('Auto DSR cloud sync caught:', err);
-  }
-
   return entry;
 }
 
@@ -542,6 +380,10 @@ export function autoCreateDSREntryFromTask(params: {
  */
 export async function syncDSRToCloud(entry: DSREntry, clientId?: string): Promise<{ dsrId?: string; invoiceId?: string }> {
   try {
+    if (isDummyDSREntry(entry)) {
+      return {};
+    }
+
     const paymentRef = entry.payment_reference || [
       entry.payment_method,
       entry.payment_terms ? `Terms: ${entry.payment_terms}` : '',
@@ -557,16 +399,28 @@ export async function syncDSRToCloud(entry: DSREntry, clientId?: string): Promis
       entry.accountant_note ? `Note: ${entry.accountant_note}` : ''
     ].filter(Boolean).join(' | ');
 
+    const targetClientId = clientId || entry.client_id;
+
     const payload: any = {
-      gov_fee: entry.gov_fee || 0,
-      profit: entry.profit || (entry.amount - entry.gov_fee),
+      company_name: entry.company_name || 'Valued Client',
+      service_name: entry.service || 'Professional Service',
+      cr_number: entry.cr_number || '',
+      amount: Number(entry.amount || 0),
+      gov_fee: Number(entry.gov_fee || 0),
+      profit: Number(entry.profit !== undefined ? entry.profit : (Number(entry.amount || 0) - Number(entry.gov_fee || 0))),
+      status: entry.status || 'Paid',
+      payment_method: entry.payment_method || null,
+      payment_date: entry.payment_date || entry.date || new Date().toISOString().split('T')[0],
+      date: entry.date || new Date().toISOString().split('T')[0],
+      employee_name: entry.employee_name || 'Staff Member',
       verified_by_accountant: Boolean(entry.verified_by_accountant),
       invoice_issued: Boolean(entry.invoice_issued),
+      invoice_number: entry.invoice_number || null,
+      receipt_number: entry.receipt_number || null,
       payment_reference: paymentRef || null,
       accountant_note: noteDetails
     };
 
-    const targetClientId = clientId || entry.client_id;
     if (targetClientId) payload.client_id = targetClientId;
     if (entry.employee_id) payload.employee_id = entry.employee_id;
 
@@ -625,9 +479,22 @@ export async function syncDSRToCloud(entry: DSREntry, clientId?: string): Promis
   }
 }
 
+/**
+ * Delete a DSR entry locally and remove from Supabase
+ */
 export function deleteDSREntry(id: string): void {
   const current = getDSREntries();
   const next = current.filter(e => e.id !== id);
   saveDSREntries(next);
-}
 
+  // If entry exists in Supabase (valid UUID), delete it
+  if (id && !id.startsWith('dsr-')) {
+    supabase
+      .from('dsr_entries')
+      .delete()
+      .eq('id', id)
+      .then(({ error }) => {
+        if (error) console.warn('Supabase DSR delete notice:', error.message);
+      });
+  }
+}

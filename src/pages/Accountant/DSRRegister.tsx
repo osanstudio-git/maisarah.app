@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
-  getDSREntries, saveDSREntries, addDSREntry, updateDSREntry, deleteDSREntry, type DSREntry
+  getDSREntries, saveDSREntries, addDSREntry, updateDSREntry, deleteDSREntry, fetchCloudDSREntries, type DSREntry
 } from '../../utils/dsrSync';
 import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
@@ -57,32 +57,52 @@ export default function DSRRegister() {
   // New Entry Form State
   const [newForm, setNewForm] = useState({
     date: new Date().toISOString().split('T')[0],
-    employee_name: 'Shafnas',
-    service: 'VAT FILING 2026 Q2',
+    employee_name: '',
+    service: '',
     company_name: '',
     cr_number: '',
-    amount: 30,
+    amount: 0,
     gov_fee: 0,
     status: 'Paid' as 'Paid' | 'Unpaid' | 'Partial',
     payment_date: new Date().toISOString().split('T')[0],
-    payment_method: 'Mobile Payment' as DSREntry['payment_method'],
+    payment_method: 'Bank transfer' as DSREntry['payment_method'],
     accountant_note: '',
   });
 
-  // Load DSR entries
-  const loadData = useCallback(() => {
-    const data = getDSREntries();
-    setEntries(data);
+  // Load live DSR entries (local cache + real-time cloud data)
+  const loadData = useCallback(async () => {
+    const local = getDSREntries();
+    setEntries(local);
+
+    try {
+      const cloud = await fetchCloudDSREntries();
+      setEntries(cloud);
+    } catch (err) {
+      console.warn('Could not fetch cloud DSR entries:', err);
+    }
   }, []);
 
   useEffect(() => {
     loadData();
-    const handleUpdate = () => loadData();
+    const handleUpdate = () => {
+      const fresh = getDSREntries();
+      setEntries(fresh);
+    };
     window.addEventListener('maisarah_dsr_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
+
+    // Live Postgres Realtime channel for DSR entries
+    const channel = supabase
+      .channel('dsr_accountant_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dsr_entries' }, () => {
+        loadData();
+      })
+      .subscribe();
+
     return () => {
       window.removeEventListener('maisarah_dsr_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
+      supabase.removeChannel(channel);
     };
   }, [loadData]);
 
@@ -445,15 +465,15 @@ export default function DSRRegister() {
     setIsAddModalOpen(false);
     setNewForm({
       date: new Date().toISOString().split('T')[0],
-      employee_name: 'Shafnas',
-      service: 'VAT FILING 2026 Q2',
+      employee_name: '',
+      service: '',
       company_name: '',
       cr_number: '',
-      amount: 30,
+      amount: 0,
       gov_fee: 0,
       status: 'Paid',
       payment_date: new Date().toISOString().split('T')[0],
-      payment_method: 'Mobile Payment',
+      payment_method: 'Bank transfer',
       accountant_note: '',
     });
     loadData();
