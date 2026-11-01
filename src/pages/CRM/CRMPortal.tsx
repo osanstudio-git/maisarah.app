@@ -245,6 +245,19 @@ export default function CRMPortal() {
     }
     return INITIAL_REMINDERS;
   });
+
+  // Safe RFC4122 v4 UUID generator with fallback for non-secure origins
+  const generateUUID = (): string => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  };
+
   const [dbLoading, setDbLoading] = useState(true);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -331,8 +344,8 @@ export default function CRMPortal() {
   const [staffList, setStaffList] = useState(MOCK_EMPLOYEES);
 
   // ── Fetch all data from Supabase ─────────────────────────────────────────
-  const fetchAll = useCallback(async () => {
-    setDbLoading(true);
+  const fetchAll = useCallback(async (isInitial = false) => {
+    if (isInitial) setDbLoading(true);
     try {
       const [crmLeadsRes, leadsRes, clientsRes, quotesRes, profilesRes] = await Promise.all([
         supabase.from('crm_leads').select('*').order('created_at', { ascending: false }),
@@ -366,20 +379,20 @@ export default function CRMPortal() {
     } catch (err) {
       console.error('CRM fetchAll error:', err);
     } finally {
-      setDbLoading(false);
+      if (isInitial) setDbLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchAll();
+    fetchAll(true);
 
     // Real-time subscriptions across all relevant tables
     const ch = supabase
       .channel('crm_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_leads' }, () => fetchAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_leads' }, () => fetchAll(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchAll(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchAll(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => fetchAll(false))
       .subscribe();
 
     channelRef.current = ch;
@@ -490,6 +503,7 @@ export default function CRMPortal() {
   // --- Onboarding Client Modal/Form States ---
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [isSubmittingOnboard, setIsSubmittingOnboard] = useState(false);
+  const [onboardFormMsg, setOnboardFormMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [onboardIntakeMode, setOnboardIntakeMode] = useState<'quick' | 'full'>('quick');
   const [clientType, setClientType] = useState<'B2B' | 'B2C'>('B2B');
   const getInitialOnboardForm = (managerName?: string) => ({
@@ -1125,8 +1139,14 @@ export default function CRMPortal() {
     e.preventDefault();
     if (isSubmittingOnboard) return;
     setIsSubmittingOnboard(true);
+    setOnboardFormMsg(null);
 
     try {
+      const clientName = (clientType === 'B2B' ? (onboardForm.companyName || onboardForm.name) : onboardForm.name).trim();
+      if (!clientName) {
+        throw new Error(isAr ? 'يرجى إدخال اسم العميل أو المنشأة' : 'Please enter Client or Company name');
+      }
+
       let calculatedBilling = onboardForm.monthlyBilling;
       if (calculatedBilling === 0) {
         calculatedBilling = onboardForm.servicePackage.reduce((sum, pkg) => sum + (SERVICE_RATES[pkg] || 0), 0);
@@ -1138,53 +1158,64 @@ export default function CRMPortal() {
       const expiryDate = onboardForm.contractExpiryDate ||
         new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const clientName = clientType === 'B2B' ? (onboardForm.companyName || onboardForm.name) : onboardForm.name;
+      // Safe RFC4122 v4 UUID generated beforehand
+      const finalClientId = generateUUID();
 
       const clientPayload: any = {
+        id: finalClientId,
         company_name: clientName,
-        contact_person: onboardForm.name,
-        cr_number: clientType === 'B2B' ? (onboardForm.registrationNumber || null) : null,
-        email: onboardForm.email || null,
-        phone: onboardForm.phone || null,
+        contact_person: (onboardForm.name || clientName).trim(),
+        cr_number: clientType === 'B2B' ? (onboardForm.registrationNumber?.trim() || null) : null,
+        email: onboardForm.email?.trim() || null,
+        phone: onboardForm.phone?.trim() || null,
         monthly_billing: calculatedBilling,
         contract_expiry_date: expiryDate,
-        source: clientType === 'B2B' ? 'b2b' : 'direct',
-        compliance_status: 'active'
+        source: clientType === 'B2B' ? (onboardForm.leadSource || 'b2b') : 'direct',
+        compliance_status: 'Active',
+        is_club_member: !!onboardForm.isClubMember,
+        b2b_partner_id: onboardForm.b2bPartnerId || null,
+        b2b_partner_name: onboardForm.b2bPartnerName || null,
+        industry: onboardForm.industry || null,
+        year_established: onboardForm.yearEstablished || null,
+        employees_count: onboardForm.numberOfEmployees || null,
+        company_address: onboardForm.companyAddress || null,
+        website: onboardForm.website || null,
+        preferred_communication: onboardForm.preferredCommunication || 'whatsapp',
+        dealing_with_audit_firm: onboardForm.dealingWithAuditFirm || 'no',
+        accounting_software: onboardForm.accountingSoftware || null,
+        current_auditors: onboardForm.currentAuditors || null,
+        services_of_interest: onboardForm.servicePackage || [],
+        priority: onboardForm.priority || 'high',
+        meeting_notes: onboardForm.meetingNotes || null,
+        estimated_opportunity_value: onboardForm.estimatedOpportunityValue || calculatedBilling,
       };
 
-      let newClientRow: any = null;
-
-      // 1. Try full insertion into clients table
-      try {
-        const { data, error } = await supabase
-          .from('clients')
-          .insert([{
-            ...clientPayload,
-            is_club_member: onboardForm.isClubMember,
-          }])
-          .select()
-          .maybeSingle();
-
-        if (error) {
-          console.warn('Full client insert notice:', error.message);
-          // Fallback to core standard schema
-          const { data: fbData, error: fbError } = await supabase
-            .from('clients')
-            .insert([clientPayload])
-            .select()
-            .maybeSingle();
-          if (fbError) console.warn('Standard client insert notice:', fbError.message);
-          newClientRow = fbData;
-        } else {
-          newClientRow = data;
+      // 1. Insert into clients table
+      const { error: insertErr } = await supabase.from('clients').insert([clientPayload]);
+      if (insertErr) {
+        console.warn('Extended client insert notice, falling back to core schema:', insertErr.message);
+        const corePayload = {
+          id: finalClientId,
+          company_name: clientPayload.company_name,
+          contact_person: clientPayload.contact_person,
+          cr_number: clientPayload.cr_number,
+          email: clientPayload.email,
+          phone: clientPayload.phone,
+          monthly_billing: clientPayload.monthly_billing,
+          contract_expiry_date: clientPayload.contract_expiry_date,
+          source: clientPayload.source,
+          compliance_status: 'Active',
+        };
+        const retry = await supabase.from('clients').insert([corePayload]);
+        if (retry.error) {
+          throw new Error(retry.error.message || 'Failed to insert client into database');
         }
-      } catch (err) {
-        console.warn('Supabase client insert error:', err);
       }
 
-      const effectiveClientId = newClientRow?.id || crypto.randomUUID();
+      // 2. Parallel secondary records creation (Quotations, Jobs, Deliverable Services, Notifications)
+      const secondaryTasks: Promise<any>[] = [];
 
-      // 2. Auto-create quotations in Supabase
+      // A. Auto-create quotation in Studio
       if (onboardForm.autoQuotation && onboardForm.servicePackage.length > 0) {
         const quoteRows = onboardForm.servicePackage.map(pkg => {
           let budget = SERVICE_RATES[pkg] || 0;
@@ -1192,11 +1223,15 @@ export default function CRMPortal() {
             budget = Math.round(budget * 0.90);
           }
           const vatAmt = +(budget * 0.05).toFixed(3);
+          const quoteNum = `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
           return {
-            client_id: effectiveClientId,
+            client_id: finalClientId,
+            quote_number: quoteNum,
+            quotation_number: quoteNum,
             client_name: clientName,
             client_type: clientType,
             services: [pkg],
+            service_type: pkg,
             subtotal: budget,
             vat_amount: vatAmt,
             total_amount: +(budget + vatAmt).toFixed(3),
@@ -1204,20 +1239,22 @@ export default function CRMPortal() {
             valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           };
         });
-        try {
-          await supabase.from('quotations').insert(quoteRows);
-        } catch (qErr) {
-          console.warn('Quote auto-create notice:', qErr);
-        }
+        secondaryTasks.push(Promise.resolve(supabase.from('quotations').insert(quoteRows)));
       }
 
-      // 3. Create Department Work Deliverables & Client Jobs
+      // B. Create client_jobs and services deliverables for each selected service
       if (onboardForm.servicePackage.length > 0) {
         for (const serviceName of onboardForm.servicePackage) {
           const rate = SERVICE_RATES[serviceName] || 250;
-          try {
-            await supabase.from('client_jobs').insert([{
-              client_id: effectiveClientId,
+          const sLower = serviceName.toLowerCase();
+          const deptId = sLower.includes('tax') || sLower.includes('vat') ? 'tax'
+            : sLower.includes('bookkeeping') || sLower.includes('accounting') ? 'bookkeeping'
+            : sLower.includes('corporate') ? 'corporate'
+            : 'audit';
+
+          secondaryTasks.push(
+            Promise.resolve(supabase.from('client_jobs').insert([{
+              client_id: finalClientId,
               service_type: serviceName,
               billing_type: 'monthly',
               status: 'pending',
@@ -1225,44 +1262,42 @@ export default function CRMPortal() {
               vat_amount: +(rate * 0.05).toFixed(3),
               description: `Onboarded Client Work: ${serviceName} for ${clientName}`,
               deadline: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-            }]);
-          } catch (jobErr) {
-            console.warn('Client job insert notice:', jobErr);
-          }
+            }]))
+          );
 
-          try {
-            await supabase.from('services').insert([{
-              client_id: effectiveClientId,
+          secondaryTasks.push(
+            Promise.resolve(supabase.from('services').insert([{
+              client_id: finalClientId,
+              department_id: deptId,
               title: `${serviceName} - ${clientName}`,
               description: onboardForm.initialActivity || `Client service deliverable for ${serviceName}. Assigned Manager: ${onboardForm.overallManager}`,
               status: 'ongoing',
               due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-            }]);
-          } catch (sErr) {
-            console.warn('Service deliverable insert notice:', sErr);
-          }
+            }]))
+          );
         }
       }
 
-      // 4. Notify HOD role about new client
-      try {
-        await supabase.from('notifications').insert([{
+      // C. HOD Notification
+      secondaryTasks.push(
+        Promise.resolve(supabase.from('notifications').insert([{
           role: 'hod',
           type: 'new_client',
           title: 'New Client Onboarded via CRM',
           message: `Client "${clientName}" onboarded. Services: ${onboardForm.servicePackage.join(', ') || 'General'}. Manager: ${onboardForm.overallManager}.`,
-          ref_id: effectiveClientId,
+          ref_id: finalClientId,
           ref_table: 'clients',
-        }]);
-      } catch (nErr) {
-        console.warn('Notification insert notice:', nErr);
-      }
+        }]))
+      );
 
-      // 5. Optimistic State Update for instantaneous UI responsiveness
+      // Execute secondary tasks safely without throwing if any secondary table has a warning
+      await Promise.allSettled(secondaryTasks);
+
+      // 3. Optimistic State Update for instantaneous UI responsiveness
       const newClientObj: Client = {
-        id: effectiveClientId,
-        name: onboardForm.name,
-        companyName: clientType === 'B2B' ? onboardForm.companyName : undefined,
+        id: finalClientId,
+        name: onboardForm.name || clientName,
+        companyName: clientType === 'B2B' ? clientName : undefined,
         registrationNumber: onboardForm.registrationNumber || undefined,
         email: onboardForm.email,
         phone: onboardForm.phone,
@@ -1275,24 +1310,34 @@ export default function CRMPortal() {
         yearlyBilling: calculatedBilling * 12,
         created_at: new Date().toISOString().slice(0, 10),
         contractExpiryDate: expiryDate,
-        isClubMember: onboardForm.isClubMember,
+        isClubMember: !!onboardForm.isClubMember,
         activityHistory: onboardForm.initialActivity ? [`${new Date().toISOString().slice(0, 10)} - ${onboardForm.initialActivity}`] : []
       };
 
-      setClients(prev => [newClientObj, ...prev.filter(c => c.id !== effectiveClientId)]);
+      setClients(prev => [newClientObj, ...prev.filter(c => c.id !== finalClientId)]);
 
-      setShowOnboardingModal(false);
-      setOnboardForm(getInitialOnboardForm(staffList[0]?.name || MOCK_EMPLOYEES[0].name));
+      setOnboardFormMsg({
+        type: 'ok',
+        text: isAr
+          ? `🎉 تم تسجيل وإدخال العميل "${clientName}" بنجاح!`
+          : `🎉 Client "${clientName}" registered & onboarded successfully!`
+      });
 
-      alert(isAr
-        ? `🎉 تم تسجيل وإدخال العميل "${clientName}" بنجاح وتوليد عروض الأسعار وتوزيع مهام العمل!`
-        : `🎉 Client "${clientName}" registered & onboarded successfully! Quotations and department tasks generated.`
-      );
+      // Close modal smoothly after brief visual confirmation
+      setTimeout(() => {
+        setShowOnboardingModal(false);
+        setOnboardForm(getInitialOnboardForm(staffList[0]?.name || MOCK_EMPLOYEES[0].name));
+        setOnboardFormMsg(null);
+      }, 700);
 
-      await fetchAll();
+      // Refresh in background without tearing down the UI
+      fetchAll(false);
     } catch (err: any) {
       console.error('Error during client onboarding:', err);
-      alert(err.message || 'Error processing client onboarding');
+      setOnboardFormMsg({
+        type: 'err',
+        text: err.message || (isAr ? 'حدث خطأ أثناء تسجيل العميل' : 'Error processing client onboarding')
+      });
     } finally {
       setIsSubmittingOnboard(false);
     }
@@ -3140,6 +3185,22 @@ export default function CRMPortal() {
                   <span>Auto-create Quotations in Studio</span>
                 </label>
               </div>
+
+              {/* Status Message (Success / Error) */}
+              {onboardFormMsg && (
+                <div className={`p-4 rounded-xl flex items-center gap-3 text-xs font-bold animate-in fade-in ${
+                  onboardFormMsg.type === 'ok'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}>
+                  {onboardFormMsg.type === 'ok' ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                  )}
+                  <span>{onboardFormMsg.text}</span>
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}

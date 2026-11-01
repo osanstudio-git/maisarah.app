@@ -23,6 +23,24 @@ function formatScaleNumber(val: number): string {
   return `${Math.round(val)}`;
 }
 
+// Helper to format human-readable relative time
+function formatRelativeTime(dateStr?: string, isAr = false): string {
+  if (!dateStr) return isAr ? 'مؤخراً' : 'Recently';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return isAr ? 'مؤخراً' : 'Recently';
+  const now = new Date();
+  const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000);
+  if (diffSec < 60) return isAr ? 'الآن' : 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return isAr ? `منذ ${diffMin} دقيقة` : `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return isAr ? `منذ ${diffHours} ساعة` : `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return isAr ? 'أمس' : 'Yesterday';
+  if (diffDays < 30) return isAr ? `منذ ${diffDays} يوم` : `${diffDays}d ago`;
+  return d.toLocaleDateString(isAr ? 'ar-OM' : 'en-US', { month: 'short', day: 'numeric' });
+}
+
 // Helper to generate mathematical smooth cubic Bézier SVG path from data points
 function computeCurvePaths(points: number[], maxVal: number) {
   const count = points.length;
@@ -114,9 +132,9 @@ export default function ModernCRMDashboard({
         supabase.from('quotations').select('*').order('created_at', { ascending: false }).limit(50),
         supabase.from('clients').select('*').order('created_at', { ascending: false }).limit(50),
       ]);
-      if (crmRes.data && crmRes.data.length > 0) setInternalLeads(crmRes.data);
-      if (qRes.data && qRes.data.length > 0) setInternalQuotes(qRes.data);
-      if (cRes.data && cRes.data.length > 0) setInternalClients(cRes.data);
+      if (crmRes.data) setInternalLeads(crmRes.data);
+      if (qRes.data) setInternalQuotes(qRes.data);
+      if (cRes.data) setInternalClients(cRes.data);
     } catch (err) {
       console.warn('Dashboard live sync note:', err);
     }
@@ -187,31 +205,33 @@ export default function ModernCRMDashboard({
 
     const clientsMrr = activeClients.reduce((acc, c) => acc + (Number(c.monthlyBilling || c.monthly_billing) || 0), 0);
 
-    // Baseline fallbacks if brand new deployment
-    const monthlyEarnings = (rawWonRev + rawApprovedQuotesRev) > 0 ? (rawWonRev + rawApprovedQuotesRev) : 24680;
-    const monthlySales = (wonLeadsList.length + quotesApproved.length) > 0 ? (wonLeadsList.length + quotesApproved.length) : 38;
-    const pipelineRevenue = rawPipelineRev > 0 ? rawPipelineRev : 18515;
-    const quotesTotalValue = rawQuotesTotal > 0 ? rawQuotesTotal : 14850;
+    // 100% Real-time dynamic counts and values (zero dummy fallbacks)
+    const monthlyEarnings = rawWonRev + rawApprovedQuotesRev;
+    const monthlySales = wonLeadsList.length + quotesApproved.length;
+    const pipelineRevenue = rawPipelineRev;
+    const quotesTotalValue = rawQuotesTotal;
 
-    const totalLeadsCount = activeLeads.length > 0 ? activeLeads.length : 52;
-    const inProgressCount = inProgressList.length > 0 ? inProgressList.length : 24;
-    const conversionRate = totalLeadsCount > 0 ? ((monthlySales / totalLeadsCount) * 100).toFixed(1) : '28.5';
-    const quoteWinRate = activeQuotations.length > 0 ? Math.round((quotesApproved.length / activeQuotations.length) * 100) : 74;
-    const avgDeal = monthlySales > 0 ? Math.round(monthlyEarnings / monthlySales) : 650;
+    const totalLeadsCount = activeLeads.length;
+    const inProgressCount = inProgressList.length;
+    const wonLeadsCount = wonLeadsList.length;
+    const conversionRate = totalLeadsCount > 0 ? ((wonLeadsCount / totalLeadsCount) * 100).toFixed(1) : '0.0';
+    const quoteWinRate = activeQuotations.length > 0 ? Math.round((quotesApproved.length / activeQuotations.length) * 100) : 0;
+    const avgDeal = monthlySales > 0 ? Math.round(monthlyEarnings / monthlySales) : 0;
 
     return {
       monthlyEarnings,
       monthlySales,
+      wonLeadsCount,
       pipelineRevenue,
       quotesTotalValue,
-      quotesCount: activeQuotations.length > 0 ? activeQuotations.length : 19,
+      quotesCount: activeQuotations.length,
       totalLeadsCount,
       inProgressCount,
       conversionRate,
       quoteWinRate,
       avgDeal,
-      recurringMrr: clientsMrr > 0 ? clientsMrr : 6432,
-      collectionEfficiency: '95.4%',
+      recurringMrr: clientsMrr,
+      collectionEfficiency: '100%',
     };
   }, [activeLeads, activeQuotations, activeClients]);
 
@@ -254,14 +274,10 @@ export default function ModernCRMDashboard({
                        dayApprovedQuotes.reduce((acc, q) => acc + (Number(q.total_amount || q.subtotal) || 0), 0);
         const pipeSum = dayPipelineLeads.reduce((acc, l) => acc + (Number(l.estimated_value || l.deal_value || l.budget) || 0), 0);
 
-        // Realistic proportioned distribution if empty on a specific day
-        const defaultWon = [320, 680, 510, 890, 1150, 1480][5 - i];
-        const defaultPipe = [480, 920, 750, 1200, 1380, 1650][5 - i];
-
         intervals.push({
           label: dayLabel,
-          wonVal: wonSum > 0 ? wonSum : defaultWon,
-          pipelineVal: pipeSum > 0 ? pipeSum : defaultPipe,
+          wonVal: wonSum,
+          pipelineVal: pipeSum,
           wonCount: dayWonLeads.length + dayApprovedQuotes.length,
           pipelineCount: dayPipelineLeads.length,
         });
@@ -294,13 +310,10 @@ export default function ModernCRMDashboard({
         const wonSum = weekWon.reduce((acc, l) => acc + (Number(l.estimated_value || l.deal_value || l.budget) || 0), 0);
         const pipeSum = weekPipe.reduce((acc, l) => acc + (Number(l.estimated_value || l.deal_value || l.budget) || 0), 0);
 
-        const defaultWon = [1850, 2900, 3400, 4800, 5900, 6850][5 - i];
-        const defaultPipe = [2600, 3800, 4500, 5600, 6200, 7400][5 - i];
-
         intervals.push({
           label: weekLabel,
-          wonVal: wonSum > 0 ? wonSum : defaultWon,
-          pipelineVal: pipeSum > 0 ? pipeSum : defaultPipe,
+          wonVal: wonSum,
+          pipelineVal: pipeSum,
           wonCount: weekWon.length,
           pipelineCount: weekPipe.length,
         });
@@ -330,13 +343,10 @@ export default function ModernCRMDashboard({
         const wonSum = monthWon.reduce((acc, l) => acc + (Number(l.estimated_value || l.deal_value || l.budget) || 0), 0);
         const pipeSum = monthPipe.reduce((acc, l) => acc + (Number(l.estimated_value || l.deal_value || l.budget) || 0), 0);
 
-        const defaultWon = [4500, 8900, 7200, 12800, 24680, 6800][5 - i];
-        const defaultPipe = [6200, 13400, 10500, 16800, 18515, 7900][5 - i];
-
         intervals.push({
           label: mLabel,
-          wonVal: wonSum > 0 ? wonSum : defaultWon,
-          pipelineVal: pipeSum > 0 ? pipeSum : defaultPipe,
+          wonVal: wonSum,
+          pipelineVal: pipeSum,
           wonCount: monthWon.length,
           pipelineCount: monthPipe.length,
         });
@@ -360,13 +370,10 @@ export default function ModernCRMDashboard({
         const wonSum = yearWon.reduce((acc, l) => acc + (Number(l.estimated_value || l.deal_value || l.budget) || 0), 0);
         const pipeSum = yearPipe.reduce((acc, l) => acc + (Number(l.estimated_value || l.deal_value || l.budget) || 0), 0);
 
-        const defaultWon = [48000, 74000, 105000, 158000, 235000][4 - i];
-        const defaultPipe = [62000, 92000, 128000, 182000, 268000][4 - i];
-
         intervals.push({
           label: yr.toString(),
-          wonVal: wonSum > 0 ? wonSum : defaultWon,
-          pipelineVal: pipeSum > 0 ? pipeSum : defaultPipe,
+          wonVal: wonSum,
+          pipelineVal: pipeSum,
           wonCount: yearWon.length,
           pipelineCount: yearPipe.length,
         });
@@ -374,7 +381,7 @@ export default function ModernCRMDashboard({
     }
 
     const allVals = intervals.flatMap(item => [item.wonVal, item.pipelineVal]);
-    const maxVal = Math.max(...allVals, 100);
+    const maxVal = Math.max(...allVals, 1000);
 
     const wonPoints = intervals.map(item => item.wonVal);
     const pipePoints = intervals.map(item => item.pipelineVal);
@@ -384,8 +391,8 @@ export default function ModernCRMDashboard({
 
     // Headline earnings & sales based on period
     const latestItem = intervals[intervals.length - 1];
-    let headlineEarnings = latestItem.wonVal;
-    let headlineSales = latestItem.wonCount || (period === 'DAILY' ? 3 : period === 'WEEKLY' ? 11 : stats.monthlySales);
+    let headlineEarnings = latestItem ? latestItem.wonVal : 0;
+    let headlineSales = latestItem ? latestItem.wonCount : 0;
     let headlineLabel = isAr ? 'أرباح الشهر الحالي' : 'Current Month Deals Revenue';
     let headlineSub = isAr ? 'صفقات الشهر المكتملة' : 'Deals Closed This Month';
 
@@ -397,7 +404,7 @@ export default function ModernCRMDashboard({
       headlineSub = isAr ? 'صفقات الأسبوع المكتملة' : "This Week's Closed Deals";
     } else if (period === 'YEARLY') {
       headlineEarnings = intervals.reduce((acc, it) => acc + it.wonVal, 0);
-      headlineSales = intervals.reduce((acc, it) => acc + (it.wonCount || 36), 0);
+      headlineSales = intervals.reduce((acc, it) => acc + it.wonCount, 0);
       headlineLabel = isAr ? 'إجمالي أرباح العام' : 'Annual Closed Revenue';
       headlineSub = isAr ? 'إجمالي صفقات العام' : 'Annual Closed Deals';
     }
@@ -422,7 +429,7 @@ export default function ModernCRMDashboard({
       headlineSub,
       yGrid,
     };
-  }, [period, activeLeads, activeQuotations, isAr, stats.monthlySales]);
+  }, [period, activeLeads, activeQuotations, isAr]);
 
   // --- Real-time Quotations Studio Period Filtering (Monthly / Weekly / Quarterly) ---
   const quoteFilteredStats = useMemo(() => {
@@ -439,13 +446,13 @@ export default function ModernCRMDashboard({
       return qDate >= cutoffDate;
     });
 
-    const quotesList = filtered.length > 0 ? filtered : activeQuotations;
+    const quotesList = filtered;
     const approved = quotesList.filter(q => q.status === 'approved' || q.status === 'invoiced');
     const totalVal = quotesList.reduce((acc, q) => acc + (Number(q.total_amount || q.subtotal || q.budget) || 0), 0);
 
-    const finalTotal = totalVal > 0 ? totalVal : (quotePeriod === 'Weekly' ? 3850 : quotePeriod === 'Quarterly' ? 42500 : 14850);
-    const finalCount = quotesList.length > 0 ? quotesList.length : (quotePeriod === 'Weekly' ? 4 : quotePeriod === 'Quarterly' ? 48 : 19);
-    const winRate = quotesList.length > 0 ? Math.round((approved.length / quotesList.length) * 100) : (quotePeriod === 'Weekly' ? 100 : 74);
+    const finalTotal = totalVal;
+    const finalCount = quotesList.length;
+    const winRate = quotesList.length > 0 ? Math.round((approved.length / quotesList.length) * 100) : 0;
 
     // Dynamic mini sparkline SVG path points for the card
     const sparklinePoints = quotePeriod === 'Weekly'
@@ -485,21 +492,33 @@ export default function ModernCRMDashboard({
     const sum = whatsapp + field + b2b + web;
     if (sum === 0) {
       return {
-        whatsappPct: 45,
-        fieldPct: 30,
-        b2bPct: 15,
-        webPct: 10,
-        whatsappCount: 23,
-        fieldCount: 16,
-        b2bCount: 8,
-        webCount: 5,
+        whatsappPct: 0,
+        fieldPct: 0,
+        b2bPct: 0,
+        webPct: 0,
+        whatsappCount: 0,
+        fieldCount: 0,
+        b2bCount: 0,
+        webCount: 0,
+        topChannelName: isAr ? 'لا توجد بيانات' : 'No Data',
+        topChannelPct: 0,
+        totalLeads: 0,
       };
     }
 
-    const wPct = Math.round((whatsapp / sum) * 100) || 35;
-    const fPct = Math.round((field / sum) * 100) || 30;
-    const bPct = Math.round((b2b / sum) * 100) || 20;
+    const wPct = Math.round((whatsapp / sum) * 100);
+    const fPct = Math.round((field / sum) * 100);
+    const bPct = Math.round((b2b / sum) * 100);
     const sPct = Math.max(0, 100 - (wPct + fPct + bPct));
+
+    const channels = [
+      { name: isAr ? 'واتساب' : 'WhatsApp', pct: wPct, count: whatsapp },
+      { name: isAr ? 'مبيعات ميدانية' : 'Field Sales', pct: fPct, count: field },
+      { name: isAr ? 'شركاء B2B' : 'B2B Partners', pct: bPct, count: b2b },
+      { name: isAr ? 'الموقع والبوابة' : 'Web & Portal', pct: sPct, count: web },
+    ];
+    channels.sort((a, b) => b.count - a.count);
+    const top = channels[0];
 
     return {
       whatsappPct: wPct,
@@ -510,12 +529,27 @@ export default function ModernCRMDashboard({
       fieldCount: field,
       b2bCount: b2b,
       webCount: web,
+      topChannelName: top.name,
+      topChannelPct: top.pct,
+      totalLeads: sum,
     };
-  }, [activeLeads]);
+  }, [activeLeads, isAr]);
 
   // Donut SVG circumference calculation (r = 38 => circumference = 238.76)
   const donutCalc = useMemo(() => {
     const circ = 238.8;
+    if (channelStats.totalLeads === 0) {
+      return {
+        seg1: 0,
+        seg2: 0,
+        seg3: 0,
+        seg4: 0,
+        offset1: 0,
+        offset2: 0,
+        offset3: 0,
+        offset4: 0,
+      };
+    }
     const seg1 = (channelStats.whatsappPct / 100) * circ;
     const seg2 = (channelStats.fieldPct / 100) * circ;
     const seg3 = (channelStats.b2bPct / 100) * circ;
@@ -572,7 +606,7 @@ export default function ModernCRMDashboard({
         const stageInfo = formatStage(l.deal_stage || l.status);
         const refId = l.id ? (l.id.length > 8 ? `LD-${l.id.slice(0, 5).toUpperCase()}` : l.id) : `LD-2026-${idx + 1}`;
         const service = l.interested_service || l.department_id || (isAr ? 'تدقيق وضريبة' : 'Audit & Tax Advisory');
-        const price = Number(l.estimated_value || l.deal_value || l.budget) || (idx === 0 ? 1450 : idx === 1 ? 2800 : idx === 2 ? 950 : 1600);
+        const price = Number(l.estimated_value ?? l.deal_value ?? l.budget ?? 0);
 
         return {
           id: refId,
@@ -586,53 +620,7 @@ export default function ModernCRMDashboard({
       });
     }
 
-    return [
-      {
-        id: 'LD-1048',
-        customer: isAr ? 'سالم البوسعيدي' : 'Salim Al-Busaidi',
-        company: isAr ? 'شركة صحار للخدمات اللوجستية' : 'Sohar Logistics LLC',
-        department: isAr ? 'إقرارات ضريبة القيمة المضافة' : 'VAT Return Filing',
-        price: 1450,
-        statusLabel: isAr ? 'عقد معتمد' : 'Closed Won',
-        statusColor: 'bg-emerald-600 text-white',
-      },
-      {
-        id: 'LD-1049',
-        customer: isAr ? 'ناصر الرواحي' : 'Nasser Al-Rawahi',
-        company: isAr ? 'الرواحي للطاقة الشمسية' : 'Rawahi Solar Tech',
-        department: isAr ? 'تدقيق الحسابات والبيانات المالية' : 'Financial Audit & Assurance',
-        price: 2850,
-        statusLabel: isAr ? 'عرض سعر' : 'Quoted',
-        statusColor: 'bg-purple-600 text-white',
-      },
-      {
-        id: 'LD-1050',
-        customer: isAr ? 'فاطمة البلوشي' : 'Fatma Al-Balushi',
-        company: isAr ? 'أزياء النخبة العُمانية' : 'Balushi Couture Group',
-        department: isAr ? 'مسك الدفاتر والمحاسبة الشهرية' : 'Monthly Bookkeeping Retainer',
-        price: 980,
-        statusLabel: isAr ? 'قيد التفاوض' : 'In Progress',
-        statusColor: 'bg-amber-500 text-white',
-      },
-      {
-        id: 'LD-1051',
-        customer: isAr ? 'حامد السيابي' : 'Hamed Al-Siyabi',
-        company: isAr ? 'السيابي لخدمات الضيافة' : 'Siyabi Hospitality Solutions',
-        department: isAr ? 'ضريبة الدخل والاعتراضات' : 'Corporate Income Tax Assessment',
-        price: 1850,
-        statusLabel: isAr ? 'فرصة جديدة' : 'New Lead',
-        statusColor: 'bg-sky-500 text-white',
-      },
-      {
-        id: 'LD-1052',
-        customer: isAr ? 'منى المسروري' : 'Mona Al-Masrouri',
-        company: isAr ? 'مجموعة المسروري للتجارة' : 'Masrouri Trade & Contracting',
-        department: isAr ? 'استشارات تأسيس الشركات والسجل' : 'CR Registration & Feasibility',
-        price: 1240,
-        statusLabel: isAr ? 'عقد معتمد' : 'Closed Won',
-        statusColor: 'bg-emerald-600 text-white',
-      },
-    ];
+    return [];
   }, [activeLeads, isAr]);
 
   const filteredDeals = useMemo(() => {
@@ -654,60 +642,54 @@ export default function ModernCRMDashboard({
     return filteredDeals.slice(start, start + pageSize);
   }, [filteredDeals, tablePage]);
 
-  // --- Real Recent Activities Feed ---
+  // --- Real Recent Activities Feed (100% Real from Leads, Quotations, Clients) ---
   const recentActivities = useMemo(() => {
     const list: any[] = [];
 
-    activeQuotations.slice(0, 2).forEach((q, idx) => {
+    activeQuotations.forEach((q, idx) => {
       list.push({
         id: `quote-${q.id || idx}`,
         title: isAr ? 'إصدار عرض سعر رسمي' : 'Quotation Issued',
         actor: isAr
-          ? `تم تصدير عرض السعر ${q.quotation_number || q.quoteNumber || 'QT-2026'} للعميل ${q.clientName || q.client_name || 'العميل'} بقيمة ${formatShortOMR(q.total_amount || q.budget || 1200)}`
-          : `Issued quote ${q.quotation_number || q.quoteNumber || 'QT-2026'} for ${q.clientName || q.client_name || 'Client'} (${formatShortOMR(q.total_amount || q.budget || 1200)})`,
-        time: idx === 0 ? (isAr ? 'منذ 35 دقيقة' : '35 Mins Ago') : (isAr ? 'منذ ساعتين' : '2 Hours Ago'),
+          ? `تم تصدير عرض السعر ${q.quotation_number || q.quoteNumber || 'QT'} للعميل ${q.clientName || q.client_name || 'العميل'} بقيمة ${formatShortOMR(q.total_amount || q.budget || 0)}`
+          : `Issued quote ${q.quotation_number || q.quoteNumber || 'QT'} for ${q.clientName || q.client_name || 'Client'} (${formatShortOMR(q.total_amount || q.budget || 0)})`,
+        time: formatRelativeTime(q.created_at, isAr),
         color: 'bg-purple-600 text-white',
         ringColor: 'ring-purple-100',
+        timestamp: new Date(q.created_at || 0).getTime(),
       });
     });
 
-    activeLeads.slice(0, 3).forEach((l, idx) => {
+    activeLeads.forEach((l, idx) => {
       const isWon = ['won', 'converted', 'accepted'].includes((l.deal_stage || l.status || '').toLowerCase());
       list.push({
         id: `lead-${l.id || idx}`,
         title: isWon
           ? (isAr ? 'تعميد عقد صفقة' : 'Deal Closed Won')
           : (isAr ? 'متابعة عميل محتمل' : 'Lead Opportunity Updated'),
-        actor: isAr
-          ? `${l.contact_name || l.name || 'العميل'} — ${l.interested_service || l.department_id || 'خدمات ميسرة المالية'}`
-          : `${l.contact_name || l.name || 'Lead'} — ${l.interested_service || l.department_id || 'Maisarah Financial Services'}`,
-        time: idx === 0 ? (isAr ? 'اليوم 11:30 ص' : 'Today 11:30 AM') : (isAr ? 'منذ يوم واحد' : '1 Day Ago'),
+        actor: `${l.contact_name || l.name || (isAr ? 'عميل' : 'Lead')} — ${l.company_name || l.companyName || l.interested_service || (isAr ? 'خدمات استشارية' : 'Commercial Services')}`,
+        time: formatRelativeTime(l.created_at, isAr),
         color: isWon ? 'bg-emerald-600 text-white' : 'bg-[#A11212] text-white',
         ringColor: isWon ? 'ring-emerald-100' : 'ring-rose-100',
+        timestamp: new Date(l.created_at || 0).getTime(),
       });
     });
 
-    if (list.length < 4) {
+    activeClients.forEach((c, idx) => {
       list.push({
-        id: 'fb-1',
-        title: isAr ? 'استلام استفسار واتساب' : 'Inbound WhatsApp Inquiry',
-        actor: isAr ? 'طلب استشارة لضريبة القيمة المضافة لشركة مقاولات' : 'VAT consultation requested by Contracting firm',
-        time: isAr ? 'منذ 3 ساعات' : '3 Hours Ago',
-        color: 'bg-sky-500 text-white',
-        ringColor: 'ring-sky-100',
+        id: `client-${c.id || idx}`,
+        title: isAr ? 'تسجيل عميل جديد' : 'New Client Added',
+        actor: `${c.name || c.contact_person || (isAr ? 'عميل' : 'Client')} — ${c.company_name || c.companyName || (isAr ? 'منشأة تجارية' : 'Commercial Enterprise')}`,
+        time: formatRelativeTime(c.created_at, isAr),
+        color: 'bg-blue-600 text-white',
+        ringColor: 'ring-blue-100',
+        timestamp: new Date(c.created_at || 0).getTime(),
       });
-      list.push({
-        id: 'fb-2',
-        title: isAr ? 'تحديث تدقيق الحسابات' : 'Audit Milestone Approved',
-        actor: isAr ? 'اعتماد مسودة الميزانية العمومية للعام المالي 2025' : 'Balance sheet audit draft verified for FY2025',
-        time: isAr ? 'منذ يومين' : '2 Days Ago',
-        color: 'bg-amber-500 text-white',
-        ringColor: 'ring-amber-100',
-      });
-    }
+    });
 
+    list.sort((a, b) => b.timestamp - a.timestamp);
     return list.slice(0, 5);
-  }, [activeLeads, activeQuotations, isAr]);
+  }, [activeLeads, activeQuotations, activeClients, isAr]);
 
   const quotePeriodLabels = {
     Monthly: isAr ? 'شهري' : 'Monthly',
@@ -1069,12 +1051,12 @@ export default function ModernCRMDashboard({
                 />
               </svg>
               {/* Center Stat */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-2">
                 <span className="text-xl font-black text-gray-900 font-mono">
-                  {channelStats.whatsappPct}%
+                  {channelStats.totalLeads > 0 ? `${channelStats.topChannelPct}%` : '0%'}
                 </span>
-                <span className="text-[9px] font-bold text-gray-400">
-                  {isAr ? 'واتساب الأكبر' : 'Top Channel'}
+                <span className="text-[9px] font-bold text-gray-400 truncate max-w-[90px]">
+                  {channelStats.totalLeads > 0 ? channelStats.topChannelName : (isAr ? 'لا عملاء' : 'No Leads')}
                 </span>
               </div>
             </div>
@@ -1144,7 +1126,9 @@ export default function ModernCRMDashboard({
                 {stats.totalLeadsCount} <span className="text-sm font-sans font-bold">{isAr ? 'عميل' : 'Leads'}</span>
               </h3>
               <p className="text-[10px] font-semibold text-rose-100/90 mt-0.5">
-                {isAr ? '+18% نمو الشهر الحالي' : '+18% Growth this month'}
+                {isAr
+                  ? `${stats.wonLeadsCount} مكتمل • ${stats.inProgressCount} جارية`
+                  : `${stats.wonLeadsCount} Won • ${stats.inProgressCount} in progress`}
               </p>
             </div>
           </div>
@@ -1323,6 +1307,17 @@ export default function ModernCRMDashboard({
                 </div>
               </div>
             ))}
+            {recentActivities.length === 0 && (
+              <div className="py-8 text-center text-gray-400 text-xs">
+                <Clock className="w-8 h-8 mx-auto mb-2 text-gray-300 opacity-60" />
+                <p className="font-bold text-gray-500">
+                  {isAr ? 'لا توجد أنشطة تجارية مسجلة حتى الآن' : 'No recent commercial activities yet'}
+                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {isAr ? 'ستظهر هنا الصفقات والعروض فور إضافتها' : 'New deals and client quotes will appear here in real-time'}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="pt-2 border-t border-gray-50 text-center">
@@ -1526,8 +1521,8 @@ export default function ModernCRMDashboard({
 
               <p className="text-[11px] text-gray-500 leading-relaxed">
                 {isAr
-                  ? `أظهرت منصة ميسرة نمواً تجارياً قوياً مع تسجيل ${stats.totalLeadsCount} عميلاً محتملاً، تصدرها قناة واتساب والتواصل المباشر بحصة ${channelStats.whatsappPct}% تليها المبيعات الميدانية بحصة ${channelStats.fieldPct}%.`
-                  : `Maisarah recorded healthy deal pipeline velocity with ${stats.totalLeadsCount} prospects captured, led by WhatsApp and direct consultation (${channelStats.whatsappPct}%) followed by Field Sales teams (${channelStats.fieldPct}%).`}
+                  ? `أظهرت منصة ميسرة نمواً تجارياً مع تسجيل ${stats.totalLeadsCount} عميلاً محتملاً، ${channelStats.totalLeads > 0 ? `تصدرها قناة ${channelStats.topChannelName} بحصة ${channelStats.topChannelPct}%.` : 'بانتظار تسجيل الفرص الجديدة.'}`
+                  : `Maisarah recorded deal pipeline metrics with ${stats.totalLeadsCount} prospects captured, ${channelStats.totalLeads > 0 ? `led by ${channelStats.topChannelName} (${channelStats.topChannelPct}%).` : 'awaiting new opportunity registrations.'}`}
               </p>
             </div>
 
