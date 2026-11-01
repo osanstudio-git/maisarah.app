@@ -39,6 +39,7 @@ interface ServiceRecord {
 interface Client {
   id: string;
   company_name: string;
+  cr_number?: string | null;
   assigned_employee_id?: string | null;
 }
 
@@ -148,6 +149,7 @@ const ServicesManager = () => {
 
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [allCompanyClients, setAllCompanyClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -176,6 +178,12 @@ const ServicesManager = () => {
       setSelectedDeptId(effectiveDeptId);
     }
   }, [effectiveDeptId]);
+
+  // Clients from other departments to allow assigning tasks without duplicate registration
+  const otherClients = useMemo(() => {
+    const scopedIds = new Set(clients.map(c => c.id));
+    return allCompanyClients.filter(c => !scopedIds.has(c.id));
+  }, [allCompanyClients, clients]);
 
   // ── DSR & Payment States ──────────────────────────────────────────────────
   const [dsrEntries, setDsrEntries] = useState<DSREntry[]>([]);
@@ -207,7 +215,7 @@ const ServicesManager = () => {
 
       const [svcRes, clientRes] = await Promise.all([
         query,
-        supabase.from('clients').select('id, company_name, assigned_employee_id').order('company_name'),
+        supabase.from('clients').select('id, company_name, cr_number, assigned_employee_id').order('company_name'),
       ]);
 
       const rawServices: ServiceRecord[] = ((svcRes.data as any[]) || []).map(item => ({
@@ -216,6 +224,7 @@ const ServicesManager = () => {
       }));
 
       const allClients: Client[] = ((clientRes.data as any[]) || []);
+      setAllCompanyClients(allClients);
 
       if (!isManagerOrAdmin) {
         // Filter services strictly to this employee's department and assigned tasks
@@ -912,9 +921,21 @@ const ServicesManager = () => {
 
                 {/* Client */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    {isAr ? 'العميل' : 'Client'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-semibold text-gray-700">
+                      {isAr ? 'العميل' : 'Client'}
+                    </label>
+                    <a
+                      href="/employee/clients"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-brand-dark font-bold hover:underline flex items-center gap-1"
+                      title={isAr ? 'تسجيل عميل جديد إذا لم يكن موجوداً' : 'Register a new client if not listed'}
+                    >
+                      <PlusCircle size={13} />
+                      <span>{isAr ? '+ تسجيل عميل جديد' : '+ Register New Client'}</span>
+                    </a>
+                  </div>
                   <div className="relative">
                     <select
                       value={formData.client_id}
@@ -923,12 +944,30 @@ const ServicesManager = () => {
                         outline-none focus:border-red-700 focus:ring-2 focus:ring-red-700/10 bg-white"
                     >
                       <option value="">{isAr ? '-- بدون عميل --' : '-- No client --'}</option>
-                      {clients.map(c => (
-                        <option key={c.id} value={c.id}>{c.company_name}</option>
-                      ))}
+                      {clients.length > 0 && (
+                        <optgroup label={isAr ? 'عملاء قسمي الحالي' : 'My Department Clients'}>
+                          {clients.map(c => (
+                            <option key={c.id} value={c.id}>{c.company_name}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {otherClients.length > 0 && (
+                        <optgroup label={isAr ? 'عملاء مسجلين بأقسام أخرى في ميسرة (لتفادي التكرار)' : 'Other Existing Maisarah Clients (Avoid duplicates)'}>
+                          {otherClients.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.company_name} {c.cr_number ? `(CR: ${c.cr_number})` : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                     <ChevronDown size={14} className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                   </div>
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    {isAr
+                      ? 'يمكنك ربط الخدمة بأي عميل مسجل بالشركة وسينتقل فوراً إلى قائمة عملائك.'
+                      : 'Assign to any existing client to instantly add them to your department portfolio.'}
+                  </p>
                 </div>
 
                 {/* Status & Due Date */}
