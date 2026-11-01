@@ -15,6 +15,12 @@ export interface DSREntry {
   gov_fee: number;
   profit: number;
   status: 'Paid' | 'Unpaid' | 'Partial';
+  work_status?: 'Pending' | 'In Progress' | 'Completed';
+  payment_terms?: 'Full Upfront' | 'Advance Payment' | 'Milestone (3-Parts)' | 'Quarterly' | 'Post-Work';
+  total_agreed_amount?: number;
+  paid_amount?: number;
+  remaining_balance?: number;
+  installment_number?: string;
   payment_date: string;
   payment_method: 'Mobile Payment' | 'POS' | 'Bank transfer' | 'Cash' | '';
   accountant_note: string;
@@ -382,6 +388,9 @@ export function addDSREntry(entry: Omit<DSREntry, 'id' | 'profit'> & { id?: stri
   const amt = Number(entry.amount || 0);
   const gov = Number(entry.gov_fee || 0);
   const profit = Number((amt - gov).toFixed(3));
+  const totalAgreed = entry.total_agreed_amount !== undefined ? Number(entry.total_agreed_amount) : amt;
+  const paidAmt = entry.paid_amount !== undefined ? Number(entry.paid_amount) : (entry.status === 'Paid' ? amt : 0);
+  const remaining = entry.remaining_balance !== undefined ? Number(entry.remaining_balance) : Math.max(0, Number((totalAgreed - paidAmt).toFixed(3)));
 
   const newEntry: DSREntry = {
     id: entry.id || `dsr-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -397,7 +406,13 @@ export function addDSREntry(entry: Omit<DSREntry, 'id' | 'profit'> & { id?: stri
     amount: amt,
     gov_fee: gov,
     profit: profit,
-    status: entry.status || 'Unpaid',
+    status: entry.status || (remaining > 0 && paidAmt > 0 ? 'Partial' : (paidAmt >= totalAgreed && totalAgreed > 0 ? 'Paid' : 'Unpaid')),
+    work_status: entry.work_status || 'In Progress',
+    payment_terms: entry.payment_terms || 'Full Upfront',
+    total_agreed_amount: totalAgreed,
+    paid_amount: paidAmt,
+    remaining_balance: remaining,
+    installment_number: entry.installment_number || '',
     payment_date: entry.payment_date || '',
     payment_method: entry.payment_method || '',
     accountant_note: entry.accountant_note || '',
@@ -436,6 +451,9 @@ export function updateDSREntry(id: string, patch: Partial<DSREntry>): DSREntry |
   const updatedAmount = patch.amount !== undefined ? Number(patch.amount) : existing.amount;
   const updatedGovFee = patch.gov_fee !== undefined ? Number(patch.gov_fee) : existing.gov_fee;
   const updatedProfit = Number((updatedAmount - updatedGovFee).toFixed(3));
+  const totalAgreed = patch.total_agreed_amount !== undefined ? Number(patch.total_agreed_amount) : (existing.total_agreed_amount !== undefined ? existing.total_agreed_amount : updatedAmount);
+  const paidAmt = patch.paid_amount !== undefined ? Number(patch.paid_amount) : (existing.paid_amount !== undefined ? existing.paid_amount : updatedAmount);
+  const remaining = patch.remaining_balance !== undefined ? Number(patch.remaining_balance) : Math.max(0, Number((totalAgreed - paidAmt).toFixed(3)));
 
   const updatedEntry: DSREntry = {
     ...existing,
@@ -443,6 +461,9 @@ export function updateDSREntry(id: string, patch: Partial<DSREntry>): DSREntry |
     amount: updatedAmount,
     gov_fee: updatedGovFee,
     profit: updatedProfit,
+    total_agreed_amount: totalAgreed,
+    paid_amount: paidAmt,
+    remaining_balance: remaining,
   };
 
   const next = [...current];
@@ -479,6 +500,11 @@ export function autoCreateDSREntryFromTask(params: {
     gov_fee: gov,
     profit: amt - gov,
     status: amt > 0 ? 'Paid' : 'Unpaid',
+    work_status: 'In Progress',
+    payment_terms: 'Full Upfront',
+    total_agreed_amount: amt,
+    paid_amount: amt,
+    remaining_balance: 0,
     payment_date: amt > 0 ? dateStr : '',
     payment_method: params.paymentMethod || '',
     accountant_note: 'Auto-created from task assignment',
@@ -486,26 +512,23 @@ export function autoCreateDSREntryFromTask(params: {
     verified_by_accountant: false
   });
 
-  // Async sync to Supabase
+  // Async sync to Supabase with real schema columns
   try {
+    const cloudPayload: any = {
+      gov_fee: gov,
+      profit: amt - gov,
+      verified_by_accountant: false,
+      invoice_issued: false,
+      accountant_note: `Auto-created from task: ${params.serviceTitle || ''}`
+    };
+    if (params.clientId) cloudPayload.client_id = params.clientId;
+    if (params.employeeId) cloudPayload.employee_id = params.employeeId;
+
     supabase
       .from('dsr_entries')
-      .insert([{
-        employee_name: entry.employee_name,
-        employee_id: entry.employee_id || null,
-        company_name: entry.company_name,
-        cr_number: entry.cr_number,
-        service_name: entry.service,
-        amount: entry.amount,
-        gov_fee: entry.gov_fee,
-        profit: entry.profit,
-        status: entry.status,
-        payment_date: entry.payment_date || null,
-        payment_method: entry.payment_method || null,
-        created_at: new Date().toISOString()
-      }])
+      .insert([cloudPayload])
       .then(({ error }) => {
-        if (error) console.warn('Supabase DSR auto-sync note:', error.message);
+        if (error) console.warn('Supabase DSR auto-sync notice:', error.message);
       });
   } catch (err) {
     console.warn('Auto DSR cloud sync caught:', err);
@@ -514,8 +537,97 @@ export function autoCreateDSREntryFromTask(params: {
   return entry;
 }
 
+/**
+ * Synchronize a DSR entry and optional invoice directly with Supabase
+ */
+export async function syncDSRToCloud(entry: DSREntry, clientId?: string): Promise<{ dsrId?: string; invoiceId?: string }> {
+  try {
+    const paymentRef = entry.payment_reference || [
+      entry.payment_method,
+      entry.payment_terms ? `Terms: ${entry.payment_terms}` : '',
+      entry.installment_number ? `Inst: ${entry.installment_number}` : '',
+      entry.remaining_balance ? `Bal: OMR ${entry.remaining_balance}` : ''
+    ].filter(Boolean).join(' | ');
+
+    const noteDetails = [
+      entry.service,
+      entry.company_name ? `Client: ${entry.company_name}` : '',
+      `Work: ${entry.work_status || 'In Progress'}`,
+      `Paid: OMR ${entry.paid_amount || entry.amount} / Total: OMR ${entry.total_agreed_amount || entry.amount}`,
+      entry.accountant_note ? `Note: ${entry.accountant_note}` : ''
+    ].filter(Boolean).join(' | ');
+
+    const payload: any = {
+      gov_fee: entry.gov_fee || 0,
+      profit: entry.profit || (entry.amount - entry.gov_fee),
+      verified_by_accountant: Boolean(entry.verified_by_accountant),
+      invoice_issued: Boolean(entry.invoice_issued),
+      payment_reference: paymentRef || null,
+      accountant_note: noteDetails
+    };
+
+    const targetClientId = clientId || entry.client_id;
+    if (targetClientId) payload.client_id = targetClientId;
+    if (entry.employee_id) payload.employee_id = entry.employee_id;
+
+    const { data: dsrData, error: dsrErr } = await supabase
+      .from('dsr_entries')
+      .insert([payload])
+      .select('id')
+      .single();
+
+    if (dsrErr) {
+      console.warn('DSR cloud sync message:', dsrErr.message);
+    }
+
+    let createdInvoiceId: string | undefined;
+
+    // If invoice is issued or paid, sync to invoices table
+    if ((entry.invoice_issued || entry.status === 'Paid' || entry.status === 'Partial') && entry.amount > 0 && targetClientId) {
+      const invNumber = entry.invoice_number || `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const grossContract = entry.total_agreed_amount || entry.amount;
+      const taxAmt = Number((grossContract * 0.05).toFixed(3));
+      const totalAmt = Number((grossContract + taxAmt).toFixed(3));
+      const paidSoFar = entry.paid_amount !== undefined ? entry.paid_amount : (entry.status === 'Paid' ? entry.amount : 0);
+
+      const invStatus = (entry.remaining_balance && entry.remaining_balance > 0) || entry.status === 'Partial'
+        ? 'partial'
+        : (entry.status === 'Paid' ? 'paid' : 'unpaid');
+
+      const { data: invData, error: invErr } = await supabase
+        .from('invoices')
+        .insert([{
+          invoice_number: invNumber,
+          client_id: targetClientId,
+          amount: grossContract,
+          amount_paid: paidSoFar,
+          tax_amount: taxAmt,
+          total_amount: totalAmt,
+          status: invStatus,
+          issued_date: entry.date || new Date().toISOString().split('T')[0],
+          due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+          invoice_type: 'tax_invoice',
+          billing_cycle: entry.payment_terms || 'one_time',
+          notes: noteDetails
+        }])
+        .select('id')
+        .single();
+
+      if (!invErr && invData) {
+        createdInvoiceId = invData.id;
+      }
+    }
+
+    return { dsrId: dsrData?.id, invoiceId: createdInvoiceId };
+  } catch (e) {
+    console.warn('syncDSRToCloud encountered error:', e);
+    return {};
+  }
+}
+
 export function deleteDSREntry(id: string): void {
   const current = getDSREntries();
   const next = current.filter(e => e.id !== id);
   saveDSREntries(next);
 }
+

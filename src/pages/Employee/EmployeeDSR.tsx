@@ -10,7 +10,7 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabaseClient';
 import {
-  getDSREntries, saveDSREntries, addDSREntry, updateDSREntry, deleteDSREntry, type DSREntry
+  getDSREntries, saveDSREntries, addDSREntry, updateDSREntry, deleteDSREntry, syncDSRToCloud, type DSREntry
 } from '../../utils/dsrSync';
 import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
@@ -120,11 +120,18 @@ export default function EmployeeDSR() {
   const [newForm, setNewForm] = useState({
     date: new Date().toISOString().split('T')[0],
     service: activeServiceCatalog[0]?.title || 'Bookkeeping (Monthly)',
+    isCustomService: false,
+    customServiceName: '',
     company_name: '',
     cr_number: '',
+    total_agreed_amount: activeServiceCatalog[0]?.defaultAmount || 50,
     amount: activeServiceCatalog[0]?.defaultAmount || 50,
     gov_fee: activeServiceCatalog[0]?.defaultGov || 0,
     status: 'Paid' as 'Paid' | 'Unpaid' | 'Partial',
+    work_status: 'In Progress' as 'Pending' | 'In Progress' | 'Completed',
+    payment_terms: 'Full Upfront' as 'Full Upfront' | 'Advance Payment' | 'Milestone (3-Parts)' | 'Quarterly' | 'Post-Work',
+    remaining_balance: 0,
+    installment_number: '',
     payment_date: new Date().toISOString().split('T')[0],
     payment_method: 'Mobile Payment' as DSREntry['payment_method'],
     accountant_note: '',
@@ -132,12 +139,15 @@ export default function EmployeeDSR() {
 
   // Keep newForm service in sync with department catalog
   useEffect(() => {
-    if (activeServiceCatalog.length > 0) {
+    if (activeServiceCatalog.length > 0 && !newForm.isCustomService) {
+      const defAmt = activeServiceCatalog[0].defaultAmount;
       setNewForm(prev => ({
         ...prev,
         service: activeServiceCatalog[0].title,
-        amount: activeServiceCatalog[0].defaultAmount,
-        gov_fee: activeServiceCatalog[0].defaultGov
+        total_agreed_amount: defAmt,
+        amount: defAmt,
+        gov_fee: activeServiceCatalog[0].defaultGov,
+        remaining_balance: 0
       }));
     }
   }, [activeServiceCatalog]);
@@ -249,15 +259,20 @@ export default function EmployeeDSR() {
     let totalGov = 0;
     let totalProfit = 0;
     let totalPaidAmt = 0;
+    let totalReceivables = 0;
     let unpaidCount = 0;
     let totalInvoicesIssued = 0;
 
     filteredEntries.forEach(e => {
-      totalGross += e.amount || 0;
+      const contractAmt = e.total_agreed_amount || e.amount || 0;
+      totalGross += contractAmt;
       totalGov += e.gov_fee || 0;
       totalProfit += e.profit || 0;
-      if (e.status === 'Paid') totalPaidAmt += e.amount || 0;
-      if (e.status === 'Unpaid') unpaidCount += 1;
+      const paid = e.status === 'Paid' ? (e.paid_amount || e.amount) : (e.paid_amount || 0);
+      totalPaidAmt += paid;
+      const bal = e.remaining_balance !== undefined ? e.remaining_balance : (e.status === 'Paid' ? 0 : e.amount);
+      totalReceivables += bal;
+      if (e.status === 'Unpaid' || (e.remaining_balance && e.remaining_balance > 0)) unpaidCount += 1;
       if (e.invoice_issued) totalInvoicesIssued += 1;
     });
 
@@ -267,6 +282,7 @@ export default function EmployeeDSR() {
       totalGov,
       totalProfit,
       totalPaidAmt,
+      totalReceivables,
       unpaidCount,
       totalInvoicesIssued,
     };
@@ -284,12 +300,25 @@ export default function EmployeeDSR() {
 
   // When service is selected in form, auto-fill standard pricing and default gov fee
   const handleServiceSelect = (serviceTitle: string) => {
+    if (serviceTitle === '__custom__') {
+      setNewForm(prev => ({
+        ...prev,
+        isCustomService: true,
+        service: '__custom__',
+        customServiceName: '',
+      }));
+      return;
+    }
     const matched = activeServiceCatalog.find(s => s.title === serviceTitle);
+    const standardAmt = matched ? matched.defaultAmount : 50;
     setNewForm(prev => ({
       ...prev,
+      isCustomService: false,
       service: serviceTitle,
-      amount: matched ? matched.defaultAmount : prev.amount,
+      total_agreed_amount: standardAmt,
+      amount: standardAmt,
       gov_fee: matched ? matched.defaultGov : 0,
+      remaining_balance: 0
     }));
   };
 
@@ -301,26 +330,54 @@ export default function EmployeeDSR() {
       return;
     }
 
+    const finalServiceName = newForm.isCustomService
+      ? (newForm.customServiceName.trim() || (isAr ? 'خدمة مخصصة' : 'Custom Operational Service'))
+      : newForm.service;
+
     // Format CR number to 7 digits if provided
     let cleanCR = newForm.cr_number.trim().replace(/\D/g, '');
     if (cleanCR.length > 7) cleanCR = cleanCR.slice(0, 7);
 
-    addDSREntry({
+    // Look up client ID if available
+    const matchedClient = clientsList.find(c =>
+      c.company_name.toLowerCase() === newForm.company_name.trim().toLowerCase() ||
+      (cleanCR && c.cr_number?.includes(cleanCR))
+    );
+
+    const totalContract = Number(newForm.total_agreed_amount || newForm.amount);
+    const paidNow = newForm.status === 'Paid' ? Number(newForm.amount) : (newForm.status === 'Partial' ? Number(newForm.amount) : 0);
+    const remaining = newForm.payment_terms === 'Full Upfront' && newForm.status === 'Paid'
+      ? 0
+      : Math.max(0, Number((totalContract - paidNow).toFixed(3)));
+
+    const added = addDSREntry({
       date: newForm.date,
       employee_name: employeeName,
       employee_id: user?.id,
       created_by: user?.id,
       department_id: effectiveDeptId,
-      service: newForm.service,
+      service: finalServiceName,
       company_name: newForm.company_name,
+      client_id: matchedClient?.id,
       cr_number: cleanCR,
       amount: Number(newForm.amount),
       gov_fee: Number(newForm.gov_fee),
       status: newForm.status,
-      payment_date: newForm.status === 'Paid' ? newForm.payment_date : '',
-      payment_method: newForm.status === 'Paid' ? newForm.payment_method : '',
+      work_status: newForm.work_status,
+      payment_terms: newForm.payment_terms,
+      total_agreed_amount: totalContract,
+      paid_amount: paidNow,
+      remaining_balance: remaining,
+      installment_number: newForm.installment_number,
+      payment_date: newForm.status === 'Paid' || newForm.status === 'Partial' ? newForm.payment_date : '',
+      payment_method: newForm.status === 'Paid' || newForm.status === 'Partial' ? newForm.payment_method : '',
       accountant_note: newForm.accountant_note,
       invoice_issued: false,
+    });
+
+    // Cloud sync with Supabase dsr_entries & invoices
+    syncDSRToCloud(added, matchedClient?.id).catch(err => {
+      console.warn('DSR cloud sync:', err);
     });
 
     // Notify Accounts Portal via Supabase Realtime
@@ -330,8 +387,8 @@ export default function EmployeeDSR() {
         recipient_role: 'accountant',
         title: isAr ? 'قيد خدمة جديد في سجل DSR' : 'New DSR Entry Logged',
         message: isAr
-          ? `قام ${employeeName} بتسجيل خدمة "${newForm.service}" لشركة ${newForm.company_name} بمبلغ ${newForm.amount} ر.ع (${newForm.status === 'Paid' ? 'مدفوع' : 'معلق'}).`
-          : `${employeeName} logged "${newForm.service}" for ${newForm.company_name} (OMR ${newForm.amount}) - [${newForm.status}].`,
+          ? `قام ${employeeName} بتسجيل خدمة "${finalServiceName}" لشركة ${newForm.company_name} بمبلغ ${newForm.amount} ر.ع (${newForm.status === 'Paid' ? 'مدفوع' : 'معلق'}).`
+          : `${employeeName} logged "${finalServiceName}" for ${newForm.company_name} (OMR ${newForm.amount}) - [${newForm.status}].`,
         type: 'payment_logged'
       }]);
     } catch (notifErr) {
@@ -342,16 +399,81 @@ export default function EmployeeDSR() {
     setNewForm({
       date: new Date().toISOString().split('T')[0],
       service: activeServiceCatalog[0]?.title || 'Bookkeeping (Monthly)',
+      isCustomService: false,
+      customServiceName: '',
       company_name: '',
       cr_number: '',
+      total_agreed_amount: activeServiceCatalog[0]?.defaultAmount || 50,
       amount: activeServiceCatalog[0]?.defaultAmount || 50,
       gov_fee: activeServiceCatalog[0]?.defaultGov || 0,
       status: 'Paid',
+      work_status: 'In Progress',
+      payment_terms: 'Full Upfront',
+      remaining_balance: 0,
+      installment_number: '',
       payment_date: new Date().toISOString().split('T')[0],
       payment_method: 'Mobile Payment',
       accountant_note: '',
     });
     loadData();
+  };
+
+  // Issue Official Tax Invoice Directly
+  const handleIssueInvoiceDirect = async (entry: DSREntry) => {
+    try {
+      const invNumber = `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const recNumber = `REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      let targetClientId = entry.client_id;
+      if (!targetClientId) {
+        const matched = clientsList.find(c =>
+          c.company_name.toLowerCase() === entry.company_name.toLowerCase() ||
+          (entry.cr_number && c.cr_number?.includes(entry.cr_number))
+        );
+        targetClientId = matched?.id;
+      }
+
+      if (targetClientId) {
+        const tax = Number((entry.amount * 0.05).toFixed(3));
+        const total = Number((entry.amount + tax).toFixed(3));
+        await supabase.from('invoices').insert([{
+          invoice_number: invNumber,
+          client_id: targetClientId,
+          amount: entry.amount,
+          tax_amount: tax,
+          total_amount: total,
+          status: entry.status === 'Paid' ? 'paid' : 'unpaid',
+          issued_date: entry.date || new Date().toISOString().split('T')[0],
+          due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+          invoice_type: 'tax_invoice',
+          notes: `Tax invoice for ${entry.service} - ${entry.company_name}`
+        }]);
+      }
+
+      updateDSREntry(entry.id, {
+        invoice_issued: true,
+        invoice_number: invNumber,
+        receipt_number: recNumber,
+      });
+
+      try {
+        await supabase.from('notifications').insert([{
+          sender_id: user?.id || null,
+          recipient_role: 'accountant',
+          title: isAr ? 'تم إصدار فاتورة ضريبية رسمية' : 'Tax Invoice Issued',
+          message: isAr
+            ? `أصدر ${employeeName} الفاتورة (${invNumber}) لخدمة "${entry.service}" لشركة ${entry.company_name}.`
+            : `${employeeName} issued invoice (${invNumber}) for ${entry.company_name} - ${entry.service}.`,
+          type: 'invoice_generated'
+        }]);
+      } catch (err) {
+        // silent
+      }
+
+      loadData();
+    } catch (err) {
+      console.error('Failed to issue invoice:', err);
+    }
   };
 
   // Save Edit Modal
@@ -464,7 +586,7 @@ export default function EmployeeDSR() {
       </div>
 
       {/* Financial KPIs Overview */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4">
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
           <p className="text-xs text-gray-500 font-medium">{isAr ? 'خدماتي المنفذة' : 'My Deliverables'}</p>
           <p className="text-xl font-bold text-gray-900 mt-1">{kpis.count}</p>
@@ -483,6 +605,12 @@ export default function EmployeeDSR() {
           <span className="text-[10px] text-emerald-500">{isAr ? 'تم التحصيل' : 'Received'}</span>
         </div>
 
+        <div className="bg-white p-4 rounded-2xl border border-amber-200/80 bg-amber-50/20 shadow-sm">
+          <p className="text-xs text-amber-800 font-medium">{isAr ? 'المتبقي للتحصيل' : 'Receivables / Due'}</p>
+          <p className="text-xl font-bold text-amber-700 mt-1">OMR {kpis.totalReceivables.toFixed(3)}</p>
+          <span className="text-[10px] text-amber-600 font-bold">{isAr ? 'أقساط ومستحقات معلقة' : 'Outstanding balance'}</span>
+        </div>
+
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
           <p className="text-xs text-gray-500 font-medium">{isAr ? 'الرسوم الحكومية' : 'Gov Fees'}</p>
           <p className="text-xl font-bold text-amber-600 mt-1">OMR {kpis.totalGov.toFixed(3)}</p>
@@ -499,7 +627,7 @@ export default function EmployeeDSR() {
           <p className="text-xs text-gray-500 font-medium">{isAr ? 'الفواتير الصادرة' : 'Invoices Issued'}</p>
           <p className="text-xl font-bold text-red-700 mt-1">{kpis.totalInvoicesIssued} / {kpis.count}</p>
           <span className="text-[10px] text-red-500">
-            {kpis.unpaidCount > 0 ? `${kpis.unpaidCount} ${isAr ? 'غير مدفوعة' : 'unpaid'}` : isAr ? 'الكل معتمد' : 'All cleared'}
+            {kpis.unpaidCount > 0 ? `${kpis.unpaidCount} ${isAr ? 'غير مدفوعة/معلقة' : 'unpaid/due'}` : isAr ? 'الكل معتمد' : 'All cleared'}
           </span>
         </div>
       </div>
@@ -630,10 +758,11 @@ export default function EmployeeDSR() {
                 <th className="px-3 py-3.5 text-start border-e border-gray-200">{isAr ? 'الخدمة المنفذة' : 'Service'}</th>
                 <th className="px-3 py-3.5 text-start border-e border-gray-200">{isAr ? 'الشركة (العميل)' : 'Company (Customer)'}</th>
                 <th className="px-3 py-3.5 text-start border-e border-gray-200">{isAr ? 'السجل التجاري (7 أرقام)' : 'CR (7-Digits)'}</th>
-                <th className="px-3 py-3.5 text-end border-e border-gray-200">{isAr ? 'المبلغ الإجمالي' : 'Amount'}</th>
+                <th className="px-3 py-3.5 text-center border-e border-gray-200">{isAr ? 'حالة العمل' : 'Work Status'}</th>
+                <th className="px-3 py-3.5 text-end border-e border-gray-200">{isAr ? 'المبلغ المحصل' : 'Amount'}</th>
                 <th className="px-3 py-3.5 text-end border-e border-gray-200">{isAr ? 'الحكومي' : 'Gov Fee'}</th>
                 <th className="px-3 py-3.5 text-end border-e border-gray-200">{isAr ? 'هامش الربح' : 'Net Margin'}</th>
-                <th className="px-3 py-3.5 text-center border-e border-gray-200">{isAr ? 'حالة السداد' : 'Status'}</th>
+                <th className="px-3 py-3.5 text-center border-e border-gray-200">{isAr ? 'حالة السداد' : 'Payment'}</th>
                 <th className="px-3 py-3.5 text-start border-e border-gray-200">{isAr ? 'تاريخ السداد' : 'Payment Date'}</th>
                 <th className="px-3 py-3.5 text-start border-e border-gray-200">{isAr ? 'طريقة الدفع' : 'Payment Method'}</th>
                 <th className="px-3 py-3.5 text-start border-e border-gray-200">{isAr ? 'ملاحظة' : 'Note'}</th>
@@ -656,7 +785,12 @@ export default function EmployeeDSR() {
 
                   {/* Service */}
                   <td className="px-3 py-2.5 font-bold text-gray-900 border-e border-gray-200">
-                    {e.service}
+                    <div>{e.service}</div>
+                    {e.payment_terms && e.payment_terms !== 'Full Upfront' && (
+                      <span className="text-[9px] font-semibold text-brand-dark bg-brand-dark/10 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                        {e.payment_terms}
+                      </span>
+                    )}
                   </td>
 
                   {/* Company Name */}
@@ -675,9 +809,31 @@ export default function EmployeeDSR() {
                     )}
                   </td>
 
-                  {/* Amount */}
+                  {/* Work Status */}
+                  <td className="px-3 py-2.5 text-center border-e border-gray-200 whitespace-nowrap">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                      e.work_status === 'Completed'
+                        ? 'bg-blue-100 text-blue-800'
+                        : e.work_status === 'Pending'
+                        ? 'bg-gray-100 text-gray-700'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {e.work_status === 'Completed' 
+                        ? (isAr ? 'تم الإنجاز' : 'Delivered') 
+                        : e.work_status === 'Pending' 
+                        ? (isAr ? 'معلق' : 'Pending') 
+                        : (isAr ? 'قيد التنفيذ' : 'In Progress')}
+                    </span>
+                  </td>
+
+                  {/* Amount & Remaining Balance */}
                   <td className="px-3 py-2.5 text-end font-bold text-gray-900 border-e border-gray-200 whitespace-nowrap">
-                    OMR {e.amount.toFixed(3)}
+                    <div>OMR {e.amount.toFixed(3)}</div>
+                    {e.remaining_balance && e.remaining_balance > 0 ? (
+                      <div className="text-[10px] text-amber-700 font-bold bg-amber-50 rounded px-1 mt-0.5">
+                        {isAr ? `متبقي: ${e.remaining_balance.toFixed(3)}` : `Bal: ${e.remaining_balance.toFixed(3)}`}
+                      </div>
+                    ) : null}
                   </td>
 
                   {/* Gov Fee */}
@@ -746,7 +902,16 @@ export default function EmployeeDSR() {
                         <Edit2 size={13} />
                       </button>
 
-                      {e.invoice_issued && (
+                      {!e.invoice_issued ? (
+                        <button
+                          onClick={() => handleIssueInvoiceDirect(e)}
+                          className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold inline-flex items-center gap-1 transition shadow-xs"
+                          title={isAr ? 'إصدار الفاتورة الضريبية وتوثيقها' : 'Generate & Issue Tax Invoice'}
+                        >
+                          <FileText size={11} />
+                          <span>{isAr ? 'إصدار فاتورة' : 'Issue Inv'}</span>
+                        </button>
+                      ) : (
                         <>
                           <button
                             onClick={() => handleViewInvoice(e)}
@@ -842,23 +1007,159 @@ export default function EmployeeDSR() {
                   </div>
                 </div>
 
-                {/* Service Catalog Auto-fill */}
+                {/* Service Catalog Auto-fill & Custom Service */}
                 <div className="col-span-2">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="font-semibold text-gray-700 block">
+                      {isAr ? 'نوع الخدمة / الإنجاز *' : 'Service Deliverable *'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setNewForm(prev => ({ 
+                        ...prev, 
+                        isCustomService: !prev.isCustomService,
+                        service: !prev.isCustomService ? '__custom__' : (activeServiceCatalog[0]?.title || '')
+                      }))}
+                      className="text-[11px] font-bold text-brand-dark hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      {newForm.isCustomService 
+                        ? (isAr ? '← اختيار من قائمة القسم' : '← Choose from Catalog') 
+                        : (isAr ? '+ كتابة خدمة مخصصة' : '+ Type Custom Service')}
+                    </button>
+                  </div>
+
+                  {!newForm.isCustomService ? (
+                    <select
+                      value={newForm.service}
+                      onChange={e => handleServiceSelect(e.target.value)}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium cursor-pointer"
+                    >
+                      {activeServiceCatalog.map(s => (
+                        <option key={s.title} value={s.title}>
+                          {isAr ? `${s.titleAr} (${s.defaultAmount} ر.ع)` : `${s.title} (OMR ${s.defaultAmount})`}
+                        </option>
+                      ))}
+                      <option value="__custom__">
+                        {isAr ? '✨ + خدمة مخصصة أخرى (كتابة الاسم يدويًا)' : '✨ + Other Custom Service (Type manually)'}
+                      </option>
+                    </select>
+                  ) : (
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        value={newForm.customServiceName}
+                        onChange={e => setNewForm({ ...newForm, customServiceName: e.target.value })}
+                        placeholder={isAr ? 'أدخل اسم الخدمة المخصصة (مثال: دراسة جدوى استثمارية خاصة، تصفية عاجلة...)' : 'Type custom service title (e.g. Special Feasibility Study, Urgent Appeal...)'}
+                        className="w-full p-2.5 bg-amber-50/60 border-2 border-brand-dark/40 rounded-xl outline-none focus:border-brand-dark font-bold text-gray-900"
+                        required={newForm.isCustomService}
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Work Execution Status */}
+                <div>
                   <label className="font-semibold text-gray-700 block mb-1">
-                    {isAr ? 'نوع الخدمة (اختر للتعبئة التلقائية للأسعار والرسوم)' : 'Service Deliverable (Auto-fills standard price)'}
+                    {isAr ? 'حالة إنجاز العمل' : 'Work Execution Status'}
                   </label>
                   <select
-                    value={newForm.service}
-                    onChange={e => handleServiceSelect(e.target.value)}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium cursor-pointer"
+                    value={newForm.work_status}
+                    onChange={e => setNewForm({ ...newForm, work_status: e.target.value as any })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
                   >
-                    {activeServiceCatalog.map(s => (
-                      <option key={s.title} value={s.title}>
-                        {isAr ? `${s.titleAr} (${s.defaultAmount} ر.ع)` : `${s.title} (OMR ${s.defaultAmount})`}
-                      </option>
-                    ))}
+                    <option value="Pending">{isAr ? 'معلق / بانتظار العقد (Pending)' : 'Work Pending'}</option>
+                    <option value="In Progress">{isAr ? 'قيد التنفيذ (In Progress)' : 'In Progress'}</option>
+                    <option value="Completed">{isAr ? 'تم الإنجاز والتسليم (Completed)' : 'Completed & Delivered'}</option>
                   </select>
                 </div>
+
+                {/* Payment Schedule & Terms */}
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'جدول وطريقة السداد' : 'Payment Terms & Schedule'}
+                  </label>
+                  <select
+                    value={newForm.payment_terms}
+                    onChange={e => {
+                      const terms = e.target.value as any;
+                      setNewForm(prev => {
+                        let newStatus = prev.status;
+                        let newAmt = prev.amount;
+                        if (terms === 'Post-Work') {
+                          newStatus = 'Unpaid';
+                          newAmt = 0;
+                        } else if (terms === 'Advance Payment') {
+                          newStatus = 'Partial';
+                          newAmt = Number((prev.total_agreed_amount / 2).toFixed(3));
+                        } else if (terms === 'Full Upfront') {
+                          newStatus = 'Paid';
+                          newAmt = prev.total_agreed_amount;
+                        }
+                        return { ...prev, payment_terms: terms, status: newStatus, amount: newAmt };
+                      });
+                    }}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
+                  >
+                    <option value="Full Upfront">{isAr ? 'دفع كامل مقدماً (Full Upfront)' : 'Full Upfront'}</option>
+                    <option value="Advance Payment">{isAr ? 'دفعة مقدمة + الباقي بعد العمل (Advance)' : 'Advance Payment'}</option>
+                    <option value="Milestone (3-Parts)">{isAr ? 'أقساط على 3 دفعات (3-Stage Milestones)' : '3-Stage Milestones'}</option>
+                    <option value="Quarterly">{isAr ? 'سداد ربع سنوي (Quarterly Retainer)' : 'Quarterly Retainer'}</option>
+                    <option value="Post-Work">{isAr ? 'الدفع بعد إنجاز وتسليم العمل (Post-Work)' : 'Post-Delivery (After Work)'}</option>
+                  </select>
+                </div>
+
+                {/* Milestone / Installment details if applicable */}
+                {newForm.payment_terms !== 'Full Upfront' && (
+                  <div className="col-span-2 grid grid-cols-3 gap-2 p-3 bg-amber-50/70 rounded-xl border border-amber-200">
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-600 block mb-0.5">
+                        {isAr ? 'إجمالي قيمة العقد (ر.ع)' : 'Contract Value (OMR)'}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={newForm.total_agreed_amount}
+                        onChange={e => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setNewForm(prev => ({
+                            ...prev,
+                            total_agreed_amount: val,
+                            remaining_balance: Math.max(0, val - prev.amount)
+                          }));
+                        }}
+                        className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-600 block mb-0.5">
+                        {isAr ? 'المدفوع حالياً (ر.ع)' : 'Paid Now (OMR)'}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={newForm.amount}
+                        onChange={e => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setNewForm(prev => ({
+                            ...prev,
+                            amount: val,
+                            remaining_balance: Math.max(0, prev.total_agreed_amount - val)
+                          }));
+                        }}
+                        className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-emerald-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-600 block mb-0.5">
+                        {isAr ? 'المتبقي المستحق (ر.ع)' : 'Remaining Balance'}
+                      </label>
+                      <div className="w-full p-2 bg-amber-100/60 border border-amber-200 rounded-lg text-xs font-black text-amber-800">
+                        OMR {Math.max(0, newForm.total_agreed_amount - (newForm.status === 'Paid' ? newForm.amount : (newForm.status === 'Partial' ? newForm.amount : 0))).toFixed(3)}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Fixed 7-digit CR Box */}
                 <div>
@@ -881,7 +1182,11 @@ export default function EmployeeDSR() {
 
                 {/* Amount */}
                 <div>
-                  <label className="font-semibold text-gray-700 block mb-1">{isAr ? 'المبلغ الإجمالي (ر.ع) *' : 'Total Amount (OMR) *'}</label>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {newForm.payment_terms === 'Full Upfront' 
+                      ? (isAr ? 'المبلغ الإجمالي (ر.ع) *' : 'Total Amount (OMR) *')
+                      : (isAr ? 'المبلغ المحصل الآن (ر.ع) *' : 'Collected Now (OMR) *')}
+                  </label>
                   <input
                     type="number"
                     step="0.5"
@@ -920,9 +1225,9 @@ export default function EmployeeDSR() {
                     onChange={e => setNewForm({ ...newForm, status: e.target.value as any })}
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
                   >
-                    <option value="Paid">{isAr ? 'مدفوع (Paid)' : 'Paid'}</option>
+                    <option value="Paid">{isAr ? 'مدفوع بالكامل (Paid)' : 'Paid'}</option>
+                    <option value="Partial">{isAr ? 'سداد جزئي / دفعة (Partial)' : 'Partial / Advance'}</option>
                     <option value="Unpaid">{isAr ? 'غير مدفوع (Unpaid)' : 'Unpaid'}</option>
-                    <option value="Partial">{isAr ? 'جزئي (Partial)' : 'Partial'}</option>
                   </select>
                 </div>
 
@@ -1000,6 +1305,85 @@ export default function EmployeeDSR() {
 
             <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-3 text-xs">
+                {/* Service Name (Editable / Custom) */}
+                <div className="col-span-2">
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'اسم الخدمة (يمكن تعديلها وتخصيصها)' : 'Service Deliverable Name (Customizable)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={editingEntry.service}
+                    onChange={e => setEditingEntry({ ...editingEntry, service: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-bold text-gray-900"
+                    required
+                  />
+                </div>
+
+                {/* Work Execution Status */}
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'حالة إنجاز العمل' : 'Work Execution Status'}
+                  </label>
+                  <select
+                    value={editingEntry.work_status || 'In Progress'}
+                    onChange={e => setEditingEntry({ ...editingEntry, work_status: e.target.value as any })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
+                  >
+                    <option value="Pending">{isAr ? 'معلق / بانتظار العقد' : 'Work Pending'}</option>
+                    <option value="In Progress">{isAr ? 'قيد التنفيذ' : 'In Progress'}</option>
+                    <option value="Completed">{isAr ? 'تم الإنجاز والتسليم' : 'Completed & Delivered'}</option>
+                  </select>
+                </div>
+
+                {/* Payment Schedule & Terms */}
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'جدول وطريقة السداد' : 'Payment Terms & Schedule'}
+                  </label>
+                  <select
+                    value={editingEntry.payment_terms || 'Full Upfront'}
+                    onChange={e => setEditingEntry({ ...editingEntry, payment_terms: e.target.value as any })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
+                  >
+                    <option value="Full Upfront">{isAr ? 'دفع كامل مقدماً' : 'Full Upfront'}</option>
+                    <option value="Advance Payment">{isAr ? 'دفعة مقدمة + الباقي بعد العمل' : 'Advance Payment'}</option>
+                    <option value="Milestone (3-Parts)">{isAr ? 'أقساط على 3 دفعات' : '3-Stage Milestones'}</option>
+                    <option value="Quarterly">{isAr ? 'سداد ربع سنوي' : 'Quarterly Retainer'}</option>
+                    <option value="Post-Work">{isAr ? 'الدفع بعد إنجاز العمل' : 'Post-Delivery (After Work)'}</option>
+                  </select>
+                </div>
+
+                {/* Contract Value & Remaining Balance */}
+                <div className="col-span-2 grid grid-cols-2 gap-2 p-3 bg-amber-50/70 rounded-xl border border-amber-200">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-600 block mb-0.5">
+                      {isAr ? 'إجمالي قيمة العقد (ر.ع)' : 'Contract Value (OMR)'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={editingEntry.total_agreed_amount || editingEntry.amount}
+                      onChange={e => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setEditingEntry({
+                          ...editingEntry,
+                          total_agreed_amount: val,
+                          remaining_balance: Math.max(0, val - editingEntry.amount)
+                        });
+                      }}
+                      className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-600 block mb-0.5">
+                      {isAr ? 'المتبقي المستحق (ر.ع)' : 'Remaining Balance'}
+                    </label>
+                    <div className="w-full p-2 bg-amber-100/60 border border-amber-200 rounded-lg text-xs font-black text-amber-800">
+                      OMR {Math.max(0, (editingEntry.total_agreed_amount || editingEntry.amount) - (editingEntry.status === 'Paid' ? editingEntry.amount : (editingEntry.status === 'Partial' ? editingEntry.amount : 0))).toFixed(3)}
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <label className="font-semibold text-gray-700 block mb-1">
                     {isAr ? 'السجل التجاري (7 أرقام)' : 'CR Number (7 Digits)'}
@@ -1014,7 +1398,9 @@ export default function EmployeeDSR() {
                 </div>
 
                 <div>
-                  <label className="font-semibold text-gray-700 block mb-1">{isAr ? 'المبلغ (ر.ع)' : 'Amount (OMR)'}</label>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'المبلغ المحصل الآن (ر.ع)' : 'Collected Now (OMR)'}
+                  </label>
                   <input
                     type="number"
                     step="0.5"
@@ -1051,8 +1437,8 @@ export default function EmployeeDSR() {
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
                   >
                     <option value="Paid">{isAr ? 'مدفوع (Paid)' : 'Paid'}</option>
+                    <option value="Partial">{isAr ? 'جزئي / دفعة (Partial)' : 'Partial / Advance'}</option>
                     <option value="Unpaid">{isAr ? 'غير مدفوع (Unpaid)' : 'Unpaid'}</option>
-                    <option value="Partial">{isAr ? 'جزئي (Partial)' : 'Partial'}</option>
                   </select>
                 </div>
 

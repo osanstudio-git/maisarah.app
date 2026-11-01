@@ -40,6 +40,7 @@ import {
   isServiceMatchingDepartment
 } from '../../utils/departmentScoping';
 import { DEPARTMENT_CONFIGS } from '../../config/departments';
+import { autoCreateDSREntryFromTask } from '../../utils/dsrSync';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 import ClientDepartmentChecklist from '../../components/employee/ClientDepartmentChecklist';
 
@@ -430,15 +431,19 @@ const ClientManager = () => {
     cr_number: '',
     vat_number: '',
     activity: '',
-    compliance_status: 'compliant',
+    compliance_status: 'Active',
     email: '',
     password: '',
     phone: '',
   });
 
+  const [createInitialTask, setCreateInitialTask] = useState(true);
+  const [initialTaskTitle, setInitialTaskTitle] = useState('');
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
 
   // ── Fetch clients (Strictly scoped to employee department) ────────────────
   const fetchClients = useCallback(async () => {
@@ -513,12 +518,14 @@ const ClientManager = () => {
     setIsModalOpen(false);
     setEditingClient(null);
     setFormMsg(null);
+    setCreateInitialTask(true);
+    setInitialTaskTitle('');
     setFormData({ 
       company_name: '', 
       cr_number: '', 
       vat_number: '', 
       activity: '', 
-      compliance_status: 'compliant', 
+      compliance_status: 'Active', 
       email: '', 
       password: '',
       phone: ''
@@ -540,60 +547,107 @@ const ClientManager = () => {
           cr_number:          formData.cr_number || null,
           vat_number:         formData.vat_number || null,
           activity:           formData.activity || null,
-          compliance_status:  formData.compliance_status,
+          compliance_status:  formData.compliance_status || 'Active',
+          email:              formData.email || null,
+          phone:              formData.phone || null,
         };
         const { error } = await supabase.from('clients').update(payload).eq('id', editingClient.id);
         if (error) throw error;
-        setFormMsg({ type: 'ok', text: isAr ? 'تم تحديث العميل بنجاح' : 'Client updated successfully' });
+        setFormMsg({ type: 'ok', text: isAr ? 'تم تحديث بيانات العميل بنجاح' : 'Client updated successfully' });
       } else {
-        if (!formData.email || !formData.password) {
-          throw new Error(isAr ? 'يرجى إدخال البريد الإلكتروني وكلمة المرور' : 'Email and password are required');
+        if (!formData.company_name.trim()) {
+          throw new Error(isAr ? 'يرجى إدخال اسم العميل أو اسم الشركة' : 'Company or client name is required');
         }
 
-        const tempClient = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          import.meta.env.VITE_SUPABASE_ANON_KEY,
-          { auth: { persistSession: false } }
-        );
+        let finalClientId: string;
+        let portalCreated = false;
 
-        const { data: authData, error: authError } = await tempClient.auth.signUp({
-          email: formData.email,
-          password: formData.password,
-          options: { data: { role: 'client', company_name: formData.company_name } }
-        });
+        // If employee provided both email and password, create portal login
+        if (formData.email?.trim() && formData.password?.trim() && formData.password.trim().length >= 6) {
+          const tempClient = createClient(
+            import.meta.env.VITE_SUPABASE_URL,
+            import.meta.env.VITE_SUPABASE_ANON_KEY,
+            { auth: { persistSession: false } }
+          );
 
-        if (authError) throw authError;
-        if (!authData.user) throw new Error('Failed to create login account');
-
-        const userId = authData.user.id;
-
-        try {
-          await tempClient.from('profiles').insert({
-            id: userId,
-            role: 'client',
-            email: formData.email
+          const { data: authData, error: authError } = await tempClient.auth.signUp({
+            email: formData.email.trim(),
+            password: formData.password.trim(),
+            options: { data: { role: 'client', company_name: formData.company_name } }
           });
-        } catch (e) {
-          // Profile exists or trigger handled it - silent ignore for production
+
+          if (authError) throw authError;
+          if (!authData.user) throw new Error('Failed to create login account');
+
+          finalClientId = authData.user.id;
+          portalCreated = true;
+
+          try {
+            await tempClient.from('profiles').insert({
+              id: finalClientId,
+              role: 'client',
+              email: formData.email.trim()
+            });
+          } catch (e) {
+            // Profile exists or trigger handled it
+          }
+
+          createdTicket = {
+            email: formData.email.trim(),
+            pass: formData.password.trim(),
+            company: formData.company_name,
+            phone: formData.phone,
+          };
+        } else {
+          // Direct client registration without instant portal auth account
+          finalClientId = crypto.randomUUID();
         }
 
         const payload: any = {
-          id: userId, 
+          id: finalClientId, 
           company_name: formData.company_name,
           cr_number: formData.cr_number || null,
           vat_number: formData.vat_number || null,
           activity: formData.activity || null,
-          compliance_status: formData.compliance_status,
-          email: formData.email,
+          compliance_status: formData.compliance_status || 'Active',
+          email: formData.email?.trim() || null,
           phone: formData.phone || null,
           assigned_employee_id: user?.id, // Capture the employee who registered the client
-          portal_access_sent: true,
-          portal_sent_at: new Date().toISOString(),
-          portal_user_id: userId,
+          portal_access_sent: portalCreated,
+          portal_sent_at: portalCreated ? new Date().toISOString() : null,
+          portal_user_id: portalCreated ? finalClientId : null,
         };
 
         const { error: clientError } = await supabase.from('clients').insert([payload]);
         if (clientError) throw clientError;
+
+        // Optionally create initial deliverable task in services table
+        if (createInitialTask) {
+          const taskName = initialTaskTitle.trim() || `${currentDeptConfig?.title || 'Operational'} Engagement`;
+          await supabase.from('services').insert([{
+            client_id: finalClientId,
+            employee_id: user?.id,
+            department_id: effectiveDeptId || 'audit',
+            title: taskName,
+            description: `Deliverable initiated upon client registration by ${user?.user_metadata?.full_name || 'Staff Member'}`,
+            status: 'in_progress',
+            priority: 'high',
+            due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+            is_approved: true
+          }]);
+
+          // Also register initial task in DSR so it appears in the employee's DSR workspace
+          autoCreateDSREntryFromTask({
+            serviceTitle: taskName,
+            companyName: formData.company_name,
+            crNumber: formData.cr_number || '',
+            clientId: finalClientId,
+            employeeName: user?.user_metadata?.full_name || user?.email || 'Staff Member',
+            employeeId: user?.id,
+            amount: 0,
+            date: new Date().toISOString().split('T')[0]
+          });
+        }
 
         // Log the activity
         await logActivity(
@@ -604,12 +658,10 @@ const ClientManager = () => {
           `تم تسجيل عميل جديد: ${formData.company_name}`
         );
 
-        createdTicket = {
-          email: formData.email,
-          pass: formData.password,
-          company: formData.company_name,
-          phone: formData.phone,
-        };
+        setFormMsg({ 
+          type: 'ok', 
+          text: isAr ? 'تم تسجيل العميل وتعيينه لقسمك بنجاح' : 'Client registered and assigned to your department successfully' 
+        });
       }
 
       await fetchClients();
@@ -1003,10 +1055,13 @@ const ClientManager = () => {
 
                 {!editingClient && (
                   <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200">
-                    <div className="col-span-2">
-                      <p className="text-[10px] font-black text-brand-dark uppercase tracking-widest mb-1">
-                        {isAr ? 'بيانات الدخول (للحساب الجديد)' : 'Login Credentials (New Account)'}
+                    <div className="col-span-2 flex justify-between items-center">
+                      <p className="text-[10px] font-black text-brand-dark uppercase tracking-widest">
+                        {isAr ? 'بيانات الدخول للبوابة (اختياري)' : 'Portal Login Credentials (Optional)'}
                       </p>
+                      <span className="text-[10px] text-gray-400">
+                        {isAr ? 'يمكن إنشاؤها لاحقاً' : 'Can be created later'}
+                      </span>
                     </div>
                     <div className="col-span-2">
                       <FormField 
@@ -1015,19 +1070,19 @@ const ClientManager = () => {
                         type="email"
                         value={formData.email}
                         onChange={handleInputChange}
-                        required 
+                        required={false}
                         placeholder="client@example.com" 
                       />
                     </div>
                     <div className="md:col-span-2 relative">
                         <FormField
-                          label={isAr ? 'كلمة المرور' : 'Password'}
+                          label={isAr ? 'كلمة المرور (6 خانات على الأقل لإنشاء حساب)' : 'Password (Min 6 chars to create portal login)'}
                           name="password"
                           type={showPassword ? 'text' : 'password'}
-                          required
+                          required={false}
                           value={formData.password}
                           onChange={e => setFormData({ ...formData, password: e.target.value })}
-                          placeholder="••••••••"
+                          placeholder={isAr ? 'اتركه فارغاً إذا كان العميل مباشراً/أوفلاين' : 'Leave empty if registering offline client'}
                         />
                         <button
                           type="button"
@@ -1039,7 +1094,7 @@ const ClientManager = () => {
                       </div>
                     <div className="col-span-2">
                       <FormField 
-                        label={isAr ? 'رقم الواتساب (اختياري)' : 'WhatsApp Number (Optional)'} 
+                        label={isAr ? 'رقم الواتساب / الهاتف (اختياري)' : 'WhatsApp / Phone Number (Optional)'} 
                         name="phone" 
                         value={formData.phone}
                         onChange={handleInputChange}
@@ -1085,11 +1140,45 @@ const ClientManager = () => {
                     className="w-full p-2.5 border border-gray-200 rounded-xl text-sm outline-none
                       focus:border-red-700 focus:ring-2 focus:ring-red-700/10 bg-white transition"
                   >
-                    <option value="Pending">Pending</option>
                     <option value="Active">Active</option>
+                    <option value="Pending">Pending</option>
                     <option value="Suspended">Suspended</option>
                   </select>
                 </div>
+
+                {/* Direct Deliverable Assignment */}
+                {!editingClient && (
+                  <div className="p-4 bg-red-50/60 rounded-xl border border-red-100 space-y-2">
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={createInitialTask} 
+                        onChange={e => setCreateInitialTask(e.target.checked)} 
+                        className="rounded text-brand-dark focus:ring-brand-dark h-4 w-4"
+                      />
+                      <span className="text-xs font-bold text-gray-800">
+                        {isAr ? 'تعيين مهمة عمل أولى للعميل في قسمك فوراً' : 'Assign initial service deliverable immediately in your department'}
+                      </span>
+                    </label>
+                    {createInitialTask && (
+                      <div className="pt-1.5 space-y-1">
+                        <input
+                          type="text"
+                          value={initialTaskTitle}
+                          onChange={e => setInitialTaskTitle(e.target.value)}
+                          placeholder={isAr ? `مثال: ${currentDeptConfig?.title || 'التدقيق والامتثال'} 2026` : `e.g. ${currentDeptConfig?.title || 'Audit & Compliance'} Deliverable`}
+                          className="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:border-brand-dark outline-none font-medium"
+                        />
+                        <p className="text-[10px] text-gray-500">
+                          {isAr 
+                            ? 'سيتم إدراج المهمة تلقائياً في جدول خدماتك وسجل DSR لربط التحصيل والفوترة.' 
+                            : 'This deliverable will be linked automatically to your services and DSR register for payment & billing.'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
 
                 <button
                   type="submit"

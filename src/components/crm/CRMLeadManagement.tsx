@@ -372,7 +372,106 @@ export default function CRMLeadManagement() {
     };
   }, [fetchLeads]);
 
-  // ── Idempotent Quotation Auto-Draft Generation ─────────────────────────────
+  // Helper: Department-specific Document Rules (Engagement Letter vs Quotation)
+  const getDocumentSpecForDepartment = (deptId: string, interestedService?: string) => {
+    const cleanDept = (deptId || '').toLowerCase().trim();
+    const svc = (interestedService || '').toLowerCase();
+    const isAudit = cleanDept === 'audit' || svc.includes('audit');
+    const isTax = cleanDept === 'tax' || cleanDept === 'tax_vat' || svc.includes('vat') || svc.includes('tax');
+    const isAccounting = cleanDept === 'accounting' || cleanDept === 'bookkeeping' || svc.includes('book') || svc.includes('account');
+    const isAdvisory = cleanDept === 'advisory' || cleanDept === 'business_advisory' || cleanDept === 'consultancy' || svc.includes('feasib') || svc.includes('advis');
+    const isLegal = cleanDept === 'legal' || cleanDept === 'liquidation' || svc.includes('cr') || svc.includes('legal');
+
+    if (isAudit) {
+      return {
+        docType: 'engagement_letter' as const,
+        prefix: 'EL',
+        badgeEn: 'Engagement Letter (EL)',
+        badgeAr: 'خطاب ارتباط تدقيق الحسابات',
+        titleEn: 'Statutory Financial Audit Engagement Letter',
+        titleAr: 'خطاب ارتباط تدقيق القوائم المالية',
+        defaultDetails: 'Independent Statutory Financial Audit of Financial Statements for the Fiscal Year in accordance with International Standards on Auditing (ISA) and the Commercial Companies Law of the Sultanate of Oman.',
+        defaultTerms: isAr
+          ? '1. التزامات الإدارة: إعداد القوائم المالية وفق معايير المحاسبة الدولية (IFRS) وحفظ وتوفير كافة السجلات والدفاتر المحاسبية.\n2. مسؤوليات المدقق: إبداء الرأي المهني المستقل وإصدار تقرير مدقق الحسابات المعتمد وفق المعايير الدولية (ISA).\n3. السرية المهنية: التزام تام بالسرية وأخلاقيات المهنة وفق ميثاق IESBA وقوانين سلطنة عمان.\n4. الأتعاب: 50% دفعة مقدمة عند توقيع خطاب الارتباط و 50% عند تسليم مسودة التقرير النهائي.'
+          : '1. Management Responsibility: Preparation and fair presentation of financial statements in accordance with IFRS, maintenance of internal controls, and full access to all accounting records.\n2. Auditor Duty: Independent audit opinion based on International Standards on Auditing (ISA) and Oman Commercial Companies Law.\n3. Professional Confidentiality: Full adherence to IESBA Code of Ethics.\n4. Fees: 50% upon signing this engagement letter, 50% upon draft audit report issuance.'
+      };
+    }
+
+    if (isTax) {
+      return {
+        docType: 'quotation' as const,
+        prefix: 'QT-TAX',
+        badgeEn: 'Tax & VAT Quotation (QT)',
+        badgeAr: 'عرض أسعار الضرائب والقيمة المضافة',
+        titleEn: 'Tax & VAT Compliance Proposal',
+        titleAr: 'عرض خدمات إقرارات الضرائب والقيمة المضافة',
+        defaultDetails: 'Corporate Income Tax annual return filing, quarterly VAT returns submission, and Oman Tax Authority representation.',
+        defaultTerms: isAr
+          ? '1. الأسعار المذكورة بالريال العماني وخاضعة لضريبة القيمة المضافة 5%.\n2. الدفع: 50% مقدماً عند بدء الإجراءات و 50% عند اعتماد الإقرار الضريبي.\n3. هذا العرض صالح لمدة 30 يوماً من تاريخ صدوره.'
+          : '1. All prices in OMR and subject to 5% Oman VAT.\n2. Payment terms: 50% upon engagement, 50% upon filing completion.\n3. Valid for 30 calendar days from issue date.'
+      };
+    }
+
+    if (isAccounting) {
+      return {
+        docType: 'quotation' as const,
+        prefix: 'QT-ACC',
+        badgeEn: 'Bookkeeping Quotation (QT)',
+        badgeAr: 'عرض أسعار مسك الدفاتر المحاسبية',
+        titleEn: 'Monthly Bookkeeping & Accounting Services Retainer',
+        titleAr: 'عرض خدمات مسك الدفاتر الشهرية والتقارير المالية',
+        defaultDetails: 'Monthly bank & ledger reconciliation, journal entries, trial balance, and monthly balance sheet / P&L statements.',
+        defaultTerms: isAr
+          ? '1. الأتعاب شهرية وتستحق في بداية كل شهر تعاقدي.\n2. تشمل الخدمة الدعم والاستشارات المحاسبية الدورية.\n3. العرض ساري لمدة 30 يوماً.'
+          : '1. Monthly retainer due at commencement of each billing cycle.\n2. Includes monthly trial balance, reconciliation and financial statements.\n3. Valid for 30 days.'
+      };
+    }
+
+    if (isAdvisory) {
+      return {
+        docType: 'quotation' as const,
+        prefix: 'QT-ADV',
+        badgeEn: 'Advisory Proposal (QT)',
+        badgeAr: 'عرض الاستشارات المالية ودراسات الجدوى',
+        titleEn: 'Financial Feasibility Study & Business Advisory',
+        titleAr: 'عرض دراسة الجدوى والاستشارات المالية',
+        defaultDetails: 'Market, financial and operational feasibility study, cash flow forecast, and break-even analysis.',
+        defaultTerms: isAr
+          ? '1. الدفع: 50% دفعة مقدمة و 50% عند تسليم الدراسة النهائية المعتمدة.\n2. تشمل الجلسات الاستشارية وعرض النموذج المالي.'
+          : '1. 50% advance, 50% upon delivery of final approved study.\n2. Includes financial modeling review sessions.'
+      };
+    }
+
+    if (isLegal) {
+      return {
+        docType: 'quotation' as const,
+        prefix: 'QT-LEG',
+        badgeEn: 'Corporate Services Quote (QT)',
+        badgeAr: 'عرض تأسيس الشركات والشؤون القانونية',
+        titleEn: 'Commercial Registration & Corporate Legal Services',
+        titleAr: 'عرض تأسيس السجلات والخدمات التجارية',
+        defaultDetails: 'Commercial registration amendment, Chamber of Commerce compliance, and municipal licensing.',
+        defaultTerms: isAr
+          ? '1. الرسوم الحكومية تدفع بموجب إيصالات سداد مستقلة.\n2. أتعاب المكتب تدفع 50% مقدماً و 50% عند اكتمال المستندات.'
+          : '1. Government statutory fees are payable directly or upon receipt.\n2. Professional fee: 50% advance, 50% upon completion.'
+      };
+    }
+
+    return {
+      docType: 'quotation' as const,
+      prefix: 'QT',
+      badgeEn: 'Quotation Proposal (QT)',
+      badgeAr: 'عرض أسعار معتمد',
+      titleEn: 'Professional Services Proposal',
+      titleAr: 'عرض خدمات مهنية متخصصة',
+      defaultDetails: `Engagement for ${interestedService || 'professional services'} as requested by corporate client.`,
+      defaultTerms: isAr
+        ? '1. الأسعار المذكورة بالريال العماني وخاضعة لضريبة القيمة المضافة 5%.\n2. الدفع: 50% دفعة مقدمة عند بدء العمل و 50% عند الإنجاز والتسليم.\n3. هذا العرض صالح لمدة 30 يوماً من تاريخ إصداره.'
+        : '1. All prices are in OMR and subject to 5% VAT.\n2. Payment terms: 50% upon engagement, 50% upon deliverable completion.\n3. Quotation valid for 30 calendar days from issue date.'
+    };
+  };
+
+  // ── Idempotent Quotation / Engagement Letter Auto-Draft Generation ──────────
   const ensureDraftQuotationForLead = async (lead: CRMLead) => {
     try {
       const { data: existingQuote, error: checkErr } = await supabase
@@ -388,18 +487,17 @@ export default function CRMLeadManagement() {
         return existingQuote as QuotationRecord;
       }
 
+      const spec = getDocumentSpecForDepartment(lead.department_id, lead.interested_service);
       const subtotal = Number(lead.estimated_value) || 0;
       const vatRate = 5;
       const vatAmount = Number(((subtotal * vatRate) / 100).toFixed(3));
       const totalAmount = Number((subtotal + vatAmount).toFixed(3));
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-      const quotationNumber = `QT-${new Date().getFullYear()}-${randomSuffix}`;
+      const quotationNumber = `${spec.prefix}-${new Date().getFullYear()}-${randomSuffix}`;
       const validUntil = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
 
-      const defaultDetails = `Engagement for ${lead.interested_service} as requested by ${lead.company_name || lead.contact_name}.`;
-      const defaultTerms = isAr
-        ? '1. الأسعار المذكورة بالريال العماني وخاضعة لضريبة القيمة المضافة 5%.\n2. الدفع: 50% دفعة مقدمة عند بدء العمل و 50% عند الإنجاز والتسليم.\n3. هذا العرض صالح لمدة 30 يوماً من تاريخ إصداره.'
-        : '1. All prices are in OMR and subject to 5% VAT.\n2. Payment terms: 50% upon engagement, 50% upon deliverable completion.\n3. Quotation valid for 30 calendar days from issue date.';
+      const clientTitle = lead.company_name || lead.contact_name;
+      const docTitle = isAr ? `${spec.titleAr} — ${clientTitle}` : `${spec.titleEn} — ${clientTitle}`;
 
       const { data: newQuote, error: insertErr } = await supabase
         .from('quotations')
@@ -407,8 +505,8 @@ export default function CRMLeadManagement() {
           quotation_number: quotationNumber,
           lead_id: lead.id,
           client_id: lead.converted_client_id || null,
-          title: lead.interested_service || 'Professional Advisory & Services',
-          service_details: defaultDetails,
+          title: docTitle,
+          service_details: spec.defaultDetails,
           department_id: lead.department_id || 'audit',
           subtotal: subtotal,
           vat_rate: vatRate,
@@ -417,7 +515,7 @@ export default function CRMLeadManagement() {
           currency: 'OMR',
           status: 'draft',
           valid_until: validUntil,
-          terms_conditions: defaultTerms,
+          terms_conditions: spec.defaultTerms,
           created_by: user?.id || null
         }])
         .select()
@@ -429,7 +527,7 @@ export default function CRMLeadManagement() {
       setQuotationsMap(prev => ({ ...prev, [lead.id]: createdRecord }));
       return createdRecord;
     } catch (err: any) {
-      console.error('Error generating quotation:', err.message);
+      console.error('Error generating document:', err.message);
       throw err;
     }
   };
@@ -550,6 +648,40 @@ export default function CRMLeadManagement() {
         createdServiceId = newService.id;
       }
 
+      // 3b. Generate Official Tax Invoice against the Service & Client
+      try {
+        const invoiceNum = `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const subtotalNum = quote.subtotal || Number(finalBudget) || 0;
+        const vatAmountNum = quote.vat_amount || +(subtotalNum * 0.05).toFixed(3);
+        const totalAmountNum = quote.total_amount || +(subtotalNum + vatAmountNum).toFixed(3);
+
+        const { data: existingInv } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('client_id', clientId)
+          .eq('service_id', createdServiceId)
+          .maybeSingle();
+
+        if (!existingInv) {
+          await supabase.from('invoices').insert([{
+            invoice_number: invoiceNum,
+            client_id: clientId,
+            service_id: createdServiceId,
+            created_by: user?.id || null,
+            amount: subtotalNum,
+            tax_amount: vatAmountNum,
+            total_amount: totalAmountNum,
+            status: 'unpaid',
+            issued_date: new Date().toISOString().split('T')[0],
+            due_date: finalDueDate,
+            invoice_type: 'tax_invoice',
+            notes: `${finalTitle} (${lead.interested_service || 'Client Service'})`
+          }]);
+        }
+      } catch (invErr) {
+        console.warn('Initial invoice generation notice:', invErr);
+      }
+
       // 4. Realtime Routing & Notification (Hierarchy Aware)
       const deptConfig = DEPARTMENTS.find(d => d.id === finalDept);
       const deptLabel = isAr ? (deptConfig?.ar || finalDept) : (deptConfig?.en || finalDept);
@@ -563,8 +695,8 @@ export default function CRMLeadManagement() {
           service_id: createdServiceId,
           title: isAr ? `مهمة جديدة مسندة إليك (${deptLabel})` : `New Task Assigned (${deptLabel})`,
           message: isAr
-            ? `تم تحويل العميل "${companyOrContactName}" بقيمة OMR ${formatOMR(finalBudget)}. تم إسناد المهمة إليك مباشرة لبدء العمل وسجل DSR.`
-            : `Client "${companyOrContactName}" converted (OMR ${formatOMR(finalBudget)}). Assigned directly to you to begin execution and DSR register.`,
+            ? `تم تحويل العميل "${companyOrContactName}" بقيمة OMR ${formatOMR(finalBudget)}. تم إسناد المهمة إليك مباشرة وتوليد الفاتورة لبدء العمل وسجل DSR.`
+            : `Client "${companyOrContactName}" converted (OMR ${formatOMR(finalBudget)}). Assigned directly to you with pending invoice to begin execution and DSR register.`,
           type: 'task_started'
         }]);
 
@@ -572,8 +704,8 @@ export default function CRMLeadManagement() {
           show: true,
           title: isAr ? 'تم التحويل والإسناد المباشر للموظف' : 'Lead Converted & Assigned to Employee',
           message: isAr
-            ? `تم إنشاء حساب العميل (${companyOrContactName}) وإسناد المهمة مباشرة لموظف قسم (${deptLabel}) بنجاح.`
-            : `Client (${companyOrContactName}) created and task assigned directly to ${deptLabel} staff.`,
+            ? `تم إنشاء حساب العميل (${companyOrContactName}) وإسناد المهمة وإصدار الفاتورة لموظف قسم (${deptLabel}) بنجاح.`
+            : `Client (${companyOrContactName}) created, deliverable assigned, and invoice issued to ${deptLabel} staff.`,
           type: 'success'
         });
       } else {
@@ -584,8 +716,8 @@ export default function CRMLeadManagement() {
           service_id: createdServiceId,
           title: isAr ? `مهمة عميل جديدة بانتظار الإسناد (${deptLabel})` : `New Client Task Pending Delegation (${deptLabel})`,
           message: isAr
-            ? `تم اعتماد العقد وعرض السعر للعميل "${companyOrContactName}" بقيمة OMR ${formatOMR(finalBudget)}. تم توجيه المهمة إلى رئيس قسم (${deptLabel}) لإسنادها للموظف المختص.`
-            : `Quotation accepted for "${companyOrContactName}" (OMR ${formatOMR(finalBudget)}). Deliverable is ready for HOD (${deptLabel}) staff assignment.`,
+            ? `تم اعتماد العقد وعرض السعر للعميل "${companyOrContactName}" بقيمة OMR ${formatOMR(finalBudget)}. تم توجيه المهمة والفاتورة إلى رئيس قسم (${deptLabel}) لإسنادها للموظف المختص.`
+            : `Quotation accepted for "${companyOrContactName}" (OMR ${formatOMR(finalBudget)}). Deliverable and invoice are ready for HOD (${deptLabel}) staff assignment.`,
           type: 'task_started'
         }]);
 
@@ -608,6 +740,36 @@ export default function CRMLeadManagement() {
         message: err.message || 'Failed to complete client conversion and routing',
         type: 'error'
       });
+    }
+  };
+
+  // ── Direct 1-Click Lead to Client Conversion (For Fast-Track Services) ─────
+  const handleDirectConvertLead = async (lead: CRMLead) => {
+    if (lead.converted_client_id || lead.status === 'won') {
+      setToast({
+        show: true,
+        title: isAr ? 'تنبيه' : 'Notice',
+        message: isAr ? 'تم تحويل هذه الفرصة مسبقاً إلى عميل نشط.' : 'This lead is already converted to a client.',
+        type: 'info'
+      });
+      return;
+    }
+
+    const confirmMsg = isAr
+      ? `هل تريد تحويل الفرصة "${lead.contact_name}" مباشرة إلى عميل وتكليف مهمة العمل للقسم المختص؟`
+      : `Convert lead "${lead.contact_name}" directly to an Active Client and generate a deliverable task?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const quote = await ensureDraftQuotationForLead(lead);
+      await executeConversionToClientAndTask(lead, quote, {
+        title: lead.interested_service || 'Corporate Services',
+        total_amount: Number(lead.estimated_value) || 0,
+        department_id: lead.department_id || 'audit'
+      });
+      fetchLeads(true);
+    } catch (err: any) {
+      alert(err.message || 'Direct conversion failed');
     }
   };
 
@@ -2821,25 +2983,48 @@ export default function CRMLeadManagement() {
                             </div>
                           )}
 
-                          {/* Quotation Button */}
-                          {isQuotedOrAccepted && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenQuotationModal(lead)}
-                              className="w-full flex items-center justify-between gap-1 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/80 px-2.5 py-1.5 rounded-xl text-[11px] font-black transition-all shadow-2xs cursor-pointer"
-                            >
-                              <div className="flex items-center gap-1 truncate">
-                                <FileText size={12} className="text-purple-700 shrink-0" />
-                                <span className="truncate">{isAr ? 'عرض السعر' : 'Quotation'}</span>
-                              </div>
-                              {linkedQuote && (
-                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${linkedQuote.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-200 text-purple-900'
-                                  }`}>
-                                  {linkedQuote.status}
-                                </span>
-                              )}
-                            </button>
-                          )}
+                          {/* Quotation / Engagement Letter Button */}
+                          {(() => {
+                            const isAuditLead = lead.department_id === 'audit' || (lead.interested_service || '').toLowerCase().includes('audit');
+                            return (
+                              <>
+                                {isQuotedOrAccepted && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenQuotationModal(lead)}
+                                    className={`w-full flex items-center justify-between gap-1 border px-2.5 py-1.5 rounded-xl text-[11px] font-black transition-all shadow-2xs cursor-pointer ${
+                                      isAuditLead
+                                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-950 border-amber-200/90'
+                                        : 'bg-purple-50 hover:bg-purple-100 text-purple-900 border-purple-200/80'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1 truncate">
+                                      {isAuditLead ? <Award size={12} className="text-amber-700 shrink-0" /> : <FileText size={12} className="text-purple-700 shrink-0" />}
+                                      <span className="truncate">{isAuditLead ? (isAr ? 'خطاب الارتباط (EL)' : 'Engagement Letter') : (isAr ? 'عرض السعر (QT)' : 'Quotation')}</span>
+                                    </div>
+                                    {linkedQuote && (
+                                      <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${linkedQuote.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : isAuditLead ? 'bg-amber-200 text-amber-900' : 'bg-purple-200 text-purple-900'
+                                        }`}>
+                                        {linkedQuote.status}
+                                      </span>
+                                    )}
+                                  </button>
+                                )}
+
+                                {!isConverted && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDirectConvertLead(lead)}
+                                    className="w-full flex items-center justify-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 px-2.5 py-1 rounded-xl text-[10px] font-black transition-all cursor-pointer"
+                                    title={isAr ? 'تحويل فوري إلى عميل ومهمة عمل للقسم' : 'Direct Convert to Client & Task'}
+                                  >
+                                    <UserCheck size={11} className="text-emerald-700 shrink-0" />
+                                    <span>{isAr ? 'تحويل فوري لعميل ومهمة' : 'Direct Convert to Client'}</span>
+                                  </button>
+                                )}
+                              </>
+                            );
+                          })()}
 
                           {/* Portal Access Button */}
                           {lead.portal_access_sent ? (
@@ -3117,18 +3302,41 @@ export default function CRMLeadManagement() {
                               <Edit2 size={13} />
                             </button>
 
-                            {/* Quotation Button */}
-                            {isQuotedOrAccepted && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenQuotationModal(lead)}
-                                className="inline-flex items-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1.5 rounded-xl text-[10px] font-black transition-colors cursor-pointer"
-                                title={isAr ? 'عرض السعر' : 'Quotation'}
-                              >
-                                <FileText size={12} />
-                                <span className="hidden sm:inline">{isAr ? 'العرض' : 'Quote'}</span>
-                              </button>
-                            )}
+                            {/* Quotation / Engagement Letter Button */}
+                            {(() => {
+                              const isAuditLead = lead.department_id === 'audit' || (lead.interested_service || '').toLowerCase().includes('audit');
+                              return (
+                                <>
+                                  {isQuotedOrAccepted && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenQuotationModal(lead)}
+                                      className={`inline-flex items-center gap-1 border px-2 py-1.5 rounded-xl text-[10px] font-black transition-colors cursor-pointer ${
+                                        isAuditLead
+                                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
+                                          : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200'
+                                      }`}
+                                      title={isAuditLead ? (isAr ? 'خطاب ارتباط التدقيق (EL)' : 'Audit Engagement Letter (EL)') : (isAr ? 'عرض السعر' : 'Quotation')}
+                                    >
+                                      {isAuditLead ? <Award size={12} className="text-amber-700" /> : <FileText size={12} className="text-purple-700" />}
+                                      <span className="hidden sm:inline">{isAuditLead ? (isAr ? 'خطاب EL' : 'Letter') : (isAr ? 'العرض' : 'Quote')}</span>
+                                    </button>
+                                  )}
+
+                                  {!isConverted && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDirectConvertLead(lead)}
+                                      className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-1.5 rounded-xl text-[10px] font-black transition-colors cursor-pointer"
+                                      title={isAr ? 'تحويل فوري إلى عميل ومهمة' : 'Direct Convert to Client & Task'}
+                                    >
+                                      <UserCheck size={12} className="text-emerald-700" />
+                                      <span className="hidden sm:inline">{isAr ? 'تحويل' : 'Convert'}</span>
+                                    </button>
+                                  )}
+                                </>
+                              );
+                            })()}
 
                             {/* Portal Access Button */}
                             {lead.portal_access_sent ? (
@@ -5150,209 +5358,229 @@ export default function CRMLeadManagement() {
         </div>
       )}
 
-      {/* ── MODAL: VIEW / EDIT QUOTATION (STEPS 3 & 4) ───────────────────── */}
-      {isQuoteModalOpen && activeQuotation && selectedLeadForQuote && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-gray-100 overflow-hidden my-8" dir={isAr ? 'rtl' : 'ltr'}>
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-800 flex items-center justify-center font-black">
-                  <FileText size={20} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-black text-gray-900">
-                      {isAr ? 'عرض وتعديل عرض السعر والتحويل' : 'Quotation Proposal & Client Conversion'}
-                    </h3>
-                    <span className="font-mono text-xs font-black bg-purple-200/80 text-purple-900 px-2.5 py-0.5 rounded-full">
-                      {activeQuotation.quotation_number}
-                    </span>
+      {/* ── MODAL: VIEW / EDIT QUOTATION OR ENGAGEMENT LETTER (STEPS 3 & 4) ── */}
+      {isQuoteModalOpen && activeQuotation && selectedLeadForQuote && (() => {
+        const isAuditDoc = selectedLeadForQuote.department_id === 'audit' || activeQuotation.quotation_number.startsWith('EL-') || activeQuotation.title.toLowerCase().includes('audit');
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-gray-100 overflow-hidden my-8" dir={isAr ? 'rtl' : 'ltr'}>
+              <div className={`p-6 border-b border-gray-100 flex items-center justify-between ${isAuditDoc ? 'bg-amber-50/70 border-amber-100' : 'bg-purple-50/50'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black ${isAuditDoc ? 'bg-amber-200 text-amber-900 shadow-xs shadow-amber-300' : 'bg-purple-100 text-purple-800'}`}>
+                    {isAuditDoc ? <Award size={20} /> : <FileText size={20} />}
                   </div>
-                  <p className="text-xs text-gray-500 font-medium mt-0.5">
-                    {selectedLeadForQuote.contact_name} {selectedLeadForQuote.company_name ? `• ${selectedLeadForQuote.company_name}` : ''}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsQuoteModalOpen(false)}
-                className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveQuotation} className="p-6 space-y-4">
-              <div>
-                <label className="block text-[11px] font-black text-gray-600 uppercase mb-1">
-                  {isAr ? 'عنوان عرض السعر والخدمة *' : 'Quotation Title / Service *'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={quoteForm.title}
-                  onChange={e => setQuoteForm({ ...quoteForm, title: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
-                />
-              </div>
-
-              <div className="bg-red-50/40 p-4 rounded-2xl border border-red-100 space-y-3">
-                <h4 className="text-[11px] font-black uppercase text-[#A11212] flex items-center gap-1.5">
-                  <DollarSign size={14} />
-                  <span>{isAr ? 'البيانات المالية وضريبة القيمة المضافة (5%)' : 'Financial Breakdown & 5% Oman VAT'}</span>
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-[10px] font-black text-gray-600 uppercase mb-1">
-                      {isAr ? 'المبلغ الأساسي (OMR)' : 'Subtotal (OMR)'}
-                    </label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      min="0"
-                      required
-                      value={quoteForm.subtotal}
-                      onChange={e => {
-                        const sub = parseFloat(e.target.value) || 0;
-                        const vat = Number(((sub * quoteForm.vat_rate) / 100).toFixed(3));
-                        const tot = Number((sub + vat).toFixed(3));
-                        setQuoteForm({
-                          ...quoteForm,
-                          subtotal: sub,
-                          vat_amount: vat,
-                          total_amount: tot
-                        });
-                      }}
-                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono font-black text-gray-900 focus:outline-none focus:border-[#A11212]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-600 uppercase mb-1">
-                      {isAr ? 'ضريبة القيمة المضافة (5%)' : 'VAT 5% (OMR)'}
-                    </label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      readOnly
-                      value={quoteForm.vat_amount}
-                      className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-gray-600 cursor-not-allowed"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-600 uppercase mb-1">
-                      {isAr ? 'المبلغ الإجمالي الشامل (OMR)' : 'Total Amount (OMR)'}
-                    </label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      readOnly
-                      value={quoteForm.total_amount}
-                      className="w-full bg-emerald-50 border border-emerald-300 rounded-xl px-3 py-2 text-xs font-mono font-black text-emerald-800 cursor-not-allowed"
-                    />
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-black text-gray-900">
+                        {isAuditDoc
+                          ? (isAr ? 'خطاب ارتباط تدقيق الحسابات والتحويل' : 'Audit Engagement Letter (EL) & Client Conversion')
+                          : (isAr ? 'عرض وتعديل عرض السعر والتحويل' : 'Quotation Proposal & Client Conversion')}
+                      </h3>
+                      <span className={`font-mono text-xs font-black px-2.5 py-0.5 rounded-full ${isAuditDoc ? 'bg-amber-200 text-amber-950 border border-amber-300' : 'bg-purple-200/80 text-purple-900'}`}>
+                        {activeQuotation.quotation_number}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 font-medium mt-0.5">
+                      {selectedLeadForQuote.contact_name} {selectedLeadForQuote.company_name ? `• ${selectedLeadForQuote.company_name}` : ''}
+                    </p>
                   </div>
                 </div>
+                <button
+                  onClick={() => setIsQuoteModalOpen(false)}
+                  className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400"
+                >
+                  ✕
+                </button>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-black text-gray-600 uppercase mb-1">
-                  {isAr ? 'نطاق العمل والتفاصيل الفنية (Scope of Work)' : 'Detailed Scope of Work & Deliverables'}
-                </label>
-                <textarea
-                  rows={3}
-                  value={quoteForm.service_details}
-                  onChange={e => setQuoteForm({ ...quoteForm, service_details: e.target.value })}
-                  placeholder={isAr ? 'أدخل تفاصيل ومخرجات الخدمة المتفق عليها...' : 'Describe service deliverables and milestones...'}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <form onSubmit={handleSaveQuotation} className="p-6 space-y-4">
                 <div>
                   <label className="block text-[11px] font-black text-gray-600 uppercase mb-1">
-                    {isAr ? 'حالة عرض السعر (Quotation Status)' : 'Proposal Status'}
-                  </label>
-                  <select
-                    value={quoteForm.status}
-                    onChange={e => setQuoteForm({ ...quoteForm, status: e.target.value as QuotationStatus })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
-                  >
-                    <option value="draft">{isAr ? 'مسودة (Draft)' : 'Draft'}</option>
-                    <option value="sent">{isAr ? 'تم الإرسال للعميل (Sent)' : 'Sent to Client'}</option>
-                    <option value="accepted">{isAr ? 'مقبول (قبول وتحويل لعميل ومهمة HOD)' : 'Accepted (Convert & Route to HOD)'}</option>
-                    <option value="rejected">{isAr ? 'مرفوض (Rejected)' : 'Rejected'}</option>
-                    <option value="expired">{isAr ? 'منتهي الصلاحية (Expired)' : 'Expired'}</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-black text-gray-600 uppercase mb-1">
-                    {isAr ? 'تاريخ استحقاق / انتهاء الصلاحية' : 'Valid Until / Target Due Date'}
+                    {isAuditDoc
+                      ? (isAr ? 'موضوع خطاب الارتباط والخدمة التدقيقية *' : 'Engagement Letter Subject / Audit Service *')
+                      : (isAr ? 'عنوان عرض السعر والخدمة *' : 'Quotation Title / Service *')}
                   </label>
                   <input
-                    type="date"
-                    value={quoteForm.valid_until}
-                    onChange={e => setQuoteForm({ ...quoteForm, valid_until: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                    type="text"
+                    required
+                    value={quoteForm.title}
+                    onChange={e => setQuoteForm({ ...quoteForm, title: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
                   />
                 </div>
-              </div>
 
-              {quoteForm.status === 'accepted' && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs space-y-1 text-emerald-900">
-                  <div className="flex items-center gap-1.5 font-black">
-                    <Sparkles size={14} className="text-emerald-600 shrink-0" />
-                    <span>{isAr ? 'إجراء التحويل التلقائي عند الحفظ:' : 'Automated Conversion on Save:'}</span>
+                <div className="bg-red-50/40 p-4 rounded-2xl border border-red-100 space-y-3">
+                  <h4 className="text-[11px] font-black uppercase text-[#A11212] flex items-center gap-1.5">
+                    <DollarSign size={14} />
+                    <span>{isAr ? 'الأتعاب المهنية وضريبة القيمة المضافة (5%)' : 'Professional Fees & 5% Oman VAT'}</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-600 uppercase mb-1">
+                        {isAr ? 'المبلغ الأساسي (OMR)' : 'Subtotal Fee (OMR)'}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        required
+                        value={quoteForm.subtotal}
+                        onChange={e => {
+                          const sub = parseFloat(e.target.value) || 0;
+                          const vat = Number(((sub * quoteForm.vat_rate) / 100).toFixed(3));
+                          const tot = Number((sub + vat).toFixed(3));
+                          setQuoteForm({
+                            ...quoteForm,
+                            subtotal: sub,
+                            vat_amount: vat,
+                            total_amount: tot
+                          });
+                        }}
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono font-black text-gray-900 focus:outline-none focus:border-[#A11212]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-600 uppercase mb-1">
+                        {isAr ? 'ضريبة القيمة المضافة (5%)' : 'VAT 5% (OMR)'}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        readOnly
+                        value={quoteForm.vat_amount}
+                        className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-gray-600 cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-600 uppercase mb-1">
+                        {isAr ? 'المبلغ الإجمالي الشامل (OMR)' : 'Total Amount (OMR)'}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        readOnly
+                        value={quoteForm.total_amount}
+                        className="w-full bg-emerald-50 border border-emerald-300 rounded-xl px-3 py-2 text-xs font-mono font-black text-emerald-800 cursor-not-allowed"
+                      />
+                    </div>
                   </div>
-                  <p className="text-[11px] font-medium leading-relaxed">
-                    {isAr
-                      ? `سيتم تحويل الفرصة "${selectedLeadForQuote.contact_name}" إلى عميل نشط في النظام، وإنشاء مهمة جديدة بقيمة OMR ${formatOMR(quoteForm.total_amount)} وتوجيه إشعار فوري لرئيس قسم (${selectedLeadForQuote.department_id}) لتكليف الموظف المختص.`
-                      : `Will register "${selectedLeadForQuote.contact_name}" as an Active Client, generate a pending task for OMR ${formatOMR(quoteForm.total_amount)}, and dispatch a Realtime alert to the ${selectedLeadForQuote.department_id.toUpperCase()} HOD for staff delegation.`}
-                  </p>
                 </div>
-              )}
 
-              <div>
-                <label className="block text-[11px] font-black text-gray-600 uppercase mb-1">
-                  {isAr ? 'الشروط والأحكام (Terms & Conditions)' : 'Terms & Conditions'}
-                </label>
-                <textarea
-                  rows={2}
-                  value={quoteForm.terms_conditions}
-                  onChange={e => setQuoteForm({ ...quoteForm, terms_conditions: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
-                />
-              </div>
+                <div>
+                  <label className="block text-[11px] font-black text-gray-600 uppercase mb-1">
+                    {isAuditDoc
+                      ? (isAr ? 'نطاق ومسؤوليات التدقيق (Audit Scope of Work)' : 'Statutory Audit Scope of Work & Responsibilities')
+                      : (isAr ? 'نطاق العمل والتفاصيل الفنية (Scope of Work)' : 'Detailed Scope of Work & Deliverables')}
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={quoteForm.service_details}
+                    onChange={e => setQuoteForm({ ...quoteForm, service_details: e.target.value })}
+                    placeholder={isAr ? 'أدخل تفاصيل ومخرجات الخدمة المتفق عليها...' : 'Describe service deliverables and milestones...'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                  />
+                </div>
 
-              <div className="flex gap-3 pt-3 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setIsQuoteModalOpen(false)}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-black text-xs uppercase"
-                >
-                  {isAr ? 'إغلاق' : 'Close'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingQuote}
-                  className={`flex-1 text-white py-3 rounded-xl font-black text-xs uppercase transition-all shadow-md disabled:opacity-50 cursor-pointer ${quoteForm.status === 'accepted'
-                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
-                      : 'bg-[#A11212] hover:bg-[#800e0e] shadow-[#A11212]/20'
-                    }`}
-                >
-                  {isSavingQuote
-                    ? (isAr ? 'جاري التنفيذ والتحويل...' : 'Processing...')
-                    : quoteForm.status === 'accepted'
-                      ? (isAr ? 'قبول العرض والتحويل لعميل ومهمة' : 'Accept & Convert to Client')
-                      : (isAr ? 'حفظ التغييرات' : 'Save Quotation')
-                  }
-                </button>
-              </div>
-            </form>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-600 uppercase mb-1">
+                      {isAuditDoc
+                        ? (isAr ? 'حالة خطاب الارتباط' : 'Engagement Letter Status')
+                        : (isAr ? 'حالة عرض السعر (Quotation Status)' : 'Proposal Status')}
+                    </label>
+                    <select
+                      value={quoteForm.status}
+                      onChange={e => setQuoteForm({ ...quoteForm, status: e.target.value as QuotationStatus })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                    >
+                      <option value="draft">{isAr ? 'مسودة (Draft)' : 'Draft'}</option>
+                      <option value="sent">{isAr ? 'تم الإرسال للعميل (Sent)' : 'Sent to Client'}</option>
+                      <option value="accepted">
+                        {isAuditDoc
+                          ? (isAr ? 'معتمد وموقع (قبول وتوليد عميل ومهمة تدقيق)' : 'Signed & Accepted (Convert to Client & Audit Task)')
+                          : (isAr ? 'مقبول (قبول وتحويل لعميل ومهمة HOD)' : 'Accepted (Convert & Route to HOD)')}
+                      </option>
+                      <option value="rejected">{isAr ? 'مرفوض (Rejected)' : 'Rejected'}</option>
+                      <option value="expired">{isAr ? 'منتهي الصلاحية (Expired)' : 'Expired'}</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-600 uppercase mb-1">
+                      {isAr ? 'تاريخ استحقاق / انتهاء الصلاحية' : 'Valid Until / Target Due Date'}
+                    </label>
+                    <input
+                      type="date"
+                      value={quoteForm.valid_until}
+                      onChange={e => setQuoteForm({ ...quoteForm, valid_until: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                    />
+                  </div>
+                </div>
+
+                {quoteForm.status === 'accepted' && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs space-y-1 text-emerald-900">
+                    <div className="flex items-center gap-1.5 font-black">
+                      <Sparkles size={14} className="text-emerald-600 shrink-0" />
+                      <span>{isAr ? 'إجراء التحويل التلقائي عند الحفظ:' : 'Automated Conversion on Save:'}</span>
+                    </div>
+                    <p className="text-[11px] font-medium leading-relaxed">
+                      {isAr
+                        ? `سيتم تحويل الفرصة "${selectedLeadForQuote.contact_name}" إلى عميل نشط في النظام، وتوليد الفاتورة الضريبية، وإنشاء مهمة جديدة بقيمة OMR ${formatOMR(quoteForm.total_amount)} وتوجيه إشعار فوري لرئيس قسم (${selectedLeadForQuote.department_id}) لتكليف الموظف المختص.`
+                        : `Will register "${selectedLeadForQuote.contact_name}" as an Active Client, issue pending tax invoice, generate deliverable task for OMR ${formatOMR(quoteForm.total_amount)}, and dispatch a Realtime alert to the ${selectedLeadForQuote.department_id.toUpperCase()} HOD for staff delegation.`}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-black text-gray-600 uppercase mb-1">
+                    {isAuditDoc
+                      ? (isAr ? 'شروط وأحكام خطاب الارتباط (Engagement Terms & Standards)' : 'Engagement Terms, ISA Standards & Responsibilities')
+                      : (isAr ? 'الشروط والأحكام (Terms & Conditions)' : 'Terms & Conditions')}
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={quoteForm.terms_conditions}
+                    onChange={e => setQuoteForm({ ...quoteForm, terms_conditions: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#A11212]"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-3 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsQuoteModalOpen(false)}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-black text-xs uppercase"
+                  >
+                    {isAr ? 'إغلاق' : 'Close'}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingQuote}
+                    className={`flex-1 text-white py-3 rounded-xl font-black text-xs uppercase transition-all shadow-md disabled:opacity-50 cursor-pointer ${quoteForm.status === 'accepted'
+                        ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                        : 'bg-[#A11212] hover:bg-[#800e0e] shadow-[#A11212]/20'
+                      }`}
+                  >
+                    {isSavingQuote
+                      ? (isAr ? 'جاري التنفيذ والتحويل...' : 'Processing...')
+                      : quoteForm.status === 'accepted'
+                        ? (isAuditDoc
+                            ? (isAr ? 'اعتماد خطاب الارتباط والتحويل لعميل ومهمة' : 'Sign & Accept Engagement Letter')
+                            : (isAr ? 'قبول العرض والتحويل لعميل ومهمة' : 'Accept & Convert to Client'))
+                        : (isAr ? 'حفظ التغييرات' : 'Save Document')
+                    }
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── MODAL: ADD / EDIT LEAD RECORD ──────────────────────────────── */}
       {isAddModalOpen && (
