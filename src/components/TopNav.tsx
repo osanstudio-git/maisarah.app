@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabaseClient';
 import LanguageSwitcher from './LanguageSwitcher';
 
 import { getHierarchyMode, subscribeHierarchyMode, type HierarchyMode } from '../utils/workflowConfig';
+import { formatStaffProfile } from '../pages/Shared/Messaging';
 
 export interface AppNotification {
   id: string;
@@ -88,9 +89,15 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
     return subscribeHierarchyMode((mode) => setHierarchyModeState(mode));
   }, []);
 
-  const displayName = user?.user_metadata?.full_name || 
-                      user?.email?.split('@')[0] || 
-                      (isAr ? 'المستخدم' : 'User');
+  const userProfileInfo = useMemo(() => {
+    return formatStaffProfile({
+      full_name: user?.user_metadata?.full_name,
+      email: user?.email,
+      role: role || undefined
+    }, isAr);
+  }, [user, role, isAr]);
+
+  const displayName = userProfileInfo.displayName;
 
   const portalNames: Record<string, { en: string; ar: string; icon: string }> = {
     accountant: { en: 'Accountant Portal', ar: 'بوابة المحاسب والفواتير', icon: '💼' },
@@ -406,11 +413,11 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
             }}
           >
             <div className="w-9 h-9 rounded-full bg-brand-dark flex items-center justify-center text-white font-bold flex-shrink-0 text-sm">
-              {user?.email?.charAt(0).toUpperCase() || 'U'}
+              {displayName.charAt(0).toUpperCase() || 'U'}
             </div>
             <div className={isAr ? 'text-right' : 'text-left'}>
               <p className="font-semibold text-xs text-gray-800 flex items-center gap-1">
-                {user?.email?.split('@')[0] || 'User'} <ChevronDown size={14} className="text-gray-500" />
+                {displayName} <ChevronDown size={14} className="text-gray-500" />
               </p>
               <p className="text-[11px] text-gray-500 capitalize">{role ? (portalNames[role]?.[isAr ? 'ar' : 'en'] || role) : t('topNav.role')}</p>
             </div>
@@ -419,7 +426,7 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
           {isProfileOpen && (
             <div className={`absolute mt-2 w-52 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-scale-up ${isAr ? 'left-0' : 'right-0'}`}>
               <div className="px-4 py-2 border-b border-gray-100 md:hidden">
-                <p className="font-bold text-sm text-gray-800 truncate">{user?.email}</p>
+                <p className="font-bold text-sm text-gray-800 truncate">{displayName}</p>
                 <p className="text-xs text-gray-500 capitalize">{role}</p>
               </div>
               <button 

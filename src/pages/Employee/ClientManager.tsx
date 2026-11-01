@@ -341,10 +341,11 @@ const ClientDetail = ({
 // Sub-component: Form Field Helper
 // ---------------------------------------------------------------------------
 const FormField = ({
-  label, name, required = false, type = 'text', placeholder = '', value, onChange
+  label, name, required = false, type = 'text', placeholder = '', value, onChange, autoComplete = 'off'
 }: {
   label: string; name: string; required?: boolean; type?: string; placeholder?: string;
   value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  autoComplete?: string;
 }) => (
   <div>
     <label className="block text-sm font-semibold text-gray-700 mb-1.5">
@@ -357,6 +358,7 @@ const FormField = ({
       value={value}
       onChange={onChange}
       placeholder={placeholder}
+      autoComplete={autoComplete}
       className="w-full p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-700 focus:ring-2 focus:ring-red-700/10 transition-colors bg-white"
     />
   </div>
@@ -386,6 +388,7 @@ const ClientManager = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [createPortalAccount, setCreatePortalAccount] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [formMsg, setFormMsg]           = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
@@ -501,6 +504,8 @@ const ClientManager = () => {
   // ── Modals / Form State ───────────────────────────────────────────────────
   const openEditModal = (client: Client) => {
     setEditingClient(client);
+    setCreatePortalAccount(false);
+    setShowPassword(false);
     setFormData({
       company_name: client.company_name,
       cr_number: client.cr_number || '',
@@ -509,7 +514,7 @@ const ClientManager = () => {
       compliance_status: client.compliance_status,
       email: client.email || '',
       password: '',
-      phone: '',
+      phone: client.phone || '',
     });
     setIsModalOpen(true);
   };
@@ -517,6 +522,8 @@ const ClientManager = () => {
   const closeFormModal = () => {
     setIsModalOpen(false);
     setEditingClient(null);
+    setCreatePortalAccount(false);
+    setShowPassword(false);
     setFormMsg(null);
     setCreateInitialTask(true);
     setInitialTaskTitle('');
@@ -562,8 +569,13 @@ const ClientManager = () => {
         let finalClientId: string;
         let portalCreated = false;
 
-        // If employee provided both email and password, create portal login
-        if (formData.email?.trim() && formData.password?.trim() && formData.password.trim().length >= 6) {
+        // Only create portal login account if employee explicitly checked the portal option AND provided valid credentials
+        if (createPortalAccount && formData.email?.trim() && formData.password?.trim() && formData.password.trim().length >= 6) {
+          const clientEmail = formData.email.trim();
+          if (user?.email && clientEmail.toLowerCase() === user.email.toLowerCase()) {
+            throw new Error(isAr ? 'لا يمكن استخدام البريد الإلكتروني للموظف كحساب دخول للعميل' : 'Cannot use employee staff email as client portal login email');
+          }
+
           const tempClient = createClient(
             import.meta.env.VITE_SUPABASE_URL,
             import.meta.env.VITE_SUPABASE_ANON_KEY,
@@ -571,7 +583,7 @@ const ClientManager = () => {
           );
 
           const { data: authData, error: authError } = await tempClient.auth.signUp({
-            email: formData.email.trim(),
+            email: clientEmail,
             password: formData.password.trim(),
             options: { data: { role: 'client', company_name: formData.company_name } }
           });
@@ -586,14 +598,14 @@ const ClientManager = () => {
             await tempClient.from('profiles').insert({
               id: finalClientId,
               role: 'client',
-              email: formData.email.trim()
+              email: clientEmail
             });
           } catch (e) {
             // Profile exists or trigger handled it
           }
 
           createdTicket = {
-            email: formData.email.trim(),
+            email: clientEmail,
             pass: formData.password.trim(),
             company: formData.company_name,
             phone: formData.phone,
@@ -624,29 +636,38 @@ const ClientManager = () => {
         // Optionally create initial deliverable task in services table
         if (createInitialTask) {
           const taskName = initialTaskTitle.trim() || `${currentDeptConfig?.title || 'Operational'} Engagement`;
-          await supabase.from('services').insert([{
-            client_id: finalClientId,
-            employee_id: user?.id,
-            department_id: effectiveDeptId || 'audit',
-            title: taskName,
-            description: `Deliverable initiated upon client registration by ${user?.user_metadata?.full_name || 'Staff Member'}`,
-            status: 'in_progress',
-            priority: 'high',
-            due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-            is_approved: true
-          }]);
+          try {
+            await supabase.from('services').insert([{
+              client_id: finalClientId,
+              employee_id: user?.id,
+              department_id: effectiveDeptId || 'audit',
+              title: taskName,
+              description: `Deliverable initiated upon client registration by ${user?.user_metadata?.full_name || 'Staff Member'}`,
+              status: 'ongoing',
+              priority: 'Medium',
+              due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+              is_approved: true
+            }]);
+          } catch (svcErr) {
+            console.warn('Initial deliverable service notice:', svcErr);
+          }
 
           // Also register initial task in DSR so it appears in the employee's DSR workspace
-          autoCreateDSREntryFromTask({
-            serviceTitle: taskName,
-            companyName: formData.company_name,
-            crNumber: formData.cr_number || '',
-            clientId: finalClientId,
-            employeeName: user?.user_metadata?.full_name || user?.email || 'Staff Member',
-            employeeId: user?.id,
-            amount: 0,
-            date: new Date().toISOString().split('T')[0]
-          });
+          try {
+            autoCreateDSREntryFromTask({
+              serviceTitle: taskName,
+              companyName: formData.company_name,
+              crNumber: formData.cr_number || '',
+              clientId: finalClientId,
+              employeeName: user?.user_metadata?.full_name || user?.email || 'Staff Member',
+              employeeId: user?.id,
+              departmentId: effectiveDeptId || 'audit',
+              amount: 0,
+              date: new Date().toISOString().split('T')[0]
+            });
+          } catch (dsrErr) {
+            console.warn('Auto DSR entry notice:', dsrErr);
+          }
         }
 
         // Log the activity
@@ -1043,64 +1064,86 @@ const ClientManager = () => {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
                 <FormField 
                   label={t('employee.companyName')} 
                   name="company_name" 
                   value={formData.company_name}
                   onChange={handleInputChange}
                   required 
+                  autoComplete="off"
                   placeholder={isAr ? 'شركة الموالح للإنشاء' : 'Al Mawaleh Construction LLC'} 
                 />
 
+                {/* Company Contact Details (Email & Phone are purely contact info, never autofilled with staff user credentials) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField 
+                    label={isAr ? 'البريد الإلكتروني للعميل (اختياري)' : 'Client Email (Optional)'} 
+                    name="client_contact_email" 
+                    type="email"
+                    autoComplete="off"
+                    value={formData.email}
+                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    required={false}
+                    placeholder="info@company.com" 
+                  />
+                  <FormField 
+                    label={isAr ? 'رقم الواتساب / الهاتف (اختياري)' : 'WhatsApp / Phone Number (Optional)'} 
+                    name="client_contact_phone" 
+                    autoComplete="off"
+                    value={formData.phone}
+                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="+968 0000 0000" 
+                  />
+                </div>
+
                 {!editingClient && (
-                  <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200">
-                    <div className="col-span-2 flex justify-between items-center">
-                      <p className="text-[10px] font-black text-brand-dark uppercase tracking-widest">
-                        {isAr ? 'بيانات الدخول للبوابة (اختياري)' : 'Portal Login Credentials (Optional)'}
-                      </p>
-                      <span className="text-[10px] text-gray-400">
-                        {isAr ? 'يمكن إنشاؤها لاحقاً' : 'Can be created later'}
-                      </span>
-                    </div>
-                    <div className="col-span-2">
-                      <FormField 
-                        label={isAr ? 'البريد الإلكتروني' : 'Email Address'} 
-                        name="email" 
-                        type="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        required={false}
-                        placeholder="client@example.com" 
+                  <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200/80 space-y-3">
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={createPortalAccount}
+                        onChange={e => {
+                          setCreatePortalAccount(e.target.checked);
+                          if (!e.target.checked) {
+                            setFormData(prev => ({ ...prev, password: '' }));
+                          }
+                        }}
+                        className="mt-0.5 w-4 h-4 rounded text-brand-dark focus:ring-brand-dark/20 border-gray-300 cursor-pointer"
                       />
-                    </div>
-                    <div className="md:col-span-2 relative">
-                        <FormField
-                          label={isAr ? 'كلمة المرور (6 خانات على الأقل لإنشاء حساب)' : 'Password (Min 6 chars to create portal login)'}
-                          name="password"
-                          type={showPassword ? 'text' : 'password'}
-                          required={false}
-                          value={formData.password}
-                          onChange={e => setFormData({ ...formData, password: e.target.value })}
-                          placeholder={isAr ? 'اتركه فارغاً إذا كان العميل مباشراً/أوفلاين' : 'Leave empty if registering offline client'}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className={`absolute ${isAr ? 'left-3' : 'right-3'} top-9 text-gray-400 hover:text-brand-dark transition-colors`}
-                        >
-                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
+                      <div>
+                        <p className="text-xs font-black text-gray-800">
+                          {isAr ? 'تفعيل حساب دخول لبوابة العملاء (اختياري)' : 'Enable Client Portal Login Account (Optional)'}
+                        </p>
+                        <p className="text-[11px] text-gray-500 font-medium">
+                          {isAr ? 'اتركه معطلاً لتسجيل عميل مباشر/أوفلاين بدون حساب دخول الآن. يمكن إرسال بيانات الدخول لاحقاً بضغطة زر.' : 'Leave unchecked for offline/direct clients. You can issue access credentials anytime later.'}
+                        </p>
                       </div>
-                    <div className="col-span-2">
-                      <FormField 
-                        label={isAr ? 'رقم الواتساب / الهاتف (اختياري)' : 'WhatsApp / Phone Number (Optional)'} 
-                        name="phone" 
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        placeholder="+968 0000 0000" 
-                      />
-                    </div>
+                    </label>
+
+                    {createPortalAccount && (
+                      <div className="pt-2 border-t border-gray-200/70 space-y-3">
+                        <div className="relative">
+                          <FormField
+                            label={isAr ? 'كلمة المرور لحساب البوابة (6 خانات على الأقل)' : 'Portal Password (Min 6 chars)'}
+                            name="portal_secret_password"
+                            type={showPassword ? 'text' : 'password'}
+                            autoComplete="new-password"
+                            required={createPortalAccount}
+                            value={formData.password}
+                            onChange={e => setFormData({ ...formData, password: e.target.value })}
+                            placeholder={isAr ? 'أدخل كلمة مرور قوية للعميل...' : 'Enter client portal password...'}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className={`absolute ${isAr ? 'left-3' : 'right-3'} top-9 text-gray-400 hover:text-brand-dark transition-colors cursor-pointer`}
+                          >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

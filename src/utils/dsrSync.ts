@@ -134,7 +134,7 @@ export async function fetchCloudDSREntries(): Promise<DSREntry[]> {
     const { data, error } = await supabase
       .from('dsr_entries')
       .select('*')
-      .order('date', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.warn('Error fetching cloud DSR entries:', error.message);
@@ -142,44 +142,79 @@ export async function fetchCloudDSREntries(): Promise<DSREntry[]> {
     }
 
     if (data && Array.isArray(data)) {
+      const local = getDSREntries();
+      const localMap = new Map(local.map(e => [e.id, e]));
+
       const cloudEntries: DSREntry[] = data
         .filter((row: any) => !isDummyDSREntry(row))
-        .map((row: any) => ({
-          id: row.id,
-          date: row.date || (row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
-          employee_name: row.employee_name || 'Staff Member',
-          employee_id: row.employee_id,
-          department_id: row.department_id,
-          service: row.service_name || 'Professional Service',
-          company_name: row.company_name || 'Valued Client',
-          client_id: row.client_id,
-          cr_number: row.cr_number || '',
-          amount: Number(row.amount || 0),
-          gov_fee: Number(row.gov_fee || 0),
-          profit: Number(row.profit !== undefined ? row.profit : (Number(row.amount || 0) - Number(row.gov_fee || 0))),
-          status: row.status || 'Paid',
-          work_status: row.work_status || 'Completed',
-          payment_terms: row.payment_terms || 'Full Upfront',
-          total_agreed_amount: Number(row.total_agreed_amount || row.amount || 0),
-          paid_amount: Number(row.paid_amount || (row.status === 'Paid' ? row.amount : 0)),
-          remaining_balance: Number(row.remaining_balance || 0),
-          installment_number: row.installment_number || '',
-          payment_date: row.payment_date || row.date || '',
-          payment_method: row.payment_method || '',
-          accountant_note: row.accountant_note || '',
-          invoice_issued: Boolean(row.invoice_issued),
-          invoice_number: row.invoice_number || '',
-          receipt_number: row.receipt_number || '',
-          payment_reference: row.payment_reference || '',
-          verified_by_accountant: Boolean(row.verified_by_accountant),
-          reconciled: Boolean(row.reconciled),
-          bank_reference: row.bank_reference || '',
-          bank_name: row.bank_name || '',
-          created_at: row.created_at,
-        }));
+        .map((row: any) => {
+          const matchedLocal = localMap.get(row.id);
+
+          // Parse extra details if stored in accountant_note or local memory
+          const noteText = row.accountant_note || '';
+          const refText = row.payment_reference || '';
+
+          // Match patterns: "Paid: OMR XX / Total: OMR YY"
+          let parsedAmt = matchedLocal?.amount;
+          if (parsedAmt === undefined) {
+            const amtMatch = noteText.match(/Paid:\s*OMR\s*([\d.]+)/i) || noteText.match(/Total:\s*OMR\s*([\d.]+)/i);
+            if (amtMatch) {
+              parsedAmt = parseFloat(amtMatch[1]);
+            } else {
+              parsedAmt = Number(row.profit || 0) + Number(row.gov_fee || 0);
+            }
+          }
+
+          // Match client: "Client: ABC"
+          let parsedCompany = matchedLocal?.company_name || row.company_name;
+          if (!parsedCompany) {
+            const compMatch = noteText.match(/Client:\s*([^|]+)/i);
+            parsedCompany = compMatch ? compMatch[1].trim() : 'Valued Client';
+          }
+
+          // Match service: First segment before '|'
+          let parsedService = matchedLocal?.service || row.service_name;
+          if (!parsedService) {
+            const parts = noteText.split('|');
+            parsedService = parts[0]?.trim() || 'Professional Service';
+          }
+
+          return {
+            id: row.id,
+            date: matchedLocal?.date || (row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+            employee_name: matchedLocal?.employee_name || row.employee_name || 'Staff Member',
+            employee_id: row.employee_id,
+            department_id: matchedLocal?.department_id || row.department_id,
+            service: parsedService,
+            company_name: parsedCompany,
+            client_id: row.client_id,
+            cr_number: matchedLocal?.cr_number || row.cr_number || '',
+            amount: Number(parsedAmt || 0),
+            gov_fee: Number(row.gov_fee || 0),
+            profit: Number(row.profit !== undefined ? row.profit : (Number(parsedAmt || 0) - Number(row.gov_fee || 0))),
+            status: matchedLocal?.status || (Number(parsedAmt || 0) > 0 ? 'Paid' : 'Unpaid'),
+            work_status: matchedLocal?.work_status || 'In Progress',
+            payment_terms: matchedLocal?.payment_terms || 'Full Upfront',
+            total_agreed_amount: Number(matchedLocal?.total_agreed_amount || parsedAmt || 0),
+            paid_amount: Number(matchedLocal?.paid_amount || (matchedLocal?.status === 'Paid' ? parsedAmt : 0)),
+            remaining_balance: Number(matchedLocal?.remaining_balance || 0),
+            installment_number: matchedLocal?.installment_number || '',
+            payment_date: matchedLocal?.payment_date || (row.created_at ? row.created_at.split('T')[0] : ''),
+            payment_method: matchedLocal?.payment_method || (refText.split('|')[0]?.trim() as any) || '',
+            accountant_note: noteText,
+            invoice_issued: Boolean(row.invoice_issued),
+            invoice_number: matchedLocal?.invoice_number || '',
+            receipt_number: matchedLocal?.receipt_number || '',
+            payment_reference: refText,
+            verified_by_accountant: Boolean(row.verified_by_accountant),
+            reconciled: Boolean(matchedLocal?.reconciled),
+            bank_reference: matchedLocal?.bank_reference || '',
+            bank_name: matchedLocal?.bank_name || '',
+            created_at: row.created_at,
+          };
+        });
 
       // Merge with non-dummy local entries that might be unsynced
-      const local = getDSREntries();
       const cloudIds = new Set(cloudEntries.map(e => e.id));
       const nonCloudLocal = local.filter(e => !cloudIds.has(e.id) && !isDummyDSREntry(e));
       const merged = [...cloudEntries, ...nonCloudLocal];
@@ -305,14 +340,9 @@ export function updateDSREntry(id: string, patch: Partial<DSREntry>): DSREntry |
     const cloudUpdate: any = {};
     if (patch.verified_by_accountant !== undefined) cloudUpdate.verified_by_accountant = patch.verified_by_accountant;
     if (patch.invoice_issued !== undefined) cloudUpdate.invoice_issued = patch.invoice_issued;
-    if (patch.invoice_number !== undefined) cloudUpdate.invoice_number = patch.invoice_number;
-    if (patch.receipt_number !== undefined) cloudUpdate.receipt_number = patch.receipt_number;
     if (patch.accountant_note !== undefined) cloudUpdate.accountant_note = patch.accountant_note;
     if (patch.gov_fee !== undefined) cloudUpdate.gov_fee = patch.gov_fee;
-    if (patch.amount !== undefined) cloudUpdate.amount = patch.amount;
-    if (patch.status !== undefined) cloudUpdate.status = patch.status;
-    if (patch.payment_method !== undefined) cloudUpdate.payment_method = patch.payment_method;
-    if (patch.payment_date !== undefined) cloudUpdate.payment_date = patch.payment_date;
+    if (patch.payment_reference !== undefined) cloudUpdate.payment_reference = patch.payment_reference;
     cloudUpdate.profit = updatedProfit;
 
     supabase
@@ -402,21 +432,10 @@ export async function syncDSRToCloud(entry: DSREntry, clientId?: string): Promis
     const targetClientId = clientId || entry.client_id;
 
     const payload: any = {
-      company_name: entry.company_name || 'Valued Client',
-      service_name: entry.service || 'Professional Service',
-      cr_number: entry.cr_number || '',
-      amount: Number(entry.amount || 0),
       gov_fee: Number(entry.gov_fee || 0),
       profit: Number(entry.profit !== undefined ? entry.profit : (Number(entry.amount || 0) - Number(entry.gov_fee || 0))),
-      status: entry.status || 'Paid',
-      payment_method: entry.payment_method || null,
-      payment_date: entry.payment_date || entry.date || new Date().toISOString().split('T')[0],
-      date: entry.date || new Date().toISOString().split('T')[0],
-      employee_name: entry.employee_name || 'Staff Member',
       verified_by_accountant: Boolean(entry.verified_by_accountant),
       invoice_issued: Boolean(entry.invoice_issued),
-      invoice_number: entry.invoice_number || null,
-      receipt_number: entry.receipt_number || null,
       payment_reference: paymentRef || null,
       accountant_note: noteDetails
     };
