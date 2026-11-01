@@ -59,8 +59,8 @@ interface Client {
   created_at: string;
   assigned_employee_id?: string | null;
   portal_access_sent?: boolean;
-  portal_sent_at?: string;
-  portal_user_id?: string;
+  portal_sent_at?: string | null;
+  portal_user_id?: string | null;
 }
 
 interface Invoice {
@@ -364,6 +364,20 @@ const FormField = ({
   </div>
 );
 
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      // fallback
+    }
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+};
+
 // ---------------------------------------------------------------------------
 // Main Component: Client Manager
 // ---------------------------------------------------------------------------
@@ -542,6 +556,7 @@ const ClientManager = () => {
   // ── Submit (Add / Edit) ───────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setIsSubmitting(true);
     setFormMsg(null);
 
@@ -550,17 +565,18 @@ const ClientManager = () => {
     try {
       if (editingClient) {
         const payload: any = {
-          company_name:       formData.company_name,
-          cr_number:          formData.cr_number || null,
-          vat_number:         formData.vat_number || null,
-          activity:           formData.activity || null,
+          company_name:       formData.company_name.trim(),
+          cr_number:          formData.cr_number?.trim() || null,
+          vat_number:         formData.vat_number?.trim() || null,
+          activity:           formData.activity?.trim() || null,
           compliance_status:  formData.compliance_status || 'Active',
-          email:              formData.email || null,
-          phone:              formData.phone || null,
+          email:              formData.email?.trim() || null,
+          phone:              formData.phone?.trim() || null,
         };
         const { error } = await supabase.from('clients').update(payload).eq('id', editingClient.id);
         if (error) throw error;
         setFormMsg({ type: 'ok', text: isAr ? 'تم تحديث بيانات العميل بنجاح' : 'Client updated successfully' });
+        setTimeout(() => closeFormModal(), 800);
       } else {
         if (!formData.company_name.trim()) {
           throw new Error(isAr ? 'يرجى إدخال اسم العميل أو اسم الشركة' : 'Company or client name is required');
@@ -585,7 +601,7 @@ const ClientManager = () => {
           const { data: authData, error: authError } = await tempClient.auth.signUp({
             email: clientEmail,
             password: formData.password.trim(),
-            options: { data: { role: 'client', company_name: formData.company_name } }
+            options: { data: { role: 'client', company_name: formData.company_name.trim() } }
           });
 
           if (authError) throw authError;
@@ -607,39 +623,54 @@ const ClientManager = () => {
           createdTicket = {
             email: clientEmail,
             pass: formData.password.trim(),
-            company: formData.company_name,
-            phone: formData.phone,
+            company: formData.company_name.trim(),
+            phone: formData.phone?.trim() || '',
           };
         } else {
           // Direct client registration without instant portal auth account
-          finalClientId = crypto.randomUUID();
+          finalClientId = generateUUID();
         }
 
         const payload: any = {
           id: finalClientId, 
-          company_name: formData.company_name,
-          cr_number: formData.cr_number || null,
-          vat_number: formData.vat_number || null,
-          activity: formData.activity || null,
+          company_name: formData.company_name.trim(),
+          cr_number: formData.cr_number?.trim() || null,
+          vat_number: formData.vat_number?.trim() || null,
+          activity: formData.activity?.trim() || null,
           compliance_status: formData.compliance_status || 'Active',
           email: formData.email?.trim() || null,
-          phone: formData.phone || null,
-          assigned_employee_id: user?.id, // Capture the employee who registered the client
+          phone: formData.phone?.trim() || null,
+          assigned_employee_id: user?.id || null, // Capture the employee who registered the client
           portal_access_sent: portalCreated,
           portal_sent_at: portalCreated ? new Date().toISOString() : null,
           portal_user_id: portalCreated ? finalClientId : null,
         };
 
-        const { error: clientError } = await supabase.from('clients').insert([payload]);
+        let { data: insertedClient, error: clientError } = await supabase
+          .from('clients')
+          .insert([payload])
+          .select()
+          .maybeSingle();
+
+        // If assigned_employee_id failed FK constraint, retry safely without it
+        if (clientError && (clientError.message?.includes('foreign key') || (clientError as any).code === '23503')) {
+          console.warn('Retrying client insert without assigned_employee_id FK');
+          delete payload.assigned_employee_id;
+          const retry = await supabase.from('clients').insert([payload]).select().maybeSingle();
+          clientError = retry.error;
+          insertedClient = retry.data;
+        }
+
         if (clientError) throw clientError;
+
+        const finalId = insertedClient?.id || finalClientId;
 
         // Optionally create initial deliverable task in services table
         if (createInitialTask) {
-          const taskName = initialTaskTitle.trim() || `${currentDeptConfig?.title || 'Operational'} Engagement`;
+          const taskName = initialTaskTitle.trim() || `${currentDeptConfig?.name || 'Operational'} Engagement`;
           try {
-            await supabase.from('services').insert([{
-              client_id: finalClientId,
-              employee_id: user?.id,
+            const svcPayload: any = {
+              client_id: finalId,
               department_id: effectiveDeptId || 'audit',
               title: taskName,
               description: `Deliverable initiated upon client registration by ${user?.user_metadata?.full_name || 'Staff Member'}`,
@@ -647,7 +678,14 @@ const ClientManager = () => {
               priority: 'Medium',
               due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
               is_approved: true
-            }]);
+            };
+            if (user?.id) svcPayload.employee_id = user.id;
+
+            const { error: svcErr } = await supabase.from('services').insert([svcPayload]);
+            if (svcErr && (svcErr.message?.includes('foreign key') || (svcErr as any).code === '23503')) {
+              delete svcPayload.employee_id;
+              await supabase.from('services').insert([svcPayload]);
+            }
           } catch (svcErr) {
             console.warn('Initial deliverable service notice:', svcErr);
           }
@@ -656,9 +694,9 @@ const ClientManager = () => {
           try {
             autoCreateDSREntryFromTask({
               serviceTitle: taskName,
-              companyName: formData.company_name,
-              crNumber: formData.cr_number || '',
-              clientId: finalClientId,
+              companyName: formData.company_name.trim(),
+              crNumber: formData.cr_number?.trim() || '',
+              clientId: finalId,
               employeeName: user?.user_metadata?.full_name || user?.email || 'Staff Member',
               employeeId: user?.id,
               departmentId: effectiveDeptId || 'audit',
@@ -671,30 +709,54 @@ const ClientManager = () => {
         }
 
         // Log the activity
-        await logActivity(
-          user?.id || '',
-          user?.user_metadata?.full_name || user?.email || 'Employee',
-          'client_created',
-          `Registered a new client: ${formData.company_name}`,
-          `تم تسجيل عميل جديد: ${formData.company_name}`
-        );
+        try {
+          await logActivity(
+            user?.id || '',
+            user?.user_metadata?.full_name || user?.email || 'Employee',
+            'client_created',
+            `Registered a new client: ${formData.company_name.trim()}`,
+            `تم تسجيل عميل جديد: ${formData.company_name.trim()}`
+          );
+        } catch (logErr) {
+          console.warn('Activity log notice:', logErr);
+        }
+
+        // Optimistically add client to local list immediately
+        const newRecord: Client = {
+          id: finalId,
+          company_name: formData.company_name.trim(),
+          cr_number: formData.cr_number?.trim() || null,
+          vat_number: formData.vat_number?.trim() || null,
+          activity: formData.activity?.trim() || null,
+          compliance_status: formData.compliance_status || 'Active',
+          email: formData.email?.trim() || null,
+          phone: formData.phone?.trim() || null,
+          assigned_employee_id: user?.id,
+          created_at: new Date().toISOString(),
+          portal_access_sent: portalCreated,
+          portal_sent_at: portalCreated ? new Date().toISOString() : null,
+          portal_user_id: portalCreated ? finalId : null,
+        };
+        setClients(prev => [newRecord, ...prev.filter(c => c.id !== finalId)]);
+
+        // Refresh cloud list in background
+        fetchClients().catch(console.warn);
 
         setFormMsg({ 
           type: 'ok', 
           text: isAr ? 'تم تسجيل العميل وتعيينه لقسمك بنجاح' : 'Client registered and assigned to your department successfully' 
         });
-      }
 
-      await fetchClients();
-
-      if (createdTicket) {
-        setSuccessTicket(createdTicket);
-        setIsModalOpen(false);
-      } else {
-        setTimeout(() => closeFormModal(), 1600);
+        if (createdTicket) {
+          setSuccessTicket(createdTicket);
+          setIsModalOpen(false);
+        } else {
+          setTimeout(() => closeFormModal(), 400);
+        }
       }
     } catch (err: any) {
-      setFormMsg({ type: 'err', text: err.message || 'Operation failed' });
+      console.error('Client registration failed:', err);
+      setFormMsg({ type: 'err', text: err.message || (isAr ? 'تعذر إتمام تسجيل العميل' : 'Failed to register client') });
     } finally {
       setIsSubmitting(false);
     }
@@ -1209,7 +1271,7 @@ const ClientManager = () => {
                           type="text"
                           value={initialTaskTitle}
                           onChange={e => setInitialTaskTitle(e.target.value)}
-                          placeholder={isAr ? `مثال: ${currentDeptConfig?.title || 'التدقيق والامتثال'} 2026` : `e.g. ${currentDeptConfig?.title || 'Audit & Compliance'} Deliverable`}
+                          placeholder={isAr ? `مثال: ${currentDeptConfig?.name_ar || 'التدقيق والامتثال'} 2026` : `e.g. ${currentDeptConfig?.name || 'Audit & Compliance'} Deliverable`}
                           className="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:border-brand-dark outline-none font-medium"
                         />
                         <p className="text-[10px] text-gray-500">
@@ -1222,6 +1284,13 @@ const ClientManager = () => {
                   </div>
                 )}
 
+
+                {formMsg && (
+                  <div className={`p-3 text-sm rounded-xl flex items-center gap-2 border ${formMsg.type === 'ok' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                    {formMsg.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                    <span className="font-semibold text-xs">{formMsg.text}</span>
+                  </div>
+                )}
 
                 <button
                   type="submit"
