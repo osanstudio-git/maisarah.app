@@ -7,7 +7,7 @@ import {
   FileSpreadsheet, Plus, Search, Filter, Download, CheckCircle2,
   AlertCircle, Clock, Edit2, Trash2, Check, X, ShieldCheck, Printer,
   Building2, DollarSign, Wallet, ArrowUpRight, TrendingUp, RefreshCw,
-  FileText, Receipt, CheckSquare, Eye, Sparkles, Calendar, Landmark
+  FileText, Receipt, CheckSquare, Eye, Sparkles, Calendar, Landmark, Loader2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -35,6 +35,7 @@ export default function DSRRegister() {
   const [dateFieldTarget, setDateFieldTarget] = useState<'date' | 'payment_date'>('date');
 
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Inline edit state for note & gov fee
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -69,18 +70,40 @@ export default function DSRRegister() {
     accountant_note: '',
   });
 
-  // Load live DSR entries (local cache + real-time cloud data)
+  // Load live DSR entries directly from cloud and synchronize with local cache
   const loadData = useCallback(async () => {
-    const local = getDSREntries();
-    setEntries(local);
-
     try {
       const cloud = await fetchCloudDSREntries();
       setEntries(cloud);
     } catch (err) {
       console.warn('Could not fetch cloud DSR entries:', err);
+      const local = getDSREntries();
+      setEntries(local);
     }
   }, []);
+
+  // Dedicated Delete Handler with instant optimistic UI removal and awaited Supabase sync
+  const handleDeleteEntry = async (entry: DSREntry) => {
+    if (!confirm(isAr ? 'هل أنت متأكد من حذف هذا السجل نهائياً؟' : 'Are you sure you want to delete this DSR record?')) {
+      return;
+    }
+    setDeletingId(entry.id);
+    try {
+      // 1. Instant optimistic update so the UI immediately feels responsive
+      setEntries(prev => prev.filter(item => item.id !== entry.id));
+
+      // 2. Await both local and Supabase deletion completely
+      await deleteDSREntry(entry.id);
+
+      // 3. Clean background re-sync
+      const cloud = await fetchCloudDSREntries();
+      setEntries(cloud);
+    } catch (err) {
+      console.error('Delete DSR error:', err);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -1079,16 +1102,16 @@ export default function DSRRegister() {
                             <Edit2 size={13} />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(isAr ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Delete this DSR entry?')) {
-                                deleteDSREntry(e.id);
-                                loadData();
-                              }
-                            }}
-                            className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Delete"
+                            onClick={() => handleDeleteEntry(e)}
+                            disabled={deletingId === e.id}
+                            className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50"
+                            title={isAr ? 'حذف السجل' : 'Delete'}
                           >
-                            <Trash2 size={13} />
+                            {deletingId === e.id ? (
+                              <Loader2 size={13} className="animate-spin text-red-600" />
+                            ) : (
+                              <Trash2 size={13} />
+                            )}
                           </button>
                         </div>
                       )}

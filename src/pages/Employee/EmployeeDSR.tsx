@@ -80,7 +80,23 @@ export default function EmployeeDSR() {
   const { user, role, departmentId } = useAuth();
   const isAr = i18n.language === 'ar';
 
-  const employeeName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Staff Member';
+  const [profileName, setProfileName] = useState<string>('');
+
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.full_name) setProfileName(data.full_name);
+      });
+  }, [user?.id]);
+
+  const rawCleanEmail = user?.email ? user.email.split('@')[0].replace(/[._-]/g, ' ') : '';
+  const formattedEmailName = rawCleanEmail ? rawCleanEmail.replace(/\b\w/g, l => l.toUpperCase()) : '';
+  const employeeName = profileName || user?.user_metadata?.full_name || formattedEmailName || 'Ajan';
 
   // Determine employee's effective department
   const effectiveDeptId = useMemo(() => {

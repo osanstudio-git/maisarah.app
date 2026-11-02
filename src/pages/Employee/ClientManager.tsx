@@ -85,21 +85,21 @@ interface Service {
 // Helpers
 // ---------------------------------------------------------------------------
 const COMPLIANCE_STYLES: Record<string, string> = {
-  Active:    'bg-green-100 text-green-700',
-  Pending:   'bg-amber-100 text-amber-700',
+  Active: 'bg-green-100 text-green-700',
+  Pending: 'bg-amber-100 text-amber-700',
   Suspended: 'bg-red-100 text-red-700',
 };
 
 const SERVICE_STYLES: Record<string, { cls: string; icon: React.ReactNode }> = {
-  ongoing:      { cls: 'bg-blue-100 text-blue-700',   icon: <PlayCircle size={12} /> },
-  completed:    { cls: 'bg-green-100 text-green-700', icon: <CheckCircle2 size={12} /> },
-  delayed:      { cls: 'bg-red-100 text-red-700',     icon: <AlertTriangle size={12} /> },
+  ongoing: { cls: 'bg-blue-100 text-blue-700', icon: <PlayCircle size={12} /> },
+  completed: { cls: 'bg-green-100 text-green-700', icon: <CheckCircle2 size={12} /> },
+  delayed: { cls: 'bg-red-100 text-red-700', icon: <AlertTriangle size={12} /> },
   under_review: { cls: 'bg-amber-100 text-amber-700', icon: <Clock size={12} /> },
 };
 
 const INVOICE_STYLES: Record<string, string> = {
-  paid:    'bg-green-100 text-green-700',
-  unpaid:  'bg-amber-100 text-amber-700',
+  paid: 'bg-green-100 text-green-700',
+  unpaid: 'bg-amber-100 text-amber-700',
   overdue: 'bg-red-100 text-red-700',
 };
 
@@ -121,9 +121,9 @@ const ClientDetail = ({
   effectiveDeptId: string;
   isManager: boolean;
 }) => {
-  const [invoices, setInvoices]   = useState<Invoice[]>([]);
-  const [services, setServices]   = useState<Service[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'checklist' | 'services' | 'invoices' | 'profile'>('checklist');
 
   useEffect(() => {
@@ -149,8 +149,8 @@ const ClientDetail = ({
     load();
   }, [client.id, effectiveDeptId, isManager]);
 
-  const totalPaid    = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0);
-  const totalUnpaid  = invoices.filter(i => i.status !== 'paid').reduce((s, i) => s + i.amount, 0);
+  const totalPaid = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0);
+  const totalUnpaid = invoices.filter(i => i.status !== 'paid').reduce((s, i) => s + i.amount, 0);
   const activeServices = services.filter(s => s.status === 'ongoing').length;
 
   return (
@@ -177,10 +177,10 @@ const ClientDetail = ({
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: isAr ? 'مدفوع' : 'Total Paid',     value: `${totalPaid.toLocaleString()} ر.ع`, icon: <CheckCircle2 size={18} />, cls: 'bg-green-50 text-green-600' },
-          { label: isAr ? 'مستحق' : 'Outstanding',    value: `${totalUnpaid.toLocaleString()} ر.ع`, icon: <Clock size={18} />,       cls: 'bg-amber-50 text-amber-600' },
-          { label: isAr ? 'فواتير' : 'Invoices',      value: invoices.length,                        icon: <Receipt size={18} />,      cls: 'bg-blue-50 text-blue-600' },
-          { label: isAr ? 'خدمات نشطة' : 'Active Svcs', value: activeServices,                      icon: <Briefcase size={18} />,    cls: 'bg-red-50 text-brand-dark' },
+          { label: isAr ? 'مدفوع' : 'Total Paid', value: `${totalPaid.toLocaleString()} ر.ع`, icon: <CheckCircle2 size={18} />, cls: 'bg-green-50 text-green-600' },
+          { label: isAr ? 'مستحق' : 'Outstanding', value: `${totalUnpaid.toLocaleString()} ر.ع`, icon: <Clock size={18} />, cls: 'bg-amber-50 text-amber-600' },
+          { label: isAr ? 'فواتير' : 'Invoices', value: invoices.length, icon: <Receipt size={18} />, cls: 'bg-blue-50 text-blue-600' },
+          { label: isAr ? 'خدمات نشطة' : 'Active Svcs', value: activeServices, icon: <Briefcase size={18} />, cls: 'bg-red-50 text-brand-dark' },
         ].map(kpi => (
           <div key={kpi.label} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-2">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${kpi.cls}`}>{kpi.icon}</div>
@@ -197,11 +197,10 @@ const ClientDetail = ({
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 min-w-[120px] py-4 text-sm font-bold transition-colors flex items-center justify-center gap-2 ${
-                activeTab === tab
+              className={`flex-1 min-w-[120px] py-4 text-sm font-bold transition-colors flex items-center justify-center gap-2 ${activeTab === tab
                   ? 'text-brand-dark border-b-2 border-brand-dark bg-red-50/40'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               {tab === 'checklist' ? <ClipboardCheck size={16} /> : tab === 'services' ? <Briefcase size={15} /> : tab === 'invoices' ? <Receipt size={15} /> : <UserCircle2 size={15} />}
               {tab === 'checklist' ? (isAr ? 'قائمة الفحص والمستندات' : 'Checklists & Docs') : tab === 'services' ? (isAr ? 'الخدمات' : 'Services') : tab === 'invoices' ? (isAr ? 'الفواتير' : 'Invoices') : (isAr ? 'الملف الشخصي' : 'Profile')}
@@ -319,11 +318,11 @@ const ClientDetail = ({
                     <p className="font-bold text-gray-800">{client.activity || '—'}</p>
                   </div>
                 </div>
-                
+
                 <div className="pt-4 border-t border-gray-50">
                   <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-xl border border-amber-100 flex items-center gap-2">
                     <AlertTriangle size={14} />
-                    {isAr 
+                    {isAr
                       ? 'لأسباب أمنية، لا يمكن عرض كلمة المرور. إذا نسي العميل كلمة المرور، يرجى استخدام خاصية "استعادة كلمة المرور" من صفحة الدخول.'
                       : 'For security reasons, passwords cannot be displayed. If the client forgets their password, please use the "Forgot Password" feature on the login page.'}
                   </p>
@@ -404,19 +403,19 @@ const ClientManager = () => {
 
   const currentDeptConfig = DEPARTMENT_CONFIGS[effectiveDeptId];
 
-  const [clients, setClients]           = useState<Client[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [searchTerm, setSearchTerm]     = useState('');
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [isModalOpen, setIsModalOpen]   = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [createPortalAccount, setCreatePortalAccount] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
-  const [formMsg, setFormMsg]           = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
-  
+  const [formMsg, setFormMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
   // Success Ticket State
   const [successTicket, setSuccessTicket] = useState<{
     email: string;
@@ -445,10 +444,10 @@ const ClientManager = () => {
   const handleEmailTicket = () => {
     if (!successTicket) return;
     const subject = isAr ? `بيانات دخول منصة ميسرة - ${successTicket.company}` : `Maisarah Platform Login - ${successTicket.company}`;
-    const body = isAr 
+    const body = isAr
       ? `مرحباً ${successTicket.company}،\n\nإليك بيانات دخول حسابك:\nالبريد: ${successTicket.email}\nكلمة المرور: ${successTicket.pass}\nالرابط: ${window.location.origin}/login`
       : `Hi ${successTicket.company},\n\nHere are your account credentials:\nEmail: ${successTicket.email}\nPassword: ${successTicket.pass}\nLogin here: ${window.location.origin}/login`;
-    
+
     window.location.href = `mailto:${successTicket.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
@@ -558,13 +557,13 @@ const ClientManager = () => {
     setFormMsg(null);
     setCreateInitialTask(true);
     setInitialTaskTitle('');
-    setFormData({ 
-      company_name: '', 
-      cr_number: '', 
-      vat_number: '', 
-      activity: '', 
-      compliance_status: 'Active', 
-      email: '', 
+    setFormData({
+      company_name: '',
+      cr_number: '',
+      vat_number: '',
+      activity: '',
+      compliance_status: 'Active',
+      email: '',
       password: '',
       phone: ''
     });
@@ -591,13 +590,13 @@ const ClientManager = () => {
 
       if (editingClient) {
         const payload: any = {
-          company_name:       formData.company_name.trim(),
-          cr_number:          formData.cr_number?.trim() || null,
-          vat_number:         formData.vat_number?.trim() || null,
-          activity:           formData.activity?.trim() || null,
-          compliance_status:  formData.compliance_status || 'Active',
-          email:              formData.email?.trim() || null,
-          phone:              formData.phone?.trim() || null,
+          company_name: formData.company_name.trim(),
+          cr_number: formData.cr_number?.trim() || null,
+          vat_number: formData.vat_number?.trim() || null,
+          activity: formData.activity?.trim() || null,
+          compliance_status: formData.compliance_status || 'Active',
+          email: formData.email?.trim() || null,
+          phone: formData.phone?.trim() || null,
         };
         const { error } = await supabase.from('clients').update(payload).eq('id', editingClient.id);
         if (error) throw error;
@@ -658,7 +657,7 @@ const ClientManager = () => {
         }
 
         const payload: any = {
-          id: finalClientId, 
+          id: finalClientId,
           company_name: formData.company_name.trim(),
           cr_number: formData.cr_number?.trim() || null,
           vat_number: formData.vat_number?.trim() || null,
@@ -718,12 +717,16 @@ const ClientManager = () => {
 
           // Also register initial task in DSR so it appears in the employee's DSR workspace
           try {
+            const cleanEmpName = user?.user_metadata?.full_name ||
+              (user?.email ? user.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : '') ||
+              'Ajan';
+
             autoCreateDSREntryFromTask({
               serviceTitle: taskName,
               companyName: formData.company_name.trim(),
               crNumber: formData.cr_number?.trim() || '',
               clientId: finalId,
-              employeeName: user?.user_metadata?.full_name || user?.email || 'Staff Member',
+              employeeName: cleanEmpName,
               employeeId: user?.id,
               departmentId: effectiveDeptId || 'audit',
               amount: 0,
@@ -768,9 +771,9 @@ const ClientManager = () => {
         // Refresh cloud list in background
         fetchClients().catch(console.warn);
 
-        setFormMsg({ 
-          type: 'ok', 
-          text: isAr ? 'تم تسجيل العميل وتعيينه لقسمك بنجاح' : 'Client registered and assigned to your department successfully' 
+        setFormMsg({
+          type: 'ok',
+          text: isAr ? 'تم تسجيل العميل وتعيينه لقسمك بنجاح' : 'Client registered and assigned to your department successfully'
         });
 
         if (createdTicket) {
@@ -798,9 +801,9 @@ const ClientManager = () => {
         .from('clients')
         .update({ is_archived: true })
         .eq('id', clientToDelete.id);
-        
+
       if (error) throw error;
-      
+
       setClients(clients.filter(c => c.id !== clientToDelete.id));
       setClientToDelete(null);
     } catch (err: any) {
@@ -820,11 +823,11 @@ const ClientManager = () => {
   // ── Drill-down view ───────────────────────────────────────────────────────
   if (selectedClient) {
     return (
-      <ClientDetail 
-        client={selectedClient} 
-        onBack={() => setSelectedClient(null)} 
-        isAr={isAr} 
-        t={t} 
+      <ClientDetail
+        client={selectedClient}
+        onBack={() => setSelectedClient(null)}
+        isAr={isAr}
+        t={t}
         effectiveDeptId={effectiveDeptId}
         isManager={isManager}
       />
@@ -1096,7 +1099,7 @@ const ClientManager = () => {
                       </button>
                     )}
                   </div>
-                  
+
                   {/* Mobile Actions */}
                   <div className="flex items-center gap-2 border-t border-gray-100 pt-3 mt-1">
                     <button
@@ -1153,35 +1156,35 @@ const ClientManager = () => {
               )}
 
               <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
-                <FormField 
-                  label={t('employee.companyName')} 
-                  name="company_name" 
+                <FormField
+                  label={t('employee.companyName')}
+                  name="company_name"
                   value={formData.company_name}
                   onChange={handleInputChange}
-                  required 
+                  required
                   autoComplete="off"
-                  placeholder={isAr ? 'شركة الموالح للإنشاء' : 'Al Mawaleh Construction LLC'} 
+                  placeholder={isAr ? 'شركة الموالح للإنشاء' : 'Al Mawaleh Construction LLC'}
                 />
 
                 {/* Company Contact Details (Email & Phone are purely contact info, never autofilled with staff user credentials) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField 
-                    label={isAr ? 'البريد الإلكتروني للعميل (اختياري)' : 'Client Email (Optional)'} 
-                    name="client_contact_email" 
+                  <FormField
+                    label={isAr ? 'البريد الإلكتروني للعميل (اختياري)' : 'Client Email (Optional)'}
+                    name="client_contact_email"
                     type="email"
                     autoComplete="off"
                     value={formData.email}
                     onChange={e => setFormData({ ...formData, email: e.target.value })}
                     required={false}
-                    placeholder="info@company.com" 
+                    placeholder="info@company.com"
                   />
-                  <FormField 
-                    label={isAr ? 'رقم الواتساب / الهاتف (اختياري)' : 'WhatsApp / Phone Number (Optional)'} 
-                    name="client_contact_phone" 
+                  <FormField
+                    label={isAr ? 'رقم الواتساب / الهاتف (اختياري)' : 'WhatsApp / Phone Number (Optional)'}
+                    name="client_contact_phone"
                     autoComplete="off"
                     value={formData.phone}
                     onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+968 0000 0000" 
+                    placeholder="+968 0000 0000"
                   />
                 </div>
 
@@ -1236,9 +1239,9 @@ const ClientManager = () => {
                 )}
 
                 <div className="grid grid-cols-2 gap-4">
-                  <FormField 
-                    label={isAr ? 'رقم السجل التجاري (7 أرقام)' : 'CR Number (7 digits)'} 
-                    name="cr_number" 
+                  <FormField
+                    label={isAr ? 'رقم السجل التجاري (7 أرقام)' : 'CR Number (7 digits)'}
+                    name="cr_number"
                     value={formData.cr_number}
                     onChange={handleInputChange}
                     placeholder="1234567"
@@ -1247,21 +1250,21 @@ const ClientManager = () => {
                     isMono={true}
                     hint={formData.cr_number ? `${formData.cr_number.length}/7` : '7 digits'}
                   />
-                  <FormField 
-                    label={t('employee.vatNumber')} 
-                    name="vat_number" 
+                  <FormField
+                    label={t('employee.vatNumber')}
+                    name="vat_number"
                     value={formData.vat_number}
                     onChange={handleInputChange}
-                    placeholder="OM123456789" 
+                    placeholder="OM123456789"
                   />
                 </div>
 
-                <FormField 
-                  label={t('employee.activity')} 
-                  name="activity" 
+                <FormField
+                  label={t('employee.activity')}
+                  name="activity"
                   value={formData.activity}
                   onChange={handleInputChange}
-                  placeholder={isAr ? 'الإنشاء والمقاولات' : 'Construction & Contracting'} 
+                  placeholder={isAr ? 'الإنشاء والمقاولات' : 'Construction & Contracting'}
                 />
 
                 {/* Compliance Status */}
@@ -1285,7 +1288,7 @@ const ClientManager = () => {
                     <option value="Suspended">{isAr ? 'موقوف (Suspended) - غير ممتثل أو مجمد' : 'Suspended (Non-compliant / Frozen)'}</option>
                   </select>
                   <p className="text-[10px] text-gray-500 mt-1">
-                    {isAr 
+                    {isAr
                       ? 'يوضح التزام العميل بالتراخيص، السجل التجاري، والإقرارات الضريبية لدى الجهات الرسمية.'
                       : 'Reflects the company\'s legal, commercial registration, and tax filing standing with official authorities.'}
                   </p>
@@ -1295,10 +1298,10 @@ const ClientManager = () => {
                 {!editingClient && (
                   <div className="p-4 bg-red-50/60 rounded-xl border border-red-100 space-y-2">
                     <label className="flex items-center gap-2.5 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={createInitialTask} 
-                        onChange={e => setCreateInitialTask(e.target.checked)} 
+                      <input
+                        type="checkbox"
+                        checked={createInitialTask}
+                        onChange={e => setCreateInitialTask(e.target.checked)}
                         className="rounded text-brand-dark focus:ring-brand-dark h-4 w-4"
                       />
                       <span className="text-xs font-bold text-gray-800">
@@ -1315,8 +1318,8 @@ const ClientManager = () => {
                           className="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:border-brand-dark outline-none font-medium"
                         />
                         <p className="text-[10px] text-gray-500">
-                          {isAr 
-                            ? 'سيتم إدراج المهمة تلقائياً في جدول خدماتك وسجل DSR لربط التحصيل والفوترة.' 
+                          {isAr
+                            ? 'سيتم إدراج المهمة تلقائياً في جدول خدماتك وسجل DSR لربط التحصيل والفوترة.'
                             : 'This deliverable will be linked automatically to your services and DSR register for payment & billing.'}
                         </p>
                       </div>
@@ -1393,7 +1396,7 @@ const ClientManager = () => {
               <div className="bg-brand-dark p-8 text-center text-white relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
                 <div className="absolute bottom-0 left-0 w-32 h-32 bg-red-500/20 rounded-full -ml-16 -mb-16 blur-2xl" />
-                
+
                 <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-md border border-white/30">
                   <CheckCircle2 size={32} className="text-white" />
                 </div>
@@ -1416,9 +1419,9 @@ const ClientManager = () => {
                 </div>
 
                 <div className="pt-2 text-center">
-                   <p className="text-[9px] text-gray-400 font-bold uppercase tracking-[0.2em]">
+                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-[0.2em]">
                     {window.location.origin.replace('http://', '').replace('https://', '')}
-                   </p>
+                  </p>
                 </div>
               </div>
             </div>
@@ -1444,10 +1447,10 @@ const ClientManager = () => {
 
               <button
                 onClick={() => {
-                  const msg = isAr 
+                  const msg = isAr
                     ? `مرحباً ${successTicket.company}،\n\nيسعدنا انضمامكم إلى منصة ميسرة. إليكم بيانات الدخول الخاصة بكم:\n\n📧 البريد: ${successTicket.email}\n🔑 كلمة المرور: ${successTicket.pass}\n\nيمكنكم تسجيل الدخول من هنا: ${window.location.origin}/login`
                     : `Hi ${successTicket.company},\n\nWelcome to Maisarah Platform! Your account is ready. Here are your credentials:\n\n📧 Email: ${successTicket.email}\n🔑 Password: ${successTicket.pass}\n\nLogin here: ${window.location.origin}/login`;
-                  
+
                   const cleanPhone = (successTicket.phone || '').replace(/\s+/g, '').replace('+', '');
                   window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
                 }}
@@ -1456,7 +1459,7 @@ const ClientManager = () => {
                 <PlayCircle size={20} />
                 {isAr ? 'مشاركة عبر واتساب' : 'Share on WhatsApp'}
               </button>
-              
+
               <button
                 onClick={() => setSuccessTicket(null)}
                 className="w-full py-2 text-gray-400 font-bold uppercase tracking-widest hover:text-gray-600 transition-all text-[10px]"
