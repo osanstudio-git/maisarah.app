@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabaseClient';
 import {
-  Clock, Calendar, Download, AlertCircle, CheckCircle2, User, FileText, Send, Loader2, Info
+  Clock, Calendar, Download, AlertCircle, CheckCircle2, User, FileText, Send, Loader2, Info,
+  Timer, TrendingUp, Check, RotateCcw, Filter, Coffee
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
@@ -14,6 +15,9 @@ interface AttendanceLog {
   date: string;
   checkIn: string;
   checkOut: string;
+  duration?: string;
+  durationMinutes?: number;
+  breakDuration?: number;
   status: 'present' | 'late' | 'absent';
   location: string;
 }
@@ -51,6 +55,9 @@ export default function EmployeeHR() {
   const [clockLogs, setClockLogs] = useState<AttendanceLog[]>([]);
   const [isClockedIn, setIsClockedIn] = useState(false);
   const [activeClockLog, setActiveClockLog] = useState<AttendanceLog | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7)); // e.g. "2026-11"
+  const [selectedDay, setSelectedDay] = useState<string>(''); // specific date filter e.g. "2026-11-03"
 
   // --- Leave Form States ---
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
@@ -188,39 +195,55 @@ export default function EmployeeHR() {
         .select('*')
         .eq('employee_id', empId)
         .order('work_date', { ascending: false })
-        .limit(30);
+        .limit(100);
 
       if (error) {
         console.warn('Error fetching hr_attendance from DB, using fallback:', error);
       }
 
       if (dbLogs && dbLogs.length > 0) {
-        const mapped: AttendanceLog[] = dbLogs.map(l => ({
-          id: String(l.id),
-          name: employeeName,
-          role: employeeRole,
-          date: l.work_date,
-          checkIn: l.check_in ? l.check_in.slice(0, 5) : '--',
-          checkOut: l.check_out ? l.check_out.slice(0, 5) : '--',
-          status: (l.status?.toLowerCase() === 'late' ? 'late' : 'present'),
-          location: l.location || 'Office HQ'
-        }));
+        const mapped: AttendanceLog[] = dbLogs.map(l => {
+          const checkIn = l.check_in ? l.check_in.slice(0, 8) : '--';
+          const checkOut = l.check_out ? l.check_out.slice(0, 8) : '--';
+          const breakMins = Number(l.break_duration || 0);
+
+          let duration = '--';
+          let durationMinutes = 0;
+
+          if (checkIn !== '--' && checkOut !== '--') {
+            const [ih, im] = checkIn.split(':').map(Number);
+            const [oh, om] = checkOut.split(':').map(Number);
+            if (!isNaN(ih) && !isNaN(im) && !isNaN(oh) && !isNaN(om)) {
+              durationMinutes = Math.max(0, (oh * 60 + om) - (ih * 60 + im) - breakMins);
+              duration = `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m`;
+            }
+          } else if (checkIn !== '--') {
+            duration = isAr ? 'قيد العمل' : 'Active';
+          }
+
+          return {
+            id: String(l.id),
+            name: employeeName,
+            role: employeeRole,
+            date: l.work_date,
+            checkIn: checkIn !== '--' ? checkIn.slice(0, 5) : '--',
+            checkOut: checkOut !== '--' ? checkOut.slice(0, 5) : '--',
+            duration,
+            durationMinutes,
+            breakDuration: breakMins,
+            status: (l.status?.toLowerCase() === 'late' ? 'late' : 'present'),
+            location: l.location || 'Office HQ'
+          };
+        });
+
         setClockLogs(mapped);
 
         const todayRecord = dbLogs.find(l => l.work_date === todayStr);
         if (todayRecord) {
           const isClocked = !!todayRecord.check_in && !todayRecord.check_out;
           setIsClockedIn(isClocked);
-          setActiveClockLog({
-            id: String(todayRecord.id),
-            name: employeeName,
-            role: employeeRole,
-            date: todayRecord.work_date,
-            checkIn: todayRecord.check_in ? todayRecord.check_in.slice(0, 5) : '--',
-            checkOut: todayRecord.check_out ? todayRecord.check_out.slice(0, 5) : '--',
-            status: (todayRecord.status?.toLowerCase() === 'late' ? 'late' : 'present'),
-            location: todayRecord.location || 'Office HQ'
-          });
+          const mappedToday = mapped.find(m => m.date === todayStr);
+          setActiveClockLog(mappedToday || null);
         } else {
           setIsClockedIn(false);
           setActiveClockLog(null);
@@ -241,7 +264,7 @@ export default function EmployeeHR() {
     } catch (err) {
       console.error('Error in fetchAttendanceLogs:', err);
     }
-  }, [employeeName, employeeRole, getEffectiveEmployeeId]);
+  }, [employeeName, employeeRole, getEffectiveEmployeeId, isAr]);
 
   useEffect(() => {
     // 1. Attendance Sync
@@ -279,16 +302,50 @@ export default function EmployeeHR() {
     };
   }, [fetchAttendanceLogs, fetchLeaves]);
 
+  // --- Live Stopwatch Timer for Active Work Shift ---
+  useEffect(() => {
+    if (!isClockedIn || !activeClockLog?.checkIn || activeClockLog.checkIn === '--') {
+      setElapsedSeconds(0);
+      return;
+    }
+
+    const parts = activeClockLog.checkIn.split(':');
+    const startHour = parseInt(parts[0], 10) || 0;
+    const startMin = parseInt(parts[1], 10) || 0;
+    const startSec = parseInt(parts[2], 10) || 0;
+
+    const startDate = new Date();
+    startDate.setHours(startHour, startMin, startSec, 0);
+
+    const updateTimer = () => {
+      const now = new Date();
+      const diffMs = Math.max(0, now.getTime() - startDate.getTime());
+      setElapsedSeconds(Math.floor(diffMs / 1000));
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [isClockedIn, activeClockLog]);
+
+  const formatTimerDigits = (sec: number) => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
   // --- Actions: Clock In / Clock Out ---
   const handleClockToggle = async () => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
     const empId = await getEffectiveEmployeeId();
 
     try {
       if (!isClockedIn) {
         // Clock In
-        const checkInHour = new Date().getHours();
+        const checkInHour = now.getHours();
         const statusVal = checkInHour >= 9 ? 'Late' : 'Present';
 
         const payload = {
@@ -337,6 +394,49 @@ export default function EmployeeHR() {
       console.error('Error toggling attendance:', err);
       alert(isAr ? 'حدث خطأ أثناء تسجيل الحضور/الانصراف' : 'Error updating attendance log');
     }
+  };
+
+  // --- Export Attendance Report to CSV ---
+  const handleExportAttendanceCSV = () => {
+    const headers = [
+      'Date',
+      'Employee Name',
+      'Role',
+      'Check-In Time',
+      'Check-Out Time',
+      'Hours Worked',
+      'Break (Minutes)',
+      'Status',
+      'Location'
+    ];
+
+    const targetLogs = clockLogs.filter(log => {
+      if (!log.date) return false;
+      if (selectedDay) return log.date === selectedDay;
+      if (selectedMonth) return log.date.startsWith(selectedMonth);
+      return true;
+    });
+
+    const rows = targetLogs.map(l => [
+      l.date,
+      `"${l.name}"`,
+      `"${l.role}"`,
+      l.checkIn,
+      l.checkOut,
+      `"${l.duration || '--'}"`,
+      l.breakDuration || 0,
+      l.status.toUpperCase(),
+      `"${l.location}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Maisarah_Attendance_${employeeName.replace(/\s+/g, '_')}_${selectedDay || selectedMonth || 'Statement'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // --- Actions: Date Calculations & Sync ---
@@ -635,8 +735,8 @@ export default function EmployeeHR() {
 
   return (
     <div className="space-y-6 pb-12" dir={isAr ? 'rtl' : 'ltr'}>
-      {/* Welcome & Info */}
-      <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* Welcome & Live Attendance Bar */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div>
           <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
             <Clock className="text-[#A11212]" size={24} />
@@ -644,22 +744,74 @@ export default function EmployeeHR() {
           </h2>
           <p className="text-xs text-gray-500 font-bold mt-1">
             {isAr
-              ? 'إدارة الحضور والانصراف، تقديم الإجازات ومراجعة كشوف الرواتب'
-              : 'Directly manage your work attendance, leave applications, and view earnings statements'}
+              ? 'إدارة الحضور والانصراف المباشر، ساعات العمل، تقديم الإجازات ومراجعة كشوف الرواتب'
+              : 'Directly manage your work attendance, live shift counter, leave applications, and view statements'}
           </p>
         </div>
 
-        {/* Live Attendance Punch Button */}
-        <button
-          onClick={handleClockToggle}
-          className={`flex items-center gap-2 px-5 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-md transition-all active:scale-95 ${isClockedIn
-              ? 'bg-red-600 text-white hover:bg-red-700 shadow-red-200'
-              : 'bg-green-600 text-white hover:bg-green-700 shadow-green-200'
+        {/* Live Attendance Punch Box & Stopwatch */}
+        <div className="flex flex-wrap items-center gap-4 bg-gray-50 border border-gray-200/80 p-3.5 rounded-2xl w-full lg:w-auto">
+          {isClockedIn ? (
+            <div className="flex items-center gap-3.5 pr-2">
+              <span className="flex h-3.5 w-3.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                    {isAr ? 'قيد العمل الآن' : 'Currently On Duty'}
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-bold">
+                    ({isAr ? 'بدء:' : 'In:'} {activeClockLog?.checkIn})
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2 mt-0.5">
+                  <span className="font-mono text-xl font-black text-gray-900 tracking-tight">
+                    {formatTimerDigits(elapsedSeconds)}
+                  </span>
+                  <span className="text-[10px] font-bold text-gray-500">
+                    {elapsedSeconds < 28800
+                      ? `${Math.floor((28800 - elapsedSeconds) / 3600)}h ${Math.floor(((28800 - elapsedSeconds) % 3600) / 60)}m ${isAr ? 'متبقي من ٨س' : 'remaining'}`
+                      : `+${Math.floor((elapsedSeconds - 28800) / 3600)}h ${Math.floor(((elapsedSeconds - 28800) % 3600) / 60)}m ${isAr ? 'ساعات إضافية' : 'overtime'}`}
+                  </span>
+                </div>
+                {/* Visual Progress Bar to 8 Hours */}
+                <div className="w-36 h-1.5 bg-gray-200 rounded-full mt-1.5 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.round((elapsedSeconds / 28800) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="pr-3">
+              <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                {activeClockLog?.checkOut && activeClockLog.checkOut !== '--'
+                  ? (isAr ? 'اكتمل دوام اليوم' : 'Shift Completed Today')
+                  : (isAr ? 'لم تسجل الحضور بعد' : 'Not Clocked In Today')}
+              </p>
+              <p className="text-xs font-black text-gray-800 mt-0.5">
+                {activeClockLog?.checkOut && activeClockLog.checkOut !== '--'
+                  ? `${isAr ? 'ساعات العمل:' : 'Hours Worked:'} ${activeClockLog.duration || '--'} (${activeClockLog.checkIn} - ${activeClockLog.checkOut})`
+                  : (isAr ? 'جاهز لبدء الدوام وتسجيل الحضور' : 'Ready to start your work shift')}
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={handleClockToggle}
+            className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all active:scale-95 ${
+              isClockedIn
+                ? 'bg-red-600 text-white hover:bg-red-700 shadow-red-200'
+                : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200'
             }`}
-        >
-          <Clock size={16} />
-          <span>{isClockedIn ? (isAr ? 'تسجيل انصراف' : 'Clock Out') : (isAr ? 'تسجيل حضور' : 'Clock In')}</span>
-        </button>
+          >
+            <Clock size={16} />
+            <span>{isClockedIn ? (isAr ? 'تسجيل انصراف' : 'Clock Out') : (isAr ? 'تسجيل حضور' : 'Clock In')}</span>
+          </button>
+        </div>
       </div>
 
       {/* Grid section */}
@@ -819,30 +971,38 @@ export default function EmployeeHR() {
           </div>
         </div>
 
-        {/* Column 3: Attendance Logs & Payslips */}
+        {/* Column 3: Today's Shift & Payslips */}
         <div className="space-y-6">
-          {/* Active Attendance Logs */}
+          {/* Today's Shift Overview */}
           <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-4">
             <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
               <Clock className="text-[#A11212]" size={18} />
-              {isAr ? 'سجل الحضور اليومي' : 'Recent Clock Logs'}
+              {isAr ? 'حالة دوام اليوم' : "Today's Work Shift"}
             </h3>
-            <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
-              {clockLogs.map(log => (
-                <div key={log.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl text-xs font-bold border border-gray-150">
-                  <div>
-                    <p className="text-gray-900">{log.date}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5 font-medium">In: {log.checkIn} &bull; Out: {log.checkOut}</p>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${log.status === 'present' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
-                    }`}>
-                    {log.status}
-                  </span>
-                </div>
-              ))}
-              {clockLogs.length === 0 && (
-                <p className="text-xs text-gray-400 italic text-center p-4">No clock-in logs recorded for this month.</p>
-              )}
+
+            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-150 space-y-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500 font-medium">{isAr ? 'الحالة الحالية:' : 'Current Status:'}</span>
+                <span className={`px-2.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                  isClockedIn ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-200 text-gray-700'
+                }`}>
+                  {isClockedIn ? (isAr ? 'على رأس العمل' : 'Active On Duty') : (isAr ? 'غير مسجل حضور' : 'Off Duty')}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500 font-medium">{isAr ? 'وقت تسجيل الحضور:' : 'Check-In Time:'}</span>
+                <span className="font-bold text-gray-900">{activeClockLog?.checkIn || '--'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500 font-medium">{isAr ? 'وقت تسجيل الانصراف:' : 'Check-Out Time:'}</span>
+                <span className="font-bold text-gray-900">{activeClockLog?.checkOut || '--'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500 font-medium">{isAr ? 'ساعات العمل اليوم:' : 'Total Worked Today:'}</span>
+                <span className="font-mono font-bold text-[#A11212]">
+                  {isClockedIn ? formatTimerDigits(elapsedSeconds) : (activeClockLog?.duration || '--')}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -863,6 +1023,7 @@ export default function EmployeeHR() {
                   <button
                     onClick={() => handleDownloadPayslip(payslip)}
                     className="p-2.5 bg-white hover:bg-gray-100 text-gray-700 hover:text-[#A11212] border border-gray-200 rounded-xl transition-all shadow-xs"
+                    title={isAr ? 'تحميل كشف الراتب' : 'Download Payslip'}
                   >
                     <Download size={14} />
                   </button>
@@ -872,6 +1033,184 @@ export default function EmployeeHR() {
           </div>
         </div>
 
+      </div>
+
+      {/* --- Full Detailed Attendance & Shift Timesheet (Day-wise & Month-wise) --- */}
+      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-6">
+        {/* Controls & Export Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-100 pb-5">
+          <div>
+            <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+              <Timer className="text-[#A11212]" size={20} />
+              {isAr ? 'سجل الحضور والدوام المفصل (يومي وشهري)' : 'Detailed Attendance & Shift Timesheet'}
+            </h3>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">
+              {isAr
+                ? 'استعراض سجلات الحضور، الانصراف، الساعات المنجزة مع إمكانية التصدير والتحميل'
+                : 'Review check-in/out logs, total hours worked, shift status, and download statements'}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Month Filter */}
+            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl">
+              <Calendar size={14} className="text-gray-400" />
+              <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider">{isAr ? 'الشهر:' : 'Month:'}</label>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => {
+                  setSelectedMonth(e.target.value);
+                  setSelectedDay('');
+                }}
+                className="bg-transparent text-xs font-bold text-gray-900 outline-none cursor-pointer"
+              />
+            </div>
+
+            {/* Day Filter */}
+            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl">
+              <Filter size={14} className="text-gray-400" />
+              <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider">{isAr ? 'اليوم:' : 'Day:'}</label>
+              <input
+                type="date"
+                value={selectedDay}
+                onChange={(e) => setSelectedDay(e.target.value)}
+                className="bg-transparent text-xs font-bold text-gray-900 outline-none cursor-pointer"
+              />
+            </div>
+
+            {selectedDay && (
+              <button
+                onClick={() => setSelectedDay('')}
+                className="text-[10px] font-bold text-gray-500 hover:text-[#A11212] underline"
+              >
+                {isAr ? 'إلغاء فلتر اليوم' : 'Clear Day'}
+              </button>
+            )}
+
+            {/* Export CSV Button */}
+            <button
+              onClick={handleExportAttendanceCSV}
+              className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95"
+            >
+              <Download size={14} />
+              <span>{isAr ? 'تحميل التقرير (CSV)' : 'Download Report (CSV)'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Summary Metrics Cards for Period */}
+        {(() => {
+          const filtered = clockLogs.filter(log => {
+            if (!log.date) return false;
+            if (selectedDay) return log.date === selectedDay;
+            if (selectedMonth) return log.date.startsWith(selectedMonth);
+            return true;
+          });
+          const totalDays = filtered.filter(l => l.checkIn !== '--').length;
+          const totalMins = filtered.reduce((acc, curr) => acc + (curr.durationMinutes || 0), 0);
+          const totalHours = `${Math.floor(totalMins / 60)}h ${totalMins % 60}m`;
+          const avgMins = totalDays > 0 ? Math.round(totalMins / totalDays) : 0;
+          const avgHours = `${Math.floor(avgMins / 60)}h ${avgMins % 60}m`;
+          const late = filtered.filter(l => l.status === 'late').length;
+
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-gray-50 border border-gray-150 p-4 rounded-2xl">
+                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'أيام العمل المسجلة' : 'Days Worked'}</p>
+                <h4 className="text-xl font-black text-gray-900 mt-1">{totalDays} {isAr ? 'يوم' : 'Days'}</h4>
+              </div>
+              <div className="bg-gray-50 border border-gray-150 p-4 rounded-2xl">
+                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'إجمالي الساعات المنجزة' : 'Total Hours Logged'}</p>
+                <h4 className="text-xl font-black text-[#A11212] mt-1">{totalHours}</h4>
+              </div>
+              <div className="bg-gray-50 border border-gray-150 p-4 rounded-2xl">
+                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'المعدل اليومي' : 'Daily Average'}</p>
+                <h4 className="text-xl font-black text-gray-900 mt-1">{avgHours} / {isAr ? 'يوم' : 'day'}</h4>
+              </div>
+              <div className="bg-gray-50 border border-gray-150 p-4 rounded-2xl">
+                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'مرات التأخير' : 'Late Check-ins'}</p>
+                <h4 className={`text-xl font-black mt-1 ${late > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {late} {isAr ? 'يوم' : 'Days'}
+                </h4>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Detailed Logs Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-gray-150 text-[9px] font-black text-gray-400 uppercase tracking-widest bg-gray-50/50">
+                <th className="py-3 px-4">{isAr ? 'التاريخ' : 'Date'}</th>
+                <th className="py-3 px-4">{isAr ? 'وقت الحضور' : 'Check-In'}</th>
+                <th className="py-3 px-4">{isAr ? 'وقت الانصراف' : 'Check-Out'}</th>
+                <th className="py-3 px-4">{isAr ? 'ساعات العمل' : 'Hours Worked'}</th>
+                <th className="py-3 px-4">{isAr ? 'الاستراحة' : 'Break'}</th>
+                <th className="py-3 px-4">{isAr ? 'الحالة' : 'Status'}</th>
+                <th className="py-3 px-4">{isAr ? 'الموقع' : 'Location'}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {(() => {
+                const filtered = clockLogs.filter(log => {
+                  if (!log.date) return false;
+                  if (selectedDay) return log.date === selectedDay;
+                  if (selectedMonth) return log.date.startsWith(selectedMonth);
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-gray-400 italic">
+                        {isAr ? 'لا توجد سجلات دوام في الفترة المحددة' : 'No attendance logs recorded for this selected period.'}
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return filtered.map((log) => {
+                  const isCurrentActive = isClockedIn && log.date === new Date().toISOString().split('T')[0];
+
+                  return (
+                    <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-gray-900">{log.date}</td>
+                      <td className="py-3.5 px-4 font-semibold text-gray-700">{log.checkIn}</td>
+                      <td className="py-3.5 px-4 font-semibold text-gray-700">
+                        {isCurrentActive ? (
+                          <span className="text-emerald-600 font-bold flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            {isAr ? 'مستمر الآن' : 'In Progress'}
+                          </span>
+                        ) : log.checkOut}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-bold text-gray-900">
+                        {isCurrentActive ? (
+                          <span className="text-[#A11212]">{formatTimerDigits(elapsedSeconds)}</span>
+                        ) : (
+                          log.duration || '--'
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-gray-500">{log.breakDuration || 0} min</td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                          log.status === 'present'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>
+                          {log.status}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-gray-500">{log.location}</td>
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

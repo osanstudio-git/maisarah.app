@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabaseClient';
 import {
   Clock, Search, Download, ArrowUpRight, ArrowDownLeft,
-  CheckCircle2, XCircle, AlertTriangle, Coffee, Loader2, Plus, Edit, X, Save
+  CheckCircle2, XCircle, AlertTriangle, Coffee, Loader2, Plus, Edit, X, Save,
+  Calendar, Filter
 } from 'lucide-react';
 
 interface AttendanceRecord {
@@ -33,6 +34,12 @@ export default function HRAttendance() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Period / Date selection
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [viewMode, setViewMode] = useState<'today' | 'customDate' | 'month'>('today');
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [selectedMonth, setSelectedMonth] = useState<string>(todayStr.slice(0, 7));
+
   // Edit/Punch modal state
   const [editData, setEditData] = useState({
     checkIn: '08:00 AM',
@@ -42,18 +49,26 @@ export default function HRAttendance() {
     location: 'Office HQ (Muscat)'
   });
 
-  const todayStr = new Date().toISOString().split('T')[0];
-
   // ── 1. Fetch live attendance from Supabase ─────────────────────────────────
   const fetchAttendance = useCallback(async () => {
     try {
       setLoading(true);
+      const activeDate = viewMode === 'today' ? todayStr : selectedDate;
 
-      // Fetch profiles, hr_employees, and today's attendance logs
+      let attQuery = supabase.from('hr_attendance').select('*');
+      if (viewMode === 'month') {
+        const startOfMonth = `${selectedMonth}-01`;
+        const endOfMonth = `${selectedMonth}-31`;
+        attQuery = attQuery.gte('work_date', startOfMonth).lte('work_date', endOfMonth).order('work_date', { ascending: false });
+      } else {
+        attQuery = attQuery.eq('work_date', activeDate);
+      }
+
+      // Fetch profiles, hr_employees, and target attendance logs
       const [{ data: profData }, { data: hrData }, { data: attLogs }, { data: leaveReqs }] = await Promise.all([
         supabase.from('profiles').select('*'),
         supabase.from('hr_employees').select('id, full_name, email, role, dept'),
-        supabase.from('hr_attendance').select('*').eq('work_date', todayStr),
+        attQuery,
         supabase.from('hr_leave_requests').select('employee_id, start_date, end_date, hr_approval')
       ]);
 
@@ -82,59 +97,121 @@ export default function HRAttendance() {
 
       const employees = Array.from(empMap.values());
 
-      // Helper to check if employee is on approved leave today
-      const isOnLeaveToday = (empId: string) => {
+      // Helper to check if employee is on approved leave
+      const isOnLeaveOnDate = (empId: string, dStr: string) => {
         return (leaveReqs || []).some((l: any) =>
           l.employee_id === empId &&
           l.hr_approval === 'Approved' &&
-          todayStr >= l.start_date &&
-          todayStr <= l.end_date
+          dStr >= l.start_date &&
+          dStr <= l.end_date
         );
       };
 
-      const calculatedRecords: AttendanceRecord[] = employees.map(emp => {
-        const log = (attLogs || []).find((a: any) => a.employee_id === emp.id);
-        const onLeave = isOnLeaveToday(emp.id);
+      let calculatedRecords: AttendanceRecord[] = [];
 
-        let status: AttendanceRecord['status'] = 'Absent';
-        let checkIn = '--';
-        let checkOut = '--';
-        let breakDuration = 0;
-        let location = 'Office HQ (Muscat)';
+      if (viewMode === 'month') {
+        // In Month View, render all recorded shifts in this month
+        calculatedRecords = (attLogs || []).map((log: any) => {
+          const emp = empMap.get(log.employee_id) || {
+            id: log.employee_id,
+            name: 'Staff Member',
+            role: 'Employee',
+            dept: 'General'
+          };
 
-        if (onLeave) {
-          status = 'On Leave';
-        } else if (log) {
-          status = (log.status as any) || 'Present';
-          checkIn = log.check_in ? log.check_in.slice(0, 5) : '--';
-          checkOut = log.check_out ? log.check_out.slice(0, 5) : '--';
-          breakDuration = Number(log.break_duration || 0);
-          location = log.location || 'Office HQ (Muscat)';
-        }
+          const checkIn = log.check_in ? log.check_in.slice(0, 5) : '--';
+          const checkOut = log.check_out ? log.check_out.slice(0, 5) : '--';
+          const breakDuration = Number(log.break_duration || 0);
 
-        // Calculate hours
-        let workingHours = '0h';
-        if (checkIn !== '--' && checkOut !== '--') {
-          workingHours = '8h 30m';
-        } else if (checkIn !== '--') {
-          workingHours = isAr ? 'قيد العمل' : 'Active';
-        }
+          let workingHours = '0h';
+          if (checkIn !== '--' && checkOut !== '--') {
+            const [ih, im] = checkIn.split(':').map(Number);
+            const [oh, om] = checkOut.split(':').map(Number);
+            if (!isNaN(ih) && !isNaN(im) && !isNaN(oh) && !isNaN(om)) {
+              const diffM = Math.max(0, (oh * 60 + om) - (ih * 60 + im) - breakDuration);
+              workingHours = `${Math.floor(diffM / 60)}h ${diffM % 60}m`;
+            }
+          } else if (checkIn !== '--') {
+            workingHours = isAr ? 'قيد العمل' : 'Active';
+          }
 
-        return {
-          id: log?.id?.toString() || `temp-${emp.id}`,
-          employeeId: emp.id,
-          employeeName: emp.name,
-          role: emp.role,
-          dept: emp.dept,
-          date: todayStr,
-          checkIn,
-          checkOut,
-          workingHours,
-          status,
-          breakDuration,
-          location
-        };
-      });
+          return {
+            id: log.id.toString(),
+            employeeId: emp.id,
+            employeeName: emp.name,
+            role: emp.role,
+            dept: emp.dept,
+            date: log.work_date,
+            checkIn,
+            checkOut,
+            workingHours,
+            status: (log.status as any) || 'Present',
+            breakDuration,
+            location: log.location || 'Office HQ (Muscat)'
+          };
+        });
+      } else {
+        // Daily View (Today or Custom Date)
+        calculatedRecords = employees.map(emp => {
+          const log = (attLogs || []).find((a: any) => a.employee_id === emp.id);
+          const onLeave = isOnLeaveOnDate(emp.id, activeDate);
+
+          let status: AttendanceRecord['status'] = 'Absent';
+          let checkIn = '--';
+          let checkOut = '--';
+          let breakDuration = 0;
+          let location = 'Office HQ (Muscat)';
+
+          if (onLeave) {
+            status = 'On Leave';
+          } else if (log) {
+            status = (log.status as any) || 'Present';
+            checkIn = log.check_in ? log.check_in.slice(0, 5) : '--';
+            checkOut = log.check_out ? log.check_out.slice(0, 5) : '--';
+            breakDuration = Number(log.break_duration || 0);
+            location = log.location || 'Office HQ (Muscat)';
+          }
+
+          // Calculate hours
+          let workingHours = '0h';
+          if (checkIn !== '--' && checkOut !== '--') {
+            const [ih, im] = checkIn.split(':').map(Number);
+            const [oh, om] = checkOut.split(':').map(Number);
+            if (!isNaN(ih) && !isNaN(im) && !isNaN(oh) && !isNaN(om)) {
+              const diffM = Math.max(0, (oh * 60 + om) - (ih * 60 + im) - breakDuration);
+              workingHours = `${Math.floor(diffM / 60)}h ${diffM % 60}m`;
+            }
+          } else if (checkIn !== '--') {
+            if (activeDate === todayStr) {
+              const [ih, im] = checkIn.split(':').map(Number);
+              if (!isNaN(ih) && !isNaN(im)) {
+                const now = new Date();
+                const elapsedM = Math.max(0, (now.getHours() * 60 + now.getMinutes()) - (ih * 60 + im));
+                workingHours = `${isAr ? 'قيد العمل' : 'Active'} (${Math.floor(elapsedM / 60)}h ${elapsedM % 60}m)`;
+              } else {
+                workingHours = isAr ? 'قيد العمل' : 'Active';
+              }
+            } else {
+              workingHours = isAr ? 'قيد العمل' : 'Active';
+            }
+          }
+
+          return {
+            id: log?.id?.toString() || `temp-${emp.id}`,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            role: emp.role,
+            dept: emp.dept,
+            date: activeDate,
+            checkIn,
+            checkOut,
+            workingHours,
+            status,
+            breakDuration,
+            location
+          };
+        });
+      }
 
       setRecords(calculatedRecords);
       localStorage.setItem('hr_attendance_cache', JSON.stringify(calculatedRecords));
@@ -143,7 +220,7 @@ export default function HRAttendance() {
     } finally {
       setLoading(false);
     }
-  }, [todayStr, isAr]);
+  }, [todayStr, selectedDate, selectedMonth, viewMode, isAr]);
 
   useEffect(() => {
     fetchAttendance();
@@ -172,9 +249,10 @@ export default function HRAttendance() {
 
     setSaving(true);
     try {
+      const activeDate = viewMode === 'today' ? todayStr : selectedDate;
       const payload = {
         employee_id: selectedRecord.employeeId,
-        work_date: todayStr,
+        work_date: viewMode === 'month' ? selectedRecord.date : activeDate,
         check_in: editData.checkIn !== '--' ? editData.checkIn : null,
         check_out: editData.checkOut !== '--' ? editData.checkOut : null,
         break_duration: Number(editData.breakDuration || 0),
@@ -211,24 +289,26 @@ export default function HRAttendance() {
   };
 
   const handleExportCSV = () => {
-    const headers = ['Employee Name', 'Role', 'Department', 'Date', 'Check-In', 'Check-Out', 'Break (Mins)', 'Status', 'Location'];
-    const rows = records.map(r => [
+    const headers = ['Employee Name', 'Role', 'Department', 'Date', 'Check-In', 'Check-Out', 'Hours Worked', 'Break (Mins)', 'Status', 'Location'];
+    const rows = filteredRecords.map(r => [
       `"${r.employeeName}"`,
       `"${r.role}"`,
       `"${r.dept}"`,
       r.date,
       r.checkIn,
       r.checkOut,
+      `"${r.workingHours}"`,
       r.breakDuration,
       r.status,
       `"${r.location}"`
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Maisarah_Attendance_${todayStr}.csv`);
+    const label = viewMode === 'month' ? selectedMonth : (viewMode === 'today' ? todayStr : selectedDate);
+    link.setAttribute('download', `Maisarah_Staff_Attendance_${label}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -296,6 +376,87 @@ export default function HRAttendance() {
 
       {/* ── Table & Filters ────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+        {/* Period / Date Selector Toolbar */}
+        <div className="p-4 bg-white border-b border-gray-150 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 mr-1">
+              {isAr ? 'عرض الحضور حسب:' : 'View By:'}
+            </span>
+
+            {/* Mode: Today */}
+            <button
+              onClick={() => {
+                setViewMode('today');
+                setSelectedDate(todayStr);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                viewMode === 'today'
+                  ? 'bg-[#A11212] text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {isAr ? 'اليوم' : 'Today'}
+            </button>
+
+            {/* Mode: Specific Date */}
+            <button
+              onClick={() => setViewMode('customDate')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                viewMode === 'customDate'
+                  ? 'bg-[#A11212] text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {isAr ? 'يوم محدد' : 'Specific Date'}
+            </button>
+
+            {/* Mode: Full Month */}
+            <button
+              onClick={() => setViewMode('month')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                viewMode === 'month'
+                  ? 'bg-[#A11212] text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {isAr ? 'سجل الشهر كاملاً' : 'Full Month Timesheet'}
+            </button>
+          </div>
+
+          {/* Conditional Pickers */}
+          <div className="flex items-center gap-2">
+            {viewMode === 'customDate' && (
+              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl">
+                <Calendar size={14} className="text-gray-400" />
+                <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider">
+                  {isAr ? 'التاريخ:' : 'Date:'}
+                </label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-gray-900 outline-none cursor-pointer"
+                />
+              </div>
+            )}
+
+            {viewMode === 'month' && (
+              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl">
+                <Calendar size={14} className="text-gray-400" />
+                <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider">
+                  {isAr ? 'الشهر:' : 'Month:'}
+                </label>
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-gray-900 outline-none cursor-pointer"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Filters Header */}
         <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row gap-4 items-center justify-between bg-gray-50/50">
           <div className="flex flex-1 w-full gap-2">
@@ -325,7 +486,7 @@ export default function HRAttendance() {
             onClick={handleExportCSV}
             className="bg-gray-900 text-white text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl flex items-center gap-1.5 hover:bg-gray-800 transition-colors w-full sm:w-auto justify-center"
           >
-            <Download size={14} /> {isAr ? 'تصدير التقرير' : 'Export Logs'}
+            <Download size={14} /> {isAr ? 'تصدير التقرير (CSV)' : 'Export Logs (CSV)'}
           </button>
         </div>
 
@@ -341,6 +502,9 @@ export default function HRAttendance() {
               <thead>
                 <tr className="bg-white border-b border-gray-100">
                   <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الموظف' : 'Employee'}</th>
+                  {viewMode === 'month' && (
+                    <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'التاريخ' : 'Date'}</th>
+                  )}
                   <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'تسجيل الدخول' : 'Check-In'}</th>
                   <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'تسجيل الخروج' : 'Check-Out'}</th>
                   <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'ساعات العمل' : 'Work Hours'}</th>
@@ -359,6 +523,9 @@ export default function HRAttendance() {
                         <p className="font-black text-sm text-gray-900">{rec.employeeName}</p>
                         <p className="text-[10px] text-gray-500 font-bold">{rec.role} · {rec.dept}</p>
                       </td>
+                      {viewMode === 'month' && (
+                        <td className="px-6 py-4 text-xs font-bold text-gray-700">{rec.date}</td>
+                      )}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
                           {rec.checkIn !== '--' && <ArrowDownLeft size={14} className="text-green-500" />}
