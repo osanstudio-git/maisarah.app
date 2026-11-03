@@ -99,102 +99,40 @@ interface Reminder {
   completed: boolean;
 }
 
-// --- Initial Mock Data ---
-const INITIAL_LEADS: Lead[] = [
-  { id: 'LD-001', name: 'Salim Al-Busaidi', email: 'salim.b@gmail.com', phone: '+968 9111 2222', companyName: 'Busaidi Logistics', status: 'hot', qualificationColor: 'green', pipelineStep: 'sort', notes: 'Very interested in VAT Filing retainer.', created_at: '2026-07-10', activityHistory: ['2026-07-10 - Lead captured through web form.', '2026-07-12 - Intro call logged. Client requested VAT Retainer proposals.'] },
-  { id: 'LD-002', name: 'Nasser Al-Rawahi', email: 'nasser@rawahipower.com', phone: '+968 9888 7777', companyName: 'Rawahi Solar', status: 'warm', qualificationColor: 'yellow', pipelineStep: 'connect', notes: 'Wants to schedule intro meeting next week.', created_at: '2026-07-12', activityHistory: ['2026-07-12 - Lead created via sales agent.', '2026-07-14 - Follow-up email sent. Awaiting schedule reply.'] },
-  { id: 'LD-003', name: 'Fatma Al-Balushi', email: 'fatma@balushifashion.om', phone: '+968 9333 4444', companyName: 'Balushi Couture', status: 'cold', qualificationColor: 'red', pipelineStep: 'follow_up', notes: 'Emailed brochure. No reply yet.', created_at: '2026-07-15', activityHistory: ['2026-07-15 - Lead entered system.', '2026-07-16 - Brochure sent. No response.'] },
-  { id: 'LD-004', name: 'Hamed Al-Siyabi', email: 'hamed@siyabifood.com', phone: '+968 9444 5555', companyName: 'Siyabi Catering', status: 'warm', qualificationColor: 'yellow', pipelineStep: 'add_data', notes: 'Gathering corporate data sheet.', created_at: '2026-07-16', activityHistory: ['2026-07-16 - Lead created.', '2026-07-17 - Contacted Salim regarding CR info.'] },
-  { id: 'LD-005', name: 'Mona Al-Masrouri', email: 'mona@masrouritrade.om', phone: '+968 9555 6666', companyName: 'Masrouri & Partners', status: 'hot', qualificationColor: 'green', pipelineStep: 'update', notes: 'Sent proposal draft OMR 3,500.', created_at: '2026-07-18', activityHistory: ['2026-07-18 - Lead identified.', '2026-07-20 - Proposal draft of OMR 3,500 delivered via email.'] }
-];
+// --- Authoritative Employee & Department Mappings ---
+const KNOWN_STAFF_MAP: Record<string, string> = {
+  '2b71648c-86a0-454a-8c46-ad0a69cf8664': 'Ali Al-Harthy',
+  'e8fbb851-713d-473a-83f3-dd1da4aa81b4': 'Afrah Khan',
+  'emp_01': 'Ali Al-Harthy',
+  'emp_02': 'Khalfan Al-Abri',
+  'emp_03': 'Fatma Al-Busaidi',
+  'emp_04': 'Zahra Al-Lawati',
+  'emp_05': 'Dr. Salim Al-Maskari',
+};
 
-const INITIAL_CLIENTS: Client[] = [
-  {
-    id: 'CL-101',
-    name: 'Khalfan Al-Abri',
-    email: 'khalfan@soharsteel.om',
-    phone: '+968 9234 5678',
-    companyPhone: '+968 2456 0002',
-    type: 'B2B',
-    companyName: 'Sohar Steel Co',
-    registrationNumber: 'CR-1098765',
-    servicesPackage: ['Tax & VAT', 'Audit'],
-    overallManager: 'Ali Al-Harthy',
-    delegatedServices: { 'Tax & VAT': 'Khalfan Al-Abri', 'Audit': 'Ali Al-Harthy' },
-    created_at: '2024-01-15',
-    monthlyBilling: 450,
-    yearlyBilling: 5400,
-    activityHistory: ['Client onboarded.', 'Introductory call logged.', 'VAT registration certificate verified.'],
-    contractExpiryDate: '2026-08-15',
-    isClubMember: true
-  },
-  {
-    id: 'CL-102',
-    name: 'Ahmed Al-Kharusi',
-    email: 'ahmed@omantel.om',
-    phone: '+968 9123 4567',
-    companyPhone: '+968 2456 0001',
-    type: 'B2B',
-    companyName: 'Oman Telco LLC',
-    registrationNumber: 'CR-2039485',
-    servicesPackage: ['Audit'],
-    overallManager: 'Fatma Al-Harthy',
-    delegatedServices: { 'Audit': 'Ali Al-Harthy' },
-    created_at: '2025-06-01',
-    monthlyBilling: 1200,
-    yearlyBilling: 14400,
-    activityHistory: ['Account created.', 'Audit schedule confirmed.', 'Engagement letter signed.'],
-    contractExpiryDate: '2027-06-01',
-    isClubMember: true
-  },
-  {
-    id: 'CL-103',
-    name: 'Mariam Al-Kindi',
-    email: 'mariam.kindi@gmail.com',
-    phone: '+968 9777 8888',
-    type: 'B2C',
-    servicesPackage: ['Business Advisory'],
-    overallManager: 'Dr. Salim Al-Maskari',
-    delegatedServices: { 'Business Advisory': 'Dr. Salim Al-Maskari' },
-    created_at: '2026-03-20',
-    monthlyBilling: 250,
-    yearlyBilling: 3000,
-    activityHistory: ['Account created.', 'Initial strategic business advice provided.'],
-    contractExpiryDate: '2026-08-10',
-    isClubMember: false
-  }
-];
+const DEPT_STAFF_FALLBACK: Record<string, string> = {
+  audit: 'Ali Al-Harthy',
+  bookkeeping: 'Zahra Al-Lawati',
+  accounting: 'Zahra Al-Lawati',
+  tax: 'Afrah Khan',
+  tax_vat: 'Afrah Khan',
+  vat: 'Afrah Khan',
+  income_tax: 'Khalfan Al-Abri',
+  consultancy: 'Dr. Salim Al-Maskari',
+  advisory: 'Dr. Salim Al-Maskari',
+  legal: 'Khalfan Al-Abri',
+};
 
-const INITIAL_QUOTATIONS: Quotation[] = [
-  { id: 'QT-901', clientName: 'Mazoon Electricity', type: 'B2B', serviceType: 'VAT Return Filing', budget: 1800, status: 'pending' },
-  { id: 'QT-902', clientName: 'Salalah Port Services', type: 'B2B', serviceType: 'Complete Client Bookkeeping', budget: 3200, status: 'pending' },
-  { id: 'QT-903', clientName: 'Amal Al-Harthy', type: 'B2C', serviceType: 'Strategic Consultancy', budget: 850, status: 'approved' }
-];
-
-const INITIAL_REMINDERS: Reminder[] = [
-  { id: 'RM-301', title: 'Follow up with Nasser Al-Rawahi regarding solar contract', date: '2026-07-24', type: 'follow_up', completed: false },
-  { id: 'RM-302', title: 'Submit Engagement letter for Mazoon Electricity', date: '2026-07-25', type: 'deadline', completed: false },
-  { id: 'RM-303', title: 'Audit billing reconciliation check', date: '2026-07-28', type: 'review', completed: false }
-];
-
-const MOCK_EMPLOYEES = [
-  { id: 'emp_01', name: 'Ali Al-Harthy', dept: 'Audit' },
-  { id: 'emp_02', name: 'Khalfan Al-Abri', dept: 'Tax & VAT' },
-  { id: 'emp_03', name: 'Fatma Al-Busaidi', dept: 'Tax & VAT' },
+const DEFAULT_STAFF = [
+  { id: '2b71648c-86a0-454a-8c46-ad0a69cf8664', name: 'Ali Al-Harthy', dept: 'Audit' },
+  { id: 'e8fbb851-713d-473a-83f3-dd1da4aa81b4', name: 'Afrah Khan', dept: 'Tax & VAT' },
   { id: 'emp_04', name: 'Zahra Al-Lawati', dept: 'Bookkeeping' },
   { id: 'emp_05', name: 'Dr. Salim Al-Maskari', dept: 'Business Advisory' }
 ];
 
-const DEPARTMENTS = ['Tax & VAT', 'Audit', 'Bookkeeping', 'Business Advisory'];
+const MOCK_EMPLOYEES = DEFAULT_STAFF;
 
-const RECHARTS_DATA = [
-  { month: 'Jan', Leads: 12, Converted: 5 },
-  { month: 'Feb', Leads: 18, Converted: 8 },
-  { month: 'Mar', Leads: 15, Converted: 10 },
-  { month: 'Apr', Leads: 22, Converted: 14 },
-  { month: 'May', Leads: 28, Converted: 19 },
-  { month: 'Jun', Leads: 32, Converted: 24 }
-];
+const DEPARTMENTS = ['Tax & VAT', 'Audit', 'Bookkeeping', 'Business Advisory'];
 
 export default function CRMPortal() {
   const { i18n } = useTranslation();
@@ -239,11 +177,16 @@ export default function CRMPortal() {
   const [reminders, setReminders] = useState<Reminder[]>(() => {
     try {
       const saved = localStorage.getItem('maisarah_crm_reminders');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((r: any) => !r.id?.startsWith('RM-30'));
+        }
+      }
     } catch (e) {
       console.warn('Could not read reminders from localStorage', e);
     }
-    return INITIAL_REMINDERS;
+    return [];
   });
 
   // Safe RFC4122 v4 UUID generator with fallback for non-secure origins
@@ -293,28 +236,44 @@ export default function CRMPortal() {
   });
 
   // ── Map Supabase row → Client interface ──────────────────────────────────
-  const mapClient = (row: any): Client => ({
-    id: row.id,
-    name: row.contact_person ?? row.full_name ?? row.company_name ?? row.name ?? '',
-    email: row.email ?? '',
-    phone: row.phone ?? '',
-    companyPhone: row.company_phone ?? undefined,
-    type: row.client_type ?? row.type ?? 'B2B',
-    companyName: row.company_name ?? undefined,
-    registrationNumber: row.cr_number ?? row.registration_number ?? undefined,
-    servicesPackage: row.services_package ?? [],
-    overallManager: row.overall_manager ?? '',
-    delegatedServices: row.delegated_services ?? {},
-    created_at: row.created_at?.slice(0, 10) ?? '',
-    monthlyBilling: row.monthly_billing ?? 0,
-    yearlyBilling: (row.monthly_billing ?? 0) * 12,
-    activityHistory: row.activity_history ?? [],
-    contractExpiryDate: row.contract_expiry_date ?? undefined,
-    isClubMember: row.is_club_member ?? false,
-    portal_access_sent: row.portal_access_sent ?? !!row.portal_user_id,
-    portal_sent_at: row.portal_sent_at ?? undefined,
-    portal_user_id: row.portal_user_id ?? undefined,
-  });
+  const mapClient = (
+    row: any,
+    servicesMap?: Map<string, string[]>,
+    managerMap?: Map<string, string>,
+    billingMap?: Map<string, number>
+  ): Client => {
+    const rawServices = row.services_package || [];
+    const dbServices = servicesMap?.get(row.id) || [];
+    const combinedServices = Array.from(new Set([...(Array.isArray(rawServices) ? rawServices : []), ...dbServices]));
+
+    const computedManager = managerMap?.get(row.id) || row.overall_manager || '';
+    const computedBilling = (row.monthly_billing && Number(row.monthly_billing) > 0)
+      ? Number(row.monthly_billing)
+      : (billingMap?.get(row.id) || 0);
+
+    return {
+      id: row.id,
+      name: row.contact_person ?? row.full_name ?? row.company_name ?? row.name ?? '',
+      email: row.email ?? '',
+      phone: row.phone ?? '',
+      companyPhone: row.company_phone ?? undefined,
+      type: row.client_type ?? row.type ?? 'B2B',
+      companyName: row.company_name ?? undefined,
+      registrationNumber: row.cr_number ?? row.registration_number ?? undefined,
+      servicesPackage: combinedServices,
+      overallManager: computedManager,
+      delegatedServices: row.delegated_services ?? {},
+      created_at: row.created_at?.slice(0, 10) ?? '',
+      monthlyBilling: computedBilling,
+      yearlyBilling: computedBilling * 12,
+      activityHistory: row.activity_history ?? [],
+      contractExpiryDate: row.contract_expiry_date ?? undefined,
+      isClubMember: row.is_club_member ?? false,
+      portal_access_sent: row.portal_access_sent ?? !!row.portal_user_id,
+      portal_sent_at: row.portal_sent_at ?? undefined,
+      portal_user_id: row.portal_user_id ?? undefined,
+    };
+  };
 
   // ── Portal Access Modal State ─────────────────────────────────────────────
   const [portalTarget, setPortalTarget] = useState<PortalAccessTarget | null>(null);
@@ -341,18 +300,20 @@ export default function CRMPortal() {
     created_at: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
   });
 
-  const [staffList, setStaffList] = useState(MOCK_EMPLOYEES);
+  const [staffList, setStaffList] = useState(DEFAULT_STAFF);
 
   // ── Fetch all data from Supabase ─────────────────────────────────────────
   const fetchAll = useCallback(async (isInitial = false) => {
     if (isInitial) setDbLoading(true);
     try {
-      const [crmLeadsRes, leadsRes, clientsRes, quotesRes, profilesRes] = await Promise.all([
+      const [crmLeadsRes, leadsRes, clientsRes, quotesRes, profilesRes, servicesRes, clientJobsRes] = await Promise.all([
         supabase.from('crm_leads').select('*').order('created_at', { ascending: false }),
         supabase.from('leads').select('*').order('created_at', { ascending: false }),
         supabase.from('clients').select('*').order('created_at', { ascending: false }),
         supabase.from('quotations').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('id, full_name, email, role'),
+        supabase.from('services').select('id, client_id, title, department_id, employee_id, status'),
+        supabase.from('client_jobs').select('id, client_id, service_type, billing_type, status, amount'),
       ]);
 
       const allLeadsMap = new Map<string, Lead>();
@@ -366,7 +327,53 @@ export default function CRMPortal() {
       }
       setLeads(Array.from(allLeadsMap.values()));
 
-      if (clientsRes.data) setClients(clientsRes.data.map(mapClient));
+      // Build real services, manager, and billing maps from database
+      const clientServicesMap = new Map<string, string[]>();
+      const clientManagerMap = new Map<string, string>();
+      const clientBillingMap = new Map<string, number>();
+
+      if (servicesRes.data) {
+        for (const s of servicesRes.data) {
+          if (!s.client_id) continue;
+          const cleanTitle = (s.title || '').split(' - ')[0].trim();
+          if (cleanTitle) {
+            const list = clientServicesMap.get(s.client_id) || [];
+            if (!list.includes(cleanTitle)) list.push(cleanTitle);
+            clientServicesMap.set(s.client_id, list);
+          }
+          if (!clientManagerMap.has(s.client_id)) {
+            let managerName = '';
+            if (s.employee_id) {
+              managerName = KNOWN_STAFF_MAP[s.employee_id] || '';
+            }
+            if (!managerName && s.department_id) {
+              managerName = DEPT_STAFF_FALLBACK[s.department_id.toLowerCase()] || '';
+            }
+            if (managerName) clientManagerMap.set(s.client_id, managerName);
+          }
+        }
+      }
+
+      if (clientJobsRes.data) {
+        for (const job of clientJobsRes.data) {
+          if (!job.client_id) continue;
+          if (job.service_type) {
+            const types = job.service_type.split(',').map((t: string) => t.trim()).filter(Boolean);
+            const list = clientServicesMap.get(job.client_id) || [];
+            for (const t of types) {
+              if (!list.includes(t)) list.push(t);
+            }
+            clientServicesMap.set(job.client_id, list);
+          }
+          if (job.amount && Number(job.amount) > 0) {
+            clientBillingMap.set(job.client_id, (clientBillingMap.get(job.client_id) || 0) + Number(job.amount));
+          }
+        }
+      }
+
+      if (clientsRes.data) {
+        setClients(clientsRes.data.map(row => mapClient(row, clientServicesMap, clientManagerMap, clientBillingMap)));
+      }
       if (quotesRes.data) setQuotations(quotesRes.data.map(mapQuotation));
       if (profilesRes.data && profilesRes.data.length > 0) {
         const fetchedStaff = profilesRes.data.map(p => ({
@@ -374,7 +381,7 @@ export default function CRMPortal() {
           name: p.full_name || p.email,
           dept: p.role === 'department_head' ? 'Department Head' : p.role.toUpperCase()
         }));
-        setStaffList([...fetchedStaff, ...MOCK_EMPLOYEES]);
+        setStaffList(fetchedStaff);
       }
     } catch (err) {
       console.error('CRM fetchAll error:', err);
@@ -393,6 +400,9 @@ export default function CRMPortal() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchAll(false))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchAll(false))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => fetchAll(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => fetchAll(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'client_jobs' }, () => fetchAll(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'b2b_partners' }, () => fetchAll(false))
       .subscribe();
 
     channelRef.current = ch;
@@ -591,11 +601,11 @@ export default function CRMPortal() {
   };
 
   // --- Combo Work Configuration States ---
-  const [selectedClientForCombo, setSelectedClientForCombo] = useState<string>(INITIAL_CLIENTS[0].id);
+  const [selectedClientForCombo, setSelectedClientForCombo] = useState<string>('');
   const [comboSetup, setComboSetup] = useState({
-    overallManager: INITIAL_CLIENTS[0].overallManager,
-    services: INITIAL_CLIENTS[0].servicesPackage,
-    delegation: INITIAL_CLIENTS[0].delegatedServices
+    overallManager: DEFAULT_STAFF[0].name,
+    services: ['Tax & VAT'] as string[],
+    delegation: { 'Tax & VAT': DEFAULT_STAFF[1].name } as Record<string, string>
   });
 
   // --- Export & Approval States ---
@@ -654,18 +664,6 @@ export default function CRMPortal() {
   ]);
   const [customDocInput, setCustomDocInput] = useState('');
 
-  const [quoteTimelineSteps, setQuoteTimelineSteps] = useState<{ id: string; step: string; duration: string; selected: boolean }[]>([
-    { id: 't1', step: 'Share Transfer', duration: '4-6 Working Days', selected: true },
-    { id: 't2', step: 'CR Renewal', duration: '1 Working Day', selected: true },
-    { id: 't3', step: 'Activity License Renewal', duration: '1 Working Day', selected: true },
-    { id: 't4', step: 'KYC Verification', duration: '1-2 Working Days', selected: true },
-    { id: 't5', step: 'CR Certificate Issue', duration: '1-2 Working Days', selected: true },
-    { id: 't6', step: 'Tax Card Issue', duration: '1-2 Working Days', selected: true },
-    { id: 't7', step: 'Feasibility Study', duration: '1 Working Day', selected: true },
-    { id: 't8', step: 'Attestation Services', duration: '2-3 Working Days', selected: true },
-  ]);
-  const [customTimelineStepName, setCustomTimelineStepName] = useState('');
-  const [customTimelineStepDuration, setCustomTimelineStepDuration] = useState('1-2 Working Days');
 
   const [quotePaymentSchedule, setQuotePaymentSchedule] = useState({
     preset: '50_50' as '50_50' | 'full_advance' | 'completion' | 'custom',
@@ -719,6 +717,7 @@ export default function CRMPortal() {
 
   // ── Direct Client Onboarding Modal ───────────────────────────────────────
   const [showDirectClientModal, setShowDirectClientModal] = useState(false);
+  const [isSubmittingDirectClient, setIsSubmittingDirectClient] = useState(false);
   const [directClientForm, setDirectClientForm] = useState({
     name: '',
     companyName: '',
@@ -726,10 +725,10 @@ export default function CRMPortal() {
     email: '',
     phone: '',
     clientType: 'B2B' as 'B2B' | 'B2C',
-    services: ['Tax & VAT'] as string[],
-    billingAmount: '450',
-    manager: MOCK_EMPLOYEES[0].name,
-    sendPortalAccess: true,
+    services: ['Business Advisory'] as string[],
+    billingAmount: '10',
+    manager: DEFAULT_STAFF[0].name,
+    sendPortalAccess: false,
   });
 
   // ── Quick Add Lead Modal (Minimal Lead Capture) ─────────────────────────
@@ -1075,15 +1074,30 @@ export default function CRMPortal() {
 
   const handleDirectClientSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingDirectClient) return;
+    setIsSubmittingDirectClient(true);
+
     try {
-      const billing = parseFloat(directClientForm.billingAmount) || 300;
+      const billing = parseFloat(directClientForm.billingAmount) || 0;
       const expiryDate = new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0];
 
+      const contactName = (directClientForm.name || '').trim();
+      const company = (directClientForm.companyName || contactName).trim();
+      const cleanEmail = directClientForm.email?.trim() || null;
+      const cleanPhone = directClientForm.phone?.trim() || null;
+      const cleanCr = directClientForm.registrationNumber?.trim() || null;
+
+      if (!contactName && !company) {
+        throw new Error(isAr ? 'يرجى إدخال اسم العميل أو اسم المنشأة' : 'Please enter contact person or company name');
+      }
+
+      // 1. Insert into clients table
       const { data: newClient, error: clientErr } = await supabase.from('clients').insert([{
-        company_name: directClientForm.clientType === 'B2B' ? (directClientForm.companyName || directClientForm.name) : directClientForm.name,
-        cr_number: directClientForm.clientType === 'B2B' ? directClientForm.registrationNumber : null,
-        email: directClientForm.email,
-        phone: directClientForm.phone,
+        company_name: company,
+        contact_person: contactName,
+        cr_number: cleanCr,
+        email: cleanEmail,
+        phone: cleanPhone,
         monthly_billing: billing,
         contract_expiry_date: expiryDate,
         source: 'direct',
@@ -1091,46 +1105,81 @@ export default function CRMPortal() {
 
       if (clientErr) throw clientErr;
 
-      await supabase.from('client_jobs').insert([{
-        client_id: newClient ? newClient.id : null,
-        service_type: directClientForm.services.join(', '),
-        billing_type: 'one_time',
-        status: 'pending',
-        amount: billing,
-        vat_amount: +(billing * 0.05).toFixed(3),
-        description: `Direct Client Job Task for ${directClientForm.companyName || directClientForm.name}`,
-        deadline: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      }]);
+      // 2. Insert into client_jobs
+      if (directClientForm.services.length > 0) {
+        await supabase.from('client_jobs').insert([{
+          client_id: newClient ? newClient.id : null,
+          service_type: directClientForm.services.join(', '),
+          billing_type: 'recurring',
+          status: 'pending',
+          amount: billing,
+          vat_amount: +(billing * 0.05).toFixed(3),
+          description: `Direct Client Job Task for ${company}`,
+          deadline: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+        }]);
 
+        // 3. Insert into services table for immediate tracking
+        for (const srv of directClientForm.services) {
+          let dept = 'accounting';
+          const srvLower = srv.toLowerCase();
+          if (srvLower.includes('audit')) dept = 'audit';
+          else if (srvLower.includes('vat') || srvLower.includes('tax')) dept = 'tax';
+          else if (srvLower.includes('advisory')) dept = 'advisory';
+
+          await supabase.from('services').insert([{
+            client_id: newClient ? newClient.id : null,
+            title: `${srv} - ${company}`,
+            department_id: dept,
+            status: 'ongoing'
+          }]);
+        }
+      }
+
+      // 4. Send notification to HOD
       await supabase.from('notifications').insert([{
         role: 'hod',
         type: 'new_client',
         title: 'New Direct Client Onboarded',
-        message: `Direct Client "${directClientForm.companyName || directClientForm.name}" added. Services: ${directClientForm.services.join(', ')}.`,
+        message: `Direct Client "${company}" added. Services: ${directClientForm.services.join(', ')}.`,
         ref_id: newClient ? newClient.id : undefined,
         ref_table: 'clients',
       }]);
 
-      if (directClientForm.sendPortalAccess && directClientForm.email) {
+      // 5. Open portal access modal if checked and email provided
+      if (directClientForm.sendPortalAccess && cleanEmail) {
         setPortalTarget({
           id: newClient ? newClient.id : 'direct-client',
           type: 'client',
-          name: directClientForm.name,
-          companyName: directClientForm.companyName,
-          email: directClientForm.email,
-          phone: directClientForm.phone,
+          name: contactName,
+          companyName: company,
+          email: cleanEmail,
+          phone: cleanPhone || '',
           portalAccessSent: false
         });
         setIsPortalModalOpen(true);
       } else {
-        alert(isAr ? 'تم إضافة العميل المباشر وإشعار رئيس القسم بنجاح!' : 'Direct client onboarded & HOD notified!');
+        alert(isAr ? 'تم إضافة العميل وحفظ البيانات في قاعدة البيانات بنجاح!' : '🎉 Client successfully onboarded and saved to database!');
       }
 
       setShowDirectClientModal(false);
-      setDirectClientForm({ name: '', companyName: '', registrationNumber: '', email: '', phone: '', clientType: 'B2B', services: ['Tax & VAT'], billingAmount: '450', manager: MOCK_EMPLOYEES[0].name, sendPortalAccess: true });
-      fetchAll();
+      setDirectClientForm({
+        name: '',
+        companyName: '',
+        registrationNumber: '',
+        email: '',
+        phone: '',
+        clientType: 'B2B',
+        services: ['Business Advisory'],
+        billingAmount: '10',
+        manager: DEFAULT_STAFF[0].name,
+        sendPortalAccess: false
+      });
+      await fetchAll();
     } catch (err: any) {
+      console.error('Error adding direct client:', err);
       alert(err.message || 'Error adding direct client');
+    } finally {
+      setIsSubmittingDirectClient(false);
     }
   };
 
@@ -1793,15 +1842,27 @@ export default function CRMPortal() {
                         </span>
                       </td>
                       <td className="p-4">
-                        <div className="flex flex-wrap gap-1">
-                          {client.servicesPackage.map(s => (
-                            <span key={s} className="bg-gray-50 border border-gray-200 text-gray-650 text-[9px] px-2 py-0.5 rounded font-bold">
-                              {s}
-                            </span>
-                          ))}
-                        </div>
+                        {client.servicesPackage && client.servicesPackage.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {client.servicesPackage.map(s => (
+                              <span key={s} className="bg-gray-50 border border-gray-200 text-gray-700 text-[9px] px-2 py-0.5 rounded font-bold">
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-gray-400 font-bold italic">{isAr ? 'بدون باقة محددة' : 'No service assigned'}</span>
+                        )}
                       </td>
-                      <td className="p-4 text-xs font-black text-gray-700">{client.overallManager}</td>
+                      <td className="p-4 text-xs font-black text-gray-700">
+                        {client.overallManager ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 text-xs font-black">
+                            {client.overallManager}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-gray-400 font-bold italic">{isAr ? 'غير محدد' : 'Unassigned'}</span>
+                        )}
+                      </td>
                       <td className="p-4 text-xs font-black text-gray-950 text-end">
                         {client.yearlyBilling.toLocaleString()} OMR
                         <span className="block text-[8px] text-gray-400 font-bold">Monthly: {client.monthlyBilling} OMR</span>
@@ -4219,60 +4280,7 @@ export default function CRMPortal() {
                   </div>
                 </div>
 
-                {/* 5. Processing Timeline Checklist */}
-                <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5">
-                    <Clock size={15} /> Processing Timeline Checklist
-                  </h4>
-
-                  <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
-                    {quoteTimelineSteps.map((ts) => (
-                      <div key={ts.id} className="flex items-center justify-between bg-slate-900 p-2 rounded-xl border border-slate-850">
-                        <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-200 font-medium">
-                          <input
-                            type="checkbox"
-                            checked={ts.selected}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              setQuoteTimelineSteps(prev => prev.map(t => t.id === ts.id ? { ...t, selected: checked } : t));
-                            }}
-                            className="accent-[#A11212] rounded"
-                          />
-                          <span>{ts.step}</span>
-                        </label>
-                        <span className="text-[10px] text-red-300 font-bold bg-red-950/60 px-2 py-0.5 rounded border border-red-800/60">
-                          {ts.duration}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 pt-1">
-                    <input
-                      type="text"
-                      placeholder="Step Name..."
-                      value={customTimelineStepName}
-                      onChange={e => setCustomTimelineStepName(e.target.value)}
-                      className="col-span-2 bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:border-red-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!customTimelineStepName.trim()) return;
-                        setQuoteTimelineSteps(prev => [
-                          ...prev,
-                          { id: `t_${Date.now()}`, step: customTimelineStepName.trim(), duration: customTimelineStepDuration, selected: true }
-                        ]);
-                        setCustomTimelineStepName('');
-                      }}
-                      className="bg-[#A11212] hover:bg-red-700 text-white text-xs font-black uppercase px-3 py-1.5 rounded-xl cursor-pointer"
-                    >
-                      + Add
-                    </button>
-                  </div>
-                </div>
-
-                {/* 6. Payment Schedule Terms */}
+                {/* 5. Payment Schedule Terms */}
                 <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
                   <h4 className="text-xs font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5">
                     <ShieldCheck size={15} /> Payment Schedule Terms
@@ -4473,22 +4481,6 @@ export default function CRMPortal() {
                       </div>
                     )}
 
-                    {/* Processing Timeline Table */}
-                    {quoteTimelineSteps.filter(t => t.selected).length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="bg-brand-dark text-white font-black text-[10px] uppercase px-3 py-1 tracking-wider">
-                          PROCESSING TIMELINE
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[9.5px] border border-slate-200 p-2 bg-slate-50/50">
-                          {quoteTimelineSteps.filter(t => t.selected).map((ts) => (
-                            <div key={ts.id} className="flex justify-between items-center border-b border-slate-100 pb-0.5">
-                              <span className="font-bold text-slate-800">{ts.step}</span>
-                              <span className="font-black text-brand-dark">{ts.duration}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
 
                     {/* Payment Schedule Terms */}
                     <div className="space-y-1.5">
@@ -4614,12 +4606,12 @@ export default function CRMPortal() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'البريد الإلكتروني *' : 'Email Address *'}</label>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'البريد الإلكتروني (اختياري)' : 'Email Address (Optional)'}</label>
                   <input
                     type="email"
-                    required
                     value={directClientForm.email}
                     onChange={e => setDirectClientForm(p => ({ ...p, email: e.target.value }))}
+                    placeholder={isAr ? 'اختياري (client@example.com)' : 'Optional (client@example.com)'}
                     className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none"
                   />
                 </div>
@@ -4630,6 +4622,7 @@ export default function CRMPortal() {
                     required
                     value={directClientForm.phone}
                     onChange={e => setDirectClientForm(p => ({ ...p, phone: e.target.value }))}
+                    placeholder="+968 9000 0000"
                     className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none"
                   />
                 </div>
@@ -4684,16 +4677,23 @@ export default function CRMPortal() {
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
                 <button
                   type="button"
+                  disabled={isSubmittingDirectClient}
                   onClick={() => setShowDirectClientModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-xl"
+                  className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-xl cursor-pointer"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold bg-brand-dark text-white rounded-xl hover:bg-brand-dark/90"
+                  disabled={isSubmittingDirectClient}
+                  className="px-5 py-2.5 text-xs font-bold bg-[#A11212] hover:bg-[#800e0e] text-white rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
                 >
-                  {isAr ? 'إضافة العميل وإرسال المهمة لرئيس القسم' : 'Add Client & Send HOD Task'}
+                  {isSubmittingDirectClient && <Loader2 size={13} className="animate-spin" />}
+                  <span>
+                    {isSubmittingDirectClient
+                      ? (isAr ? 'جاري حفظ العميل...' : 'Saving Client...')
+                      : (isAr ? 'إضافة العميل وإرسال المهمة لرئيس القسم' : 'Add Client & Send HOD Task')}
+                  </span>
                 </button>
               </div>
             </form>

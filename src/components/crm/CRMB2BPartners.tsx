@@ -50,57 +50,6 @@ interface CRMB2BPartnersProps {
   staffList: any[];
 }
 
-const INITIAL_B2B_PARTNERS: B2BPartner[] = [
-  {
-    id: 'b2b-01',
-    name: 'Al-Tasheel Sanad Services Group',
-    partner_type: 'sanad',
-    contact_person: 'Sheikh Salim Al-Busaidi',
-    phone: '+968 9123 4567',
-    email: 'salim@tasheel-oman.om',
-    location: 'Muscat (Al-Khuwair)',
-    cr_number: 'CR-1049281',
-    notes: 'Premier Sanad channel bringing corporate and SME registrations.',
-    created_at: '2026-01-10'
-  },
-  {
-    id: 'b2b-02',
-    name: 'Oman Legal & Corporate Advisory Chambers',
-    partner_type: 'company',
-    contact_person: 'Adv. Maryam Al-Lawati',
-    phone: '+968 9456 7890',
-    email: 'maryam@omanlegal.om',
-    location: 'Muscat (Al-Mouj)',
-    cr_number: 'CR-2039482',
-    notes: 'Legal partners referring international FDI companies for financial audit and corporate tax.',
-    created_at: '2026-02-14'
-  },
-  {
-    id: 'b2b-03',
-    name: 'Sohar Industrial Holding Cluster',
-    partner_type: 'company',
-    contact_person: 'Tariq Al-Fazari',
-    phone: '+968 9789 0123',
-    email: 'tariq@soharholding.om',
-    location: 'Sohar Freezone',
-    cr_number: 'CR-3048192',
-    notes: 'Holding group coordinating subsidiaries bookkeeping & VAT filings.',
-    created_at: '2026-03-01'
-  },
-  {
-    id: 'b2b-04',
-    name: 'Duqm Business & Startup Incubator',
-    partner_type: 'agent',
-    contact_person: 'Eng. Khalid Al-Habsi',
-    phone: '+968 9234 5678',
-    email: 'khalid@duqmincubator.om',
-    location: 'Duqm Special Economic Zone',
-    cr_number: 'CR-4091823',
-    notes: 'Channeling newly formed SME startups.',
-    created_at: '2026-04-18'
-  }
-];
-
 export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList }: CRMB2BPartnersProps) {
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
@@ -108,11 +57,16 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
   const [partners, setPartners] = useState<B2BPartner[]>(() => {
     try {
       const saved = localStorage.getItem('maisarah_b2b_partners');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const list = JSON.parse(saved);
+        if (Array.isArray(list)) {
+          return list.filter((p: any) => p && !p.id?.startsWith('b2b-0'));
+        }
+      }
     } catch (e) {
       console.warn('Error reading saved B2B partners:', e);
     }
-    return INITIAL_B2B_PARTNERS;
+    return [];
   });
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -150,8 +104,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
     const fetchSupabasePartners = async () => {
       try {
         const { data, error } = await supabase.from('b2b_partners').select('*').order('created_at', { ascending: false });
-        if (!error && data && data.length > 0) {
-          setPartners(data);
+        if (!error && data) {
+          const nonDummy = data.filter((p: any) => !p.id?.startsWith('b2b-0'));
+          setPartners(nonDummy);
+          localStorage.setItem('maisarah_b2b_partners', JSON.stringify(nonDummy));
         }
       } catch (e) {
         console.warn('Notice fetching B2B partners from Supabase:', e);
@@ -168,7 +124,10 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
         { event: '*', schema: 'public', table: 'b2b_partners' },
         (payload) => {
           if (payload.eventType === 'INSERT' && payload.new) {
-            setPartners(prev => [payload.new as B2BPartner, ...prev.filter(p => p.id !== payload.new.id)]);
+            const row = payload.new as B2BPartner;
+            if (!row.id?.startsWith('b2b-0')) {
+              setPartners(prev => [row, ...prev.filter(p => p.id !== row.id)]);
+            }
           } else if (payload.eventType === 'UPDATE' && payload.new) {
             setPartners(prev => prev.map(p => p.id === payload.new.id ? (payload.new as B2BPartner) : p));
           } else if (payload.eventType === 'DELETE' && payload.old) {
@@ -189,7 +148,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
     partners.forEach(p => map.set(p.id, []));
 
     clients.forEach(c => {
-      const pId = c.b2b_partner_id || (c.source === 'b2b' ? partners[0]?.id : null);
+      const pId = c.b2b_partner_id || (c.source === 'b2b' && partners.length > 0 ? partners[0].id : null);
       if (pId && map.has(pId)) {
         map.get(pId)!.push(c);
       } else if (c.type === 'B2B' && partners.length > 0) {
@@ -204,33 +163,42 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
     return map;
   }, [partners, clients]);
 
-  // Aggregate Metrics
+  // Aggregate Metrics with 100% Real-Time Values (No Dummy Fallbacks)
   const metrics = useMemo(() => {
     const totalPartners = partners.length;
     let totalB2BClients = 0;
     let totalAttributedRevenue = 0;
+    let bestPartnerName = '—';
+    let maxRevenue = -1;
 
-    partnerClientsMap.forEach((pClients) => {
+    partnerClientsMap.forEach((pClients, pId) => {
       totalB2BClients += pClients.length;
+      let partnerRev = 0;
       pClients.forEach(c => {
-        totalAttributedRevenue += (c.monthlyBilling || 0) * 12 || (c.yearlyBilling || 0);
+        const m = Number(c.monthlyBilling) || 0;
+        const y = Number(c.yearlyBilling) || 0;
+        partnerRev += (m * 12) || y;
       });
+      totalAttributedRevenue += partnerRev;
+
+      if (partnerRev > maxRevenue && pClients.length > 0) {
+        maxRevenue = partnerRev;
+        const match = partners.find(p => p.id === pId);
+        if (match) bestPartnerName = match.name;
+      }
     });
 
-    // If initial dataset has 0 mapped clients, calculate based on B2B clients
-    if (totalB2BClients === 0) {
-      const b2bOnly = clients.filter(c => c.type === 'B2B');
-      totalB2BClients = b2bOnly.length || 14;
-      totalAttributedRevenue = b2bOnly.reduce((sum, c) => sum + (c.yearlyBilling || (c.monthlyBilling || 350) * 12), 0) || 48600;
+    if (bestPartnerName === '—' && partners.length > 0) {
+      bestPartnerName = partners[0].name;
     }
 
     return {
       totalPartners,
       totalB2BClients,
       totalAttributedRevenue,
-      topPartner: partners[0]?.name || 'Al-Tasheel Sanad Group'
+      topPartner: bestPartnerName
     };
-  }, [partners, partnerClientsMap, clients]);
+  }, [partners, partnerClientsMap]);
 
   // Filtered Partners
   const filteredPartners = useMemo(() => {
@@ -479,7 +447,28 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
       </div>
 
       {/* 3. B2B Partners Directory (Grid View or List View) */}
-      {viewMode === 'grid' ? (
+      {filteredPartners.length === 0 ? (
+        <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center shadow-xs">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-50 text-[#A11212] flex items-center justify-center">
+            <Building2 size={32} />
+          </div>
+          <h3 className="text-base font-black text-gray-900 mb-1">
+            {isAr ? 'لا يوجد شركاء أعمال B2B حالياً' : 'No B2B Partners Found'}
+          </h3>
+          <p className="text-xs text-gray-500 max-w-md mx-auto mb-6">
+            {isAr
+              ? 'لم يتم تسجيل شركاء أعمال (مكاتب سند، جهات قانونية، وسطاء). يمكنك إضافة شريك جديد لربط العملاء ومتابعة الإيرادات الحقيقية.'
+              : 'No corporate or channel partners have been registered yet. Add a verified partner to attribute clients and monitor ARR in real-time.'}
+          </p>
+          <button
+            onClick={() => setShowAddPartnerModal(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#A11212] hover:bg-[#800e0e] text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 cursor-pointer"
+          >
+            <Plus size={15} />
+            <span>{isAr ? '+ إضافة شريك جديد' : '+ Add New B2B Partner'}</span>
+          </button>
+        </div>
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
           {filteredPartners.map(partner => {
             const affiliatedClients = partnerClientsMap.get(partner.id) || [];

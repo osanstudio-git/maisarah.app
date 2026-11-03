@@ -171,6 +171,21 @@ export default function FieldSalesPortal() {
 
   useEffect(() => {
     fetchSalesData();
+
+    // Subscribe to real-time changes on crm_leads and clients
+    const channel = supabase
+      .channel('field_sales_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_leads' }, () => {
+        fetchSalesData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
+        fetchSalesData(true);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchSalesData]);
 
   // Handle GPS Auto Location
