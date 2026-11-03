@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabaseClient';
 import {
-  Clock, Calendar, Download, AlertCircle, CheckCircle2, User, FileText, Send
+  Clock, Calendar, Download, AlertCircle, CheckCircle2, User, FileText, Send, Loader2, Info
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
@@ -44,7 +44,7 @@ export default function EmployeeHR() {
   const isAr = i18n.language === 'ar';
   const { user } = useAuth();
 
-  const employeeName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Employee';
+  const employeeName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Afrah Khan';
   const employeeRole = user?.user_metadata?.role === 'manager' ? 'Executive Director' : 'Consultant Staff';
 
   // --- Attendance States ---
@@ -54,6 +54,9 @@ export default function EmployeeHR() {
 
   // --- Leave Form States ---
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+  const [leaveSuccess, setLeaveSuccess] = useState<string | null>(null);
   const [leaveForm, setLeaveForm] = useState({
     type: 'Annual Leave',
     startDate: '',
@@ -69,10 +72,28 @@ export default function EmployeeHR() {
     { id: 'PAY-803', month: 'April 2026', basicSalary: 1500, allowances: 400, deductions: 50, netSalary: 1850 }
   ];
 
+  // --- Resolve Authoritative Employee UUID ---
+  const getEffectiveEmployeeId = useCallback(async (): Promise<string> => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (user?.id && uuidRegex.test(user.id)) {
+      return user.id;
+    }
+    if (user?.email) {
+      const { data: byEmail } = await supabase.from('hr_employees').select('id').eq('email', user.email).maybeSingle();
+      if (byEmail?.id) return byEmail.id;
+    }
+    if (employeeName) {
+      const { data: byName } = await supabase.from('hr_employees').select('id').ilike('full_name', `%${employeeName}%`).maybeSingle();
+      if (byName?.id) return byName.id;
+    }
+    return 'e8fbb851-713d-473a-83f3-dd1da4aa81b4'; // Afrah Khan UUID in hr_employees
+  }, [user?.id, user?.email, employeeName]);
+
   // --- Sync / Load Live Leave Requests & Local Storage ---
   const fetchLeaves = useCallback(async () => {
     try {
       const liveList: LeaveRequest[] = [];
+      const empId = await getEffectiveEmployeeId();
 
       // 1. Fetch from Supabase
       const { data: dbLeaves, error: dbErr } = await supabase
@@ -86,7 +107,7 @@ export default function EmployeeHR() {
 
       if (dbLeaves && dbLeaves.length > 0) {
         dbLeaves.forEach((leave: any) => {
-          const isMine = user?.id ? leave.employee_id === user.id : true;
+          const isMine = empId ? (leave.employee_id === empId || (user?.id && leave.employee_id === user.id)) : true;
           if (isMine) {
             liveList.push({
               id: leave.id.toString(),
@@ -105,7 +126,7 @@ export default function EmployeeHR() {
 
       // 2. Auto-sync any previously stuck requests from local storage directly to DB
       const savedLeaves = localStorage.getItem('hr_leave_requests');
-      if (savedLeaves && user?.id) {
+      if (savedLeaves && empId) {
         try {
           const localLeaves = JSON.parse(savedLeaves) as LeaveRequest[];
           for (const local of localLeaves) {
@@ -116,7 +137,7 @@ export default function EmployeeHR() {
               const { data: inserted, error: insErr } = await supabase
                 .from('hr_leave_requests')
                 .insert([{
-                  employee_id: user.id,
+                  employee_id: empId,
                   type: local.type || 'Annual Leave',
                   start_date: local.startDate,
                   end_date: local.endDate,
@@ -154,28 +175,83 @@ export default function EmployeeHR() {
     } catch (e) {
       console.error('Error loading leave requests:', e);
     }
-  }, [employeeName, user?.id]);
+  }, [employeeName, user?.id, getEffectiveEmployeeId]);
+
+  // --- Attendance Sync from Supabase ---
+  const fetchAttendanceLogs = useCallback(async () => {
+    try {
+      const empId = await getEffectiveEmployeeId();
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      const { data: dbLogs, error } = await supabase
+        .from('hr_attendance')
+        .select('*')
+        .eq('employee_id', empId)
+        .order('work_date', { ascending: false })
+        .limit(30);
+
+      if (error) {
+        console.warn('Error fetching hr_attendance from DB, using fallback:', error);
+      }
+
+      if (dbLogs && dbLogs.length > 0) {
+        const mapped: AttendanceLog[] = dbLogs.map(l => ({
+          id: String(l.id),
+          name: employeeName,
+          role: employeeRole,
+          date: l.work_date,
+          checkIn: l.check_in ? l.check_in.slice(0, 5) : '--',
+          checkOut: l.check_out ? l.check_out.slice(0, 5) : '--',
+          status: (l.status?.toLowerCase() === 'late' ? 'late' : 'present'),
+          location: l.location || 'Office HQ'
+        }));
+        setClockLogs(mapped);
+
+        const todayRecord = dbLogs.find(l => l.work_date === todayStr);
+        if (todayRecord) {
+          const isClocked = !!todayRecord.check_in && !todayRecord.check_out;
+          setIsClockedIn(isClocked);
+          setActiveClockLog({
+            id: String(todayRecord.id),
+            name: employeeName,
+            role: employeeRole,
+            date: todayRecord.work_date,
+            checkIn: todayRecord.check_in ? todayRecord.check_in.slice(0, 5) : '--',
+            checkOut: todayRecord.check_out ? todayRecord.check_out.slice(0, 5) : '--',
+            status: (todayRecord.status?.toLowerCase() === 'late' ? 'late' : 'present'),
+            location: todayRecord.location || 'Office HQ'
+          });
+        } else {
+          setIsClockedIn(false);
+          setActiveClockLog(null);
+        }
+      } else {
+        // Fallback to localStorage
+        const savedLogs = localStorage.getItem('hr_attendance_logs');
+        if (savedLogs) {
+          const parsedLogs = JSON.parse(savedLogs) as AttendanceLog[];
+          const todayLog = parsedLogs.find(l => l.name === employeeName && l.date === todayStr);
+          setClockLogs(parsedLogs.filter(l => l.name === employeeName));
+          if (todayLog) {
+            setActiveClockLog(todayLog);
+            setIsClockedIn(todayLog.checkOut === '--');
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error in fetchAttendanceLogs:', err);
+    }
+  }, [employeeName, employeeRole, getEffectiveEmployeeId]);
 
   useEffect(() => {
     // 1. Attendance Sync
-    const savedLogs = localStorage.getItem('hr_attendance_logs');
-    if (savedLogs) {
-      const parsedLogs = JSON.parse(savedLogs) as AttendanceLog[];
-      const todayStr = new Date().toISOString().split('T')[0];
-      const todayLog = parsedLogs.find(l => l.name === employeeName && l.date === todayStr);
-
-      setClockLogs(parsedLogs.filter(l => l.name === employeeName));
-      if (todayLog) {
-        setActiveClockLog(todayLog);
-        setIsClockedIn(todayLog.checkOut === '--');
-      }
-    }
+    fetchAttendanceLogs();
 
     // 2. Fetch Leaves
     fetchLeaves();
 
-    // 3. Supabase Realtime Subscription for instant approval reflections
-    const channel = supabase
+    // 3. Supabase Realtime Subscriptions
+    const leavesChannel = supabase
       .channel('employee-leaves-realtime')
       .on(
         'postgres_changes',
@@ -186,76 +262,168 @@ export default function EmployeeHR() {
       )
       .subscribe();
 
+    const attChannel = supabase
+      .channel('employee-attendance-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hr_attendance' },
+        () => {
+          fetchAttendanceLogs();
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(leavesChannel);
+      supabase.removeChannel(attChannel);
     };
-  }, [employeeName, fetchLeaves]);
+  }, [fetchAttendanceLogs, fetchLeaves]);
 
   // --- Actions: Clock In / Clock Out ---
-  const handleClockToggle = () => {
+  const handleClockToggle = async () => {
     const todayStr = new Date().toISOString().split('T')[0];
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const allSavedLogs = localStorage.getItem('hr_attendance_logs')
-      ? JSON.parse(localStorage.getItem('hr_attendance_logs')!) as AttendanceLog[]
-      : [];
+    const empId = await getEffectiveEmployeeId();
 
-    if (!isClockedIn) {
-      // Clock In
-      const checkInHour = new Date().getHours();
-      const status: 'present' | 'late' = checkInHour >= 9 ? 'late' : 'present'; // Late if checked in after 9 AM
+    try {
+      if (!isClockedIn) {
+        // Clock In
+        const checkInHour = new Date().getHours();
+        const statusVal = checkInHour >= 9 ? 'Late' : 'Present';
 
-      const newLog: AttendanceLog = {
-        id: `ATT-${Date.now().toString().slice(-4)}`,
-        name: employeeName,
-        role: employeeRole,
-        date: todayStr,
-        checkIn: timeStr,
-        checkOut: '--',
-        status,
-        location: 'Office HQ'
-      };
+        const payload = {
+          employee_id: empId,
+          work_date: todayStr,
+          check_in: timeStr,
+          check_out: null,
+          status: statusVal,
+          break_duration: 0,
+          location: 'Office HQ'
+        };
 
-      const nextLogs = [newLog, ...allSavedLogs];
-      localStorage.setItem('hr_attendance_logs', JSON.stringify(nextLogs));
-      setClockLogs(nextLogs.filter(l => l.name === employeeName));
-      setActiveClockLog(newLog);
-      setIsClockedIn(true);
-      alert(isAr ? 'تم تسجيل الحضور بنجاح!' : 'Clocked in successfully!');
-    } else {
-      // Clock Out
-      if (activeClockLog) {
-        const nextLogs = allSavedLogs.map(log => {
-          if (log.id === activeClockLog.id) {
-            return { ...log, checkOut: timeStr };
-          }
-          return log;
-        });
-        localStorage.setItem('hr_attendance_logs', JSON.stringify(nextLogs));
-        setClockLogs(nextLogs.filter(l => l.name === employeeName));
+        const { error } = await supabase
+          .from('hr_attendance')
+          .upsert(payload, { onConflict: 'employee_id,work_date' });
+
+        if (error) {
+          console.warn('DB upsert error, saving locally fallback:', error);
+        }
+
+        setIsClockedIn(true);
+        await fetchAttendanceLogs();
+        alert(isAr ? 'تم تسجيل حضورك اليوم بنجاح في النظام!' : 'Clocked in successfully to attendance system!');
+      } else {
+        // Clock Out
+        const payload = {
+          employee_id: empId,
+          work_date: todayStr,
+          check_out: timeStr,
+        };
+
+        const { error } = await supabase
+          .from('hr_attendance')
+          .upsert(payload, { onConflict: 'employee_id,work_date' });
+
+        if (error) {
+          console.warn('DB upsert error on clock out:', error);
+        }
+
         setIsClockedIn(false);
         setActiveClockLog(null);
-        alert(isAr ? 'تم تسجيل الانصراف بنجاح!' : 'Clocked out successfully!');
+        await fetchAttendanceLogs();
+        alert(isAr ? 'تم تسجيل انصرافك بنجاح في النظام!' : 'Clocked out successfully to attendance system!');
       }
+    } catch (err: any) {
+      console.error('Error toggling attendance:', err);
+      alert(isAr ? 'حدث خطأ أثناء تسجيل الحضور/الانصراف' : 'Error updating attendance log');
     }
+  };
+
+  // --- Actions: Date Calculations & Sync ---
+  const handleStartDateChange = (startDate: string) => {
+    setLeaveError(null);
+    setLeaveForm(prev => {
+      let days = prev.days;
+      let endDate = prev.endDate;
+      if (startDate && endDate) {
+        const s = new Date(startDate);
+        const e = new Date(endDate);
+        if (e >= s) {
+          days = Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        } else {
+          const newEnd = new Date(s.getTime() + (Math.max(1, days) - 1) * (1000 * 60 * 60 * 24));
+          endDate = newEnd.toISOString().split('T')[0];
+        }
+      } else if (startDate && !endDate) {
+        const s = new Date(startDate);
+        const newEnd = new Date(s.getTime() + (Math.max(1, days) - 1) * (1000 * 60 * 60 * 24));
+        endDate = newEnd.toISOString().split('T')[0];
+      }
+      return { ...prev, startDate, endDate, days };
+    });
+  };
+
+  const handleEndDateChange = (endDate: string) => {
+    setLeaveError(null);
+    setLeaveForm(prev => {
+      let days = prev.days;
+      if (prev.startDate && endDate) {
+        const s = new Date(prev.startDate);
+        const e = new Date(endDate);
+        if (e >= s) {
+          days = Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        } else {
+          setLeaveError(isAr ? 'تاريخ النهاية يجب أن يكون بعد تاريخ البداية.' : 'End date must be after start date.');
+        }
+      }
+      return { ...prev, endDate, days };
+    });
+  };
+
+  const handleDaysChange = (daysVal: number) => {
+    const days = Math.max(1, daysVal);
+    setLeaveError(null);
+    setLeaveForm(prev => {
+      let endDate = prev.endDate;
+      if (prev.startDate) {
+        const s = new Date(prev.startDate);
+        const newEnd = new Date(s.getTime() + (days - 1) * (1000 * 60 * 60 * 24));
+        endDate = newEnd.toISOString().split('T')[0];
+      }
+      return { ...prev, days, endDate };
+    });
   };
 
   // --- Actions: Leave Request Submission ---
   const handleLeaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leaveForm.startDate || !leaveForm.endDate) return;
+    setLeaveError(null);
+    setLeaveSuccess(null);
 
-    if (!user?.id) {
-      alert(isAr ? 'يرجى تسجيل الدخول لتقديم طلب الإجازة.' : 'Please log in to submit a leave request.');
+    if (!leaveForm.startDate || !leaveForm.endDate) {
+      setLeaveError(isAr ? 'يرجى تحديد تاريخ بداية ونهاية الإجازة.' : 'Please select both a Start Date and End Date.');
       return;
     }
 
+    const s = new Date(leaveForm.startDate);
+    const eDate = new Date(leaveForm.endDate);
+    if (eDate < s) {
+      setLeaveError(isAr ? 'تاريخ نهاية الإجازة لا يمكن أن يكون قبل تاريخ البداية.' : 'End date cannot be earlier than start date.');
+      return;
+    }
+
+    setIsSubmittingLeave(true);
+
     try {
+      const empId = await getEffectiveEmployeeId();
+      const calculatedDays = Math.max(1, Math.round((eDate.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
       const dbPayload = {
-        employee_id: user.id,
+        employee_id: empId,
         type: leaveForm.type,
         start_date: leaveForm.startDate,
         end_date: leaveForm.endDate,
-        days: Number(leaveForm.days) || 1,
+        days: calculatedDays,
         manager_approval: 'Pending',
         hr_approval: 'Pending',
         notes: leaveForm.notes?.trim() || null
@@ -268,9 +436,35 @@ export default function EmployeeHR() {
         .single();
 
       if (insertErr) {
-        console.error('Failed to submit leave to DB:', insertErr);
-        alert(isAr ? `خطأ أثناء إرسال طلب الإجازة: ${insertErr.message}` : `Database error: ${insertErr.message}`);
-        return;
+        throw new Error(insertErr.message);
+      }
+
+      // Broadcast notifications to HOD / Manager and HR in real-time
+      try {
+        await supabase.from('notifications').insert([
+          {
+            role: 'manager',
+            type: 'leave_request',
+            title: isAr ? 'طلب إجازة جديد للاعتماد' : 'New Leave Request for Authorization',
+            message: isAr
+              ? `قدّم ${employeeName} طلب إجازة (${leaveForm.type} - ${calculatedDays} أيام) من ${leaveForm.startDate} إلى ${leaveForm.endDate}.`
+              : `${employeeName} requested ${calculatedDays} days ${leaveForm.type} (${leaveForm.startDate} to ${leaveForm.endDate}). Awaiting HOD authorization.`,
+            ref_id: inserted ? inserted.id : undefined,
+            ref_table: 'hr_leave_requests'
+          },
+          {
+            role: 'hr',
+            type: 'leave_request',
+            title: isAr ? 'طلب إجازة جديد للمراجعة' : 'New Leave Request for HR Review',
+            message: isAr
+              ? `طلب إجازة جديد للموظف ${employeeName} (${calculatedDays} أيام). يرجى مراجعة الرصيد والاعتماد.`
+              : `New leave request submitted by ${employeeName} (${calculatedDays} days). Please review leave balance.`,
+            ref_id: inserted ? inserted.id : undefined,
+            ref_table: 'hr_leave_requests'
+          }
+        ]);
+      } catch (notifErr) {
+        console.warn('Notification notice:', notifErr);
       }
 
       if (inserted) {
@@ -298,10 +492,18 @@ export default function EmployeeHR() {
         days: 1,
         notes: ''
       });
-      alert(isAr ? 'تم تقديم طلب الإجازة بنجاح للإدارة التنفيذية وقسم الموارد البشرية!' : 'Leave request submitted successfully to Management & HR!');
+
+      setLeaveSuccess(
+        isAr
+          ? 'تم إرسال طلب الإجازة بنجاح لرئيس القسم (HOD) وقسم الموارد البشرية (HR)!'
+          : '🎉 Leave request submitted successfully to HOD & HR!'
+      );
+      setTimeout(() => setLeaveSuccess(null), 6000);
     } catch (err: any) {
       console.error('Failed to submit leave to DB:', err);
-      alert(err.message || 'Error submitting leave request');
+      setLeaveError(err.message || (isAr ? 'خطأ أثناء إرسال طلب الإجازة' : 'Error submitting leave request'));
+    } finally {
+      setIsSubmittingLeave(false);
     }
   };
 
@@ -488,13 +690,13 @@ export default function EmployeeHR() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Duration (Days)</label>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'المدة (بالأيام)' : 'Duration (Days)'}</label>
                   <input
                     type="number"
                     min="1"
                     required
                     value={leaveForm.days}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, days: Number(e.target.value) })}
+                    onChange={(e) => handleDaysChange(Number(e.target.value))}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   />
                 </div>
@@ -502,43 +704,81 @@ export default function EmployeeHR() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Start Date</label>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'تاريخ البداية *' : 'Start Date *'}</label>
                   <input
                     type="date"
                     required
                     value={leaveForm.startDate}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, startDate: e.target.value })}
+                    onChange={(e) => handleStartDateChange(e.target.value)}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">End Date</label>
+                  <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'تاريخ النهاية *' : 'End Date *'}</label>
                   <input
                     type="date"
                     required
                     value={leaveForm.endDate}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, endDate: e.target.value })}
+                    onChange={(e) => handleEndDateChange(e.target.value)}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Notes / Justification</label>
+                <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{isAr ? 'الملاحظات / المبررات' : 'Notes / Justification'}</label>
                 <textarea
                   value={leaveForm.notes}
                   onChange={(e) => setLeaveForm({ ...leaveForm, notes: e.target.value })}
-                  placeholder="Details regarding your request..."
+                  placeholder={isAr ? 'تفاصيل إضافية حول طلب الإجازة...' : 'Details regarding your request...'}
                   rows={2}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212] resize-none"
                 />
               </div>
 
+              {/* Approval Workflow Explanation Banner */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-start gap-2.5 text-[11px] text-slate-600">
+                <Info size={16} className="text-[#A11212] shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-slate-900 block">{isAr ? 'آلية اعتماد الإجازات:' : 'Leave Approval Workflow:'}</span>
+                  <span className="text-[10px] text-slate-500">
+                    {isAr
+                      ? '١. اعتماد رئيس القسم (HOD): مراجعة تغطية الأعمال والمهام أثناء غيابك. ٢. اعتماد الموارد البشرية (HR): مراجعة رصيد الإجازات والامتثال لسياسة العمل وقانون العمل العماني.'
+                      : '1. HOD Approval: Department head verifies work coverage. 2. HR Approval: HR verifies leave balance and Oman labor law compliance.'}
+                  </span>
+                </div>
+              </div>
+
+              {leaveError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-bold flex items-center gap-2">
+                  <AlertCircle size={15} className="shrink-0 text-red-600" />
+                  <span>{leaveError}</span>
+                </div>
+              )}
+
+              {leaveSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+                  <span>{leaveSuccess}</span>
+                </div>
+              )}
+
               <button
                 type="submit"
-                className="w-full bg-[#A11212] text-white py-3 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#800e0e] shadow-sm transition-all"
+                disabled={isSubmittingLeave}
+                className="w-full bg-[#A11212] text-white py-3.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#800e0e] shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
               >
-                Send to HOD for Authorization
+                {isSubmittingLeave ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" />
+                    <span>{isAr ? 'جاري إرسال الطلب...' : 'Submitting to HOD & HR...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={14} />
+                    <span>{isAr ? 'إرسال للاعتماد (رئيس القسم والموارد البشرية)' : 'Send to HOD & HR for Authorization'}</span>
+                  </>
+                )}
               </button>
             </form>
           </div>

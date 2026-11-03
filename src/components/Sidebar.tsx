@@ -87,6 +87,8 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
           { title: isAr ? 'نادي الأعمال' : 'Business Club', icon: Star, path: '/manager/club' },
           { title: isAr ? 'أداء الأقسام' : 'Department Performance', icon: Layers, path: '/manager/departments' },
           { title: isAr ? 'إدارة الموظفين والتعيينات' : 'Employee Placements', icon: Users, path: '/manager/hr' },
+          { title: isAr ? 'الحضور والانصراف' : 'Staff Attendance', icon: Clock, path: '/hr/attendance' },
+          { title: isAr ? 'إدارة الإجازات' : 'Leave Management', icon: Calendar, path: '/hr/leave' },
           { title: isAr ? 'التحليلات الاستراتيجية' : 'Strategic Analytics', icon: Target, path: '/manager/analytics' },
           { title: isAr ? 'الاعتمادات التنفيذية' : 'Executive Approvals', icon: ClipboardCheck, path: '/manager/approvals' },
           { title: isAr ? 'التقارير' : 'Reports', icon: FileBarChart, path: '/manager/reports' },
