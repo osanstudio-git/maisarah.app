@@ -16,7 +16,7 @@ import {
   isClientRelevantToDepartment,
   getDepartmentClientIdsFromDSR
 } from '../../utils/departmentScoping';
-import { getDSREntries, updateDSREntry, addDSREntry, type DSREntry } from '../../utils/dsrSync';
+import { getDSREntries, updateDSREntry, addDSREntry, deleteDSRsByTask, type DSREntry } from '../../utils/dsrSync';
 import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
 
@@ -171,6 +171,7 @@ const ServicesManager = () => {
   const [deletingService, setDeletingService] = useState<ServiceRecord | null>(null);
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  const [deleteTaskDsrAlso, setDeleteTaskDsrAlso] = useState(true);
 
   // Keep selectedDeptId synced with employee department
   useEffect(() => {
@@ -442,6 +443,17 @@ const ServicesManager = () => {
 
     setIsSubmitting(true);
     try {
+      // 1. Remove associated DSR from Employee & Accounts portals if user confirmed
+      if (deleteTaskDsrAlso) {
+        await deleteDSRsByTask({
+          taskId: deletingService.id,
+          serviceTitle: deletingService.title,
+          clientName: deletingService.clients?.company_name,
+          clientId: deletingService.client_id
+        });
+      }
+
+      // 2. Delete service from database
       const { error } = await supabase.from('services').delete().eq('id', deletingService.id);
       if (error) throw error;
       setServices(prev => prev.filter(s => s.id !== deletingService.id));
@@ -1129,6 +1141,28 @@ const ServicesManager = () => {
                   onChange={e => setDeleteConfirmInput(e.target.value)}
                   className="w-full p-4 border-2 border-red-100 rounded-2xl text-sm font-bold text-center outline-none focus:border-brand-dark bg-white shadow-sm transition-all"
                 />
+              </div>
+
+              {/* Optional DSR Deletion Checkbox */}
+              <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200/80 text-start">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={deleteTaskDsrAlso}
+                    onChange={e => setDeleteTaskDsrAlso(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded text-red-600 focus:ring-red-500 border-gray-300"
+                  />
+                  <div className="text-xs">
+                    <p className="font-bold text-gray-900">
+                      {isAr ? 'حذف سجل تقرير الإيراد (DSR) المرتبط بهذه المهمة أيضاً؟' : 'Also remove associated DSR record for this task?'}
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">
+                      {isAr
+                        ? 'سيتم حذف قيد الـ DSR المرتبط فوراً من بوابة الموظف وبوابة المحاسبة وقاعدة البيانات.'
+                        : 'Removes the corresponding DSR entry from both the Employee & Accounts portals.'}
+                    </p>
+                  </div>
+                </label>
               </div>
 
               <div className="flex gap-3 pt-2">

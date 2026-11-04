@@ -667,33 +667,155 @@ export async function syncDSRToCloud(entry: DSREntry, clientId?: string): Promis
 }
 
 /**
- * Delete a DSR entry locally and remove from Supabase
+ * Delete a DSR entry locally and remove from Supabase (syncing to Accounts and Employee portals)
  */
 export async function deleteDSREntry(id: string): Promise<boolean> {
   if (!id) return false;
 
-  // 1. Immediately remove from local memory & storage
   const current = getDSREntries();
+  const targetEntry = current.find(e => e.id === id);
+
+  // 1. Immediately remove from local memory & storage
   const next = current.filter(e => e.id !== id);
   saveDSREntries(next);
 
   // 2. Mark this ID as deleted so it can NEVER be resurrected by sync
   addDeletedDSRId(id);
 
-  // 3. Delete from Supabase
-  try {
-    const { error } = await supabase
-      .from('dsr_entries')
-      .delete()
-      .eq('id', id);
+  // 3. Dispatch global sync event so all open tabs, Accounts portal, and Employee portal update in 0ms
+  window.dispatchEvent(new CustomEvent('maisarah_dsr_updated', { detail: next }));
 
-    if (error) {
-      console.warn('Supabase DSR delete notice:', error.message);
-      return false;
+  // 4. Delete from Supabase
+  try {
+    let deleted = false;
+
+    // A. Direct delete by ID (for cloud UUID records)
+    if (!id.startsWith('dsr-')) {
+      const { error } = await supabase
+        .from('dsr_entries')
+        .delete()
+        .eq('id', id);
+
+      if (!error) deleted = true;
     }
+
+    // B. Also search and delete matching cloud entries if target had client_id or company_name
+    if (targetEntry) {
+      if (targetEntry.client_id) {
+        await supabase
+          .from('dsr_entries')
+          .delete()
+          .eq('client_id', targetEntry.client_id)
+          .ilike('accountant_note', `%${targetEntry.service}%`);
+      }
+      if (targetEntry.company_name && targetEntry.service) {
+        await supabase
+          .from('dsr_entries')
+          .delete()
+          .ilike('accountant_note', `%${targetEntry.company_name}%`)
+          .ilike('accountant_note', `%${targetEntry.service}%`);
+      }
+    }
+
     return true;
   } catch (e) {
-    console.warn('deleteDSREntry error:', e);
+    console.warn('deleteDSREntry cloud sync notice:', e);
     return false;
   }
+}
+
+/**
+ * Delete all DSR entries associated with a client (for when removing/archiving a client)
+ */
+export async function deleteDSRsByClientId(clientId: string, clientCompanyName?: string): Promise<number> {
+  if (!clientId && !clientCompanyName) return 0;
+
+  const current = getDSREntries();
+  const cNameLower = (clientCompanyName || '').trim().toLowerCase();
+
+  const toRemove = current.filter(e => {
+    if (clientId && e.client_id === clientId) return true;
+    if (cNameLower && e.company_name.toLowerCase() === cNameLower) return true;
+    return false;
+  });
+
+  if (toRemove.length > 0) {
+    const toRemoveIds = new Set(toRemove.map(e => e.id));
+    const next = current.filter(e => !toRemoveIds.has(e.id));
+    saveDSREntries(next);
+    toRemove.forEach(e => addDeletedDSRId(e.id));
+    window.dispatchEvent(new CustomEvent('maisarah_dsr_updated', { detail: next }));
+  }
+
+  // Delete from Supabase dsr_entries directly
+  try {
+    if (clientId) {
+      await supabase.from('dsr_entries').delete().eq('client_id', clientId);
+    }
+    if (cNameLower) {
+      await supabase.from('dsr_entries').delete().ilike('accountant_note', `%${clientCompanyName}%`);
+    }
+  } catch (err) {
+    console.warn('deleteDSRsByClientId Supabase notice:', err);
+  }
+
+  return toRemove.length;
+}
+
+/**
+ * Delete all DSR entries associated with a task/service (for when removing a task)
+ */
+export async function deleteDSRsByTask(params: {
+  taskId?: string;
+  serviceTitle?: string;
+  clientName?: string;
+  clientId?: string;
+}): Promise<number> {
+  const { serviceTitle, clientName, clientId } = params;
+  if (!serviceTitle && !clientId && !clientName) return 0;
+
+  const current = getDSREntries();
+  const sTitleLower = (serviceTitle || '').trim().toLowerCase();
+  const cNameLower = (clientName || '').trim().toLowerCase();
+
+  const toRemove = current.filter(e => {
+    const matchService = sTitleLower && (
+      e.service.toLowerCase().includes(sTitleLower) ||
+      sTitleLower.includes(e.service.toLowerCase())
+    );
+    const matchClient = (clientId && e.client_id === clientId) ||
+      (cNameLower && (e.company_name.toLowerCase().includes(cNameLower) || cNameLower.includes(e.company_name.toLowerCase())));
+
+    if (matchService && matchClient) return true;
+    if (matchService && !clientName && !clientId) return true;
+    return false;
+  });
+
+  if (toRemove.length > 0) {
+    const toRemoveIds = new Set(toRemove.map(e => e.id));
+    const next = current.filter(e => !toRemoveIds.has(e.id));
+    saveDSREntries(next);
+    toRemove.forEach(e => addDeletedDSRId(e.id));
+    window.dispatchEvent(new CustomEvent('maisarah_dsr_updated', { detail: next }));
+  }
+
+  // Delete from Supabase dsr_entries directly
+  try {
+    if (clientId && serviceTitle) {
+      await supabase
+        .from('dsr_entries')
+        .delete()
+        .eq('client_id', clientId)
+        .ilike('accountant_note', `%${serviceTitle}%`);
+    } else if (serviceTitle) {
+      await supabase
+        .from('dsr_entries')
+        .delete()
+        .ilike('accountant_note', `%${serviceTitle}%`);
+    }
+  } catch (err) {
+    console.warn('deleteDSRsByTask Supabase notice:', err);
+  }
+
+  return toRemove.length;
 }

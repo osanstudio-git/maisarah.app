@@ -126,6 +126,8 @@ export default function EmployeeDSR() {
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<DSREntry | null>(null);
+  const [deletingDsr, setDeletingDsr] = useState<DSREntry | null>(null);
+  const [isDeletingDsr, setIsDeletingDsr] = useState(false);
 
   // Official Document Viewer Modals
   const [showTaxInvoiceModal, setShowTaxInvoiceModal] = useState(false);
@@ -516,7 +518,7 @@ export default function EmployeeDSR() {
   };
 
   // Save Edit Modal
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingEntry) return;
 
@@ -530,8 +532,48 @@ export default function EmployeeDSR() {
       gov_fee: Number(editingEntry.gov_fee),
     });
 
+    if (editingEntry.id && !editingEntry.id.startsWith('dsr-')) {
+      try {
+        await supabase
+          .from('dsr_entries')
+          .update({
+            gov_fee: Number(editingEntry.gov_fee),
+            profit: Number(editingEntry.amount) - Number(editingEntry.gov_fee),
+            accountant_note: editingEntry.accountant_note,
+            payment_reference: editingEntry.payment_reference
+          })
+          .eq('id', editingEntry.id);
+      } catch (err) {
+        console.warn('Cloud DSR update error:', err);
+      }
+    }
+
     setEditingEntry(null);
     loadData();
+  };
+
+  // Delete DSR Entry Handler (Instantly removes from Employee & Accounts portals)
+  const handleConfirmDeleteDSR = async () => {
+    if (!deletingDsr) return;
+    setIsDeletingDsr(true);
+    const targetId = deletingDsr.id;
+    try {
+      // 1. Instant optimistic UI removal
+      setEntries(prev => prev.filter(item => item.id !== targetId));
+
+      // 2. Perform comprehensive deletion across local storage & Supabase
+      await deleteDSREntry(targetId);
+
+      // 3. Close confirmation modal
+      setDeletingDsr(null);
+
+      // 4. Background sync
+      loadData();
+    } catch (err) {
+      console.error('Failed to delete DSR entry:', err);
+    } finally {
+      setIsDeletingDsr(false);
+    }
   };
 
   // View Tax Invoice Modal
@@ -935,10 +977,18 @@ export default function EmployeeDSR() {
                     <div className="flex items-center justify-center gap-1.5">
                       <button
                         onClick={() => setEditingEntry({ ...e })}
-                        className="p-1.5 text-gray-500 hover:text-red-800 hover:bg-red-50 rounded-lg transition"
+                        className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
                         title={isAr ? 'تعديل وتخصيص البيانات' : 'Edit DSR Details'}
                       >
                         <Edit2 size={13} />
+                      </button>
+
+                      <button
+                        onClick={() => setDeletingDsr(e)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                        title={isAr ? 'حذف هذا السجل نهائياً من سجلات DSR وبوابة المحاسبة' : 'Delete DSR Record (Sync with Accounts)'}
+                      >
+                        <Trash2 size={13} />
                       </button>
 
                       {!e.invoice_issued ? (
@@ -1522,6 +1572,71 @@ export default function EmployeeDSR() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: CONFIRM DELETE DSR RECORD ───────────────────────────── */}
+      {deletingDsr && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-red-100 text-center space-y-5 animate-in fade-in duration-200" dir={isAr ? 'rtl' : 'ltr'}>
+            <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center mx-auto border border-red-100">
+              <Trash2 size={32} />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-lg font-black text-gray-900">
+                {isAr ? 'تأكيد حذف سجل DSR' : 'Delete DSR Record'}
+              </h3>
+              <p className="text-xs text-gray-500 font-medium">
+                {isAr
+                  ? 'سيتم حذف هذا السجل نهائياً ومزامنته فوراً للإزالة من بوابة الموظف وبوابة المحاسب.'
+                  : 'This record will be permanently deleted and immediately removed from both the Employee & Accounts portals.'}
+              </p>
+            </div>
+
+            <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-150 text-xs text-start space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-gray-400 font-medium">{isAr ? 'الخدمة:' : 'Service:'}</span>
+                <span className="font-bold text-gray-800">{deletingDsr.service}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 font-medium">{isAr ? 'الشركة / العميل:' : 'Company:'}</span>
+                <span className="font-bold text-gray-800">{deletingDsr.company_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 font-medium">{isAr ? 'المبلغ:' : 'Amount:'}</span>
+                <span className="font-bold text-[#A11212]">OMR {deletingDsr.amount}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingDsr(null)}
+                className="flex-1 py-3 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteDSR}
+                disabled={isDeletingDsr}
+                className="flex-1 py-3 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md transition flex items-center justify-center gap-1.5"
+              >
+                {isDeletingDsr ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <span>{isAr ? 'جاري الحذف...' : 'Deleting...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    <span>{isAr ? 'تأكيد الحذف' : 'Confirm Delete'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

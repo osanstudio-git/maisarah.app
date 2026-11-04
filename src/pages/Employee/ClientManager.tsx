@@ -40,7 +40,7 @@ import {
   isServiceMatchingDepartment
 } from '../../utils/departmentScoping';
 import { DEPARTMENT_CONFIGS } from '../../config/departments';
-import { autoCreateDSREntryFromTask } from '../../utils/dsrSync';
+import { autoCreateDSREntryFromTask, deleteDSRsByClientId } from '../../utils/dsrSync';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 import ClientDepartmentChecklist from '../../components/employee/ClientDepartmentChecklist';
 
@@ -414,6 +414,7 @@ const ClientManager = () => {
   const [createPortalAccount, setCreatePortalAccount] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [deleteClientDSRAlso, setDeleteClientDSRAlso] = useState(true);
   const [formMsg, setFormMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   // Success Ticket State
@@ -796,7 +797,12 @@ const ClientManager = () => {
     if (!clientToDelete) return;
     setIsSubmitting(true);
     try {
-      // Use update instead of delete for Archiving logic
+      // 1. If confirmed by user, remove all associated DSR entries from local storage, memory, and database
+      if (deleteClientDSRAlso) {
+        await deleteDSRsByClientId(clientToDelete.id, clientToDelete.company_name);
+      }
+
+      // 2. Archive client in database
       const { error } = await supabase
         .from('clients')
         .update({ is_archived: true })
@@ -1465,6 +1471,77 @@ const ClientManager = () => {
                 className="w-full py-2 text-gray-400 font-bold uppercase tracking-widest hover:text-gray-600 transition-all text-[10px]"
               >
                 {isAr ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Client Deletion & Cascading DSR Confirmation Modal ── */}
+      {clientToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-red-100 space-y-5 animate-in fade-in duration-200" dir={isAr ? 'rtl' : 'ltr'}>
+            <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center mx-auto border border-red-100">
+              <Trash2 size={32} />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-xl font-black text-gray-900">
+                {isAr ? 'تأكيد إزالة العميل' : 'Delete Client'}
+              </h3>
+              <p className="text-xs text-gray-500 font-medium">
+                {isAr ? 'هل أنت متأكد من حذف العميل' : 'Are you sure you want to delete'}{' '}
+                <span className="font-bold text-gray-900">{clientToDelete.company_name}</span>?
+              </p>
+            </div>
+
+            {/* DSR Cascading Option Checkbox */}
+            <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200/80 space-y-2">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteClientDSRAlso}
+                  onChange={e => setDeleteClientDSRAlso(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded text-red-600 focus:ring-red-500 border-gray-300"
+                />
+                <div className="text-xs">
+                  <p className="font-bold text-gray-900">
+                    {isAr ? 'حذف كافة سجلات (DSR) والعمليات المالية المرتبطة بهذا العميل أيضاً؟' : 'Also remove all associated DSR entries for this client?'}
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">
+                    {isAr
+                      ? 'عند التفعيل، سيتم إزالة كافة قيود تقرير الإيراد اليومي (DSR) التابعة للعميل فوراً من بوابة الموظف وبوابة المحاسبة وقاعدة البيانات.'
+                      : 'If enabled, all daily sales reports (DSR) and linked records for this client will be immediately removed from both the Employee and Accounts portals.'}
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setClientToDelete(null)}
+                className="flex-1 py-3 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isSubmitting}
+                className="flex-1 py-3 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md transition flex items-center justify-center gap-1.5"
+              >
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <span>{isAr ? 'جاري الحذف...' : 'Deleting...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    <span>{isAr ? 'تأكيد الحذف' : 'Confirm Delete'}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
