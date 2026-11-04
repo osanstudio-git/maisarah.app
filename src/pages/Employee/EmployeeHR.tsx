@@ -225,33 +225,46 @@ export default function EmployeeHR() {
         .or(`id.eq.${empId},email.ilike.${user?.email || 'marketing@maisarah.net'}`)
         .maybeSingle();
 
+      const resolvedEmpId = empData?.id || empId;
+
       if (empData) {
         activeName = empData.name || empData.full_name || activeName;
         activeRole = empData.role || empData.designation || empData.department || activeRole;
-        if (empData.salary || empData.basic_salary) {
-          const s = Number(empData.salary || empData.basic_salary);
-          if (s > 0) {
-            basic = Math.round(s * 0.7);
-            housing = Math.round(s * 0.18);
-            transport = Math.round(s * 0.08);
-            other = Math.max(0, s - basic - housing - transport);
-          }
+
+        // Exact live salary package from hr_employees
+        if (empData.basic_salary !== undefined && empData.basic_salary !== null && Number(empData.basic_salary) > 0) {
+          basic = Number(empData.basic_salary);
+        } else if (empData.salary && Number(empData.salary) > 0) {
+          const s = Number(empData.salary);
+          basic = Math.round(s * 0.7);
+          housing = Math.round(s * 0.18);
+          transport = Math.round(s * 0.08);
+          other = Math.max(0, s - basic - housing - transport);
         }
+
+        // Live allowances from hr_employees
+        if (empData.allowances && typeof empData.allowances === 'object') {
+          if (empData.allowances.housing !== undefined) housing = Number(empData.allowances.housing) || 0;
+          if (empData.allowances.transport !== undefined) transport = Number(empData.allowances.transport) || 0;
+          if (empData.allowances.other !== undefined) other = Number(empData.allowances.other) || 0;
+        }
+
         setEmployeeProfile({
-          id: empData.id || empId,
+          id: resolvedEmpId,
           name: activeName,
           role: activeRole,
-          dept: empData.department || 'Client Success & Coordination',
+          dept: empData.dept || empData.department || 'Client Success & Coordination',
           email: empData.email || user?.email || 'marketing@maisarah.net',
           basicSalary: basic,
           allowances: { housing, transport, other }
         });
       }
 
-      // Check if hr_payroll_runs has records
+      // Check if hr_payroll_runs has records for this specific employee
       const { data: dbPayroll } = await supabase
         .from('hr_payroll_runs')
         .select('*')
+        .eq('employee_id', resolvedEmpId)
         .order('created_at', { ascending: false });
 
       const totalAllowances = housing + transport + other;
@@ -263,53 +276,60 @@ export default function EmployeeHR() {
       let generatedPayslips: Payslip[] = [];
 
       if (dbPayroll && dbPayroll.length > 0) {
-        generatedPayslips = dbPayroll.map((p, idx) => ({
-          id: p.id ? String(p.id) : `PAY-2026-${String(idx + 1).padStart(2, '0')}`,
-          month: p.month || p.period || 'Current',
-          basicSalary: Number(p.basic_salary) || basic,
-          housingAllowance: housing,
-          transportAllowance: transport,
-          otherAllowance: other,
-          allowances: totalAllowances,
-          deductions: Number(p.deductions) || pasiDeduction,
-          netSalary: Number(p.net_salary) || net,
-          status: 'Disbursed',
-          disbursedDate: p.created_at ? new Date(p.created_at).toLocaleDateString() : '2026-10-27',
-          paymentRef: `WPS-OM-${p.id || idx + 1000}`
-        }));
+        generatedPayslips = dbPayroll.map((p, idx) => {
+          const pBasic = Number(p.basic_salary) || basic;
+          const pHousing = p.housing_allowance !== undefined && p.housing_allowance !== null ? Number(p.housing_allowance) : housing;
+          const pTransport = p.transport_allowance !== undefined && p.transport_allowance !== null ? Number(p.transport_allowance) : transport;
+          const pOther = p.other_allowance !== undefined && p.other_allowance !== null ? Number(p.other_allowance) : other;
+          const pAllowances = pHousing + pTransport + pOther;
+          const pDeductions = p.deductions !== undefined && p.deductions !== null ? Number(p.deductions) : Math.round((pBasic + pHousing) * 0.07);
+          const pOvertime = Number(p.overtime || 0);
+          const pIncentives = Number(p.incentives || 0);
+          const pBonuses = Number(p.bonuses || 0);
+          const pNet = p.net_salary !== undefined && p.net_salary !== null
+            ? Number(p.net_salary)
+            : (pBasic + pAllowances + pOvertime + pIncentives + pBonuses - pDeductions);
+
+          const dateStr = p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+
+          return {
+            id: p.id ? String(p.id) : `PAY-${(p.month || 'RUN').replace(/\s+/g, '-').toUpperCase()}-${idx + 1}`,
+            month: p.month || p.period || 'Current',
+            basicSalary: pBasic,
+            housingAllowance: pHousing,
+            transportAllowance: pTransport,
+            otherAllowance: pOther,
+            allowances: pAllowances,
+            deductions: pDeductions,
+            netSalary: pNet,
+            status: p.status === 'Paid' ? 'Disbursed' : (p.status || 'Disbursed'),
+            disbursedDate: dateStr,
+            paymentRef: `WPS-BMAIS-${p.id ? p.id.replace(/[^0-9]/g, '').slice(0, 6) : String(idx + 1000)}`
+          };
+        });
       }
 
-      // If no DB payroll records yet, generate authoritative dynamic statements for recent months of 2026
+      // If no DB payroll records yet, generate authoritative live statement from employee database salary
       if (generatedPayslips.length === 0) {
-        const monthsData = [
-          { month: 'October 2026', id: 'PAY-2026-10-AJAN', date: '2026-10-27', netOffset: 0 },
-          { month: 'September 2026', id: 'PAY-2026-09-AJAN', date: '2026-09-27', netOffset: 0 },
-          { month: 'August 2026', id: 'PAY-2026-08-AJAN', date: '2026-08-27', netOffset: 0 },
-          { month: 'July 2026', id: 'PAY-2026-07-AJAN', date: '2026-07-27', netOffset: -50 },
-          { month: 'June 2026', id: 'PAY-2026-06-AJAN', date: '2026-06-27', netOffset: 0 },
-          { month: 'May 2026', id: 'PAY-2026-05-AJAN', date: '2026-05-27', netOffset: 0 },
-        ];
+        const currentMonthName = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+        const currentRefDate = new Date().toISOString().split('T')[0];
 
-        generatedPayslips = monthsData.map(m => {
-          const currentBasic = basic + (m.netOffset !== 0 ? m.netOffset : 0);
-          const currentGross = currentBasic + totalAllowances;
-          const currentDeductions = pasiDeduction;
-          const currentNet = currentGross - currentDeductions;
-          return {
-            id: m.id,
-            month: m.month,
-            basicSalary: currentBasic,
+        generatedPayslips = [
+          {
+            id: `PAY-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${resolvedEmpId.slice(0, 4).toUpperCase()}`,
+            month: currentMonthName,
+            basicSalary: basic,
             housingAllowance: housing,
             transportAllowance: transport,
             otherAllowance: other,
             allowances: totalAllowances,
-            deductions: currentDeductions,
-            netSalary: currentNet,
+            deductions: pasiDeduction,
+            netSalary: net,
             status: 'Disbursed',
-            disbursedDate: m.date,
-            paymentRef: `WPS-BMAIS-${m.id.replace(/[^0-9]/g, '')}`
-          };
-        });
+            disbursedDate: currentRefDate,
+            paymentRef: `WPS-BMAIS-${resolvedEmpId.replace(/[^0-9]/g, '').slice(0, 6) || '202611'}`
+          }
+        ];
       }
 
       setPayslips(generatedPayslips);
@@ -428,6 +448,13 @@ export default function EmployeeHR() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'hr_payroll_runs' },
+        () => {
+          loadEmployeeProfileAndPayslips();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hr_employees' },
         () => {
           loadEmployeeProfileAndPayslips();
         }

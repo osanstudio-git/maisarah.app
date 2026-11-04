@@ -165,22 +165,38 @@ export default function HRPayroll() {
     localStorage.setItem('accountant_paid_payroll_ids', JSON.stringify(paidList));
 
     try {
-      await supabase
+      const { data: existingRun } = await supabase
         .from('hr_payroll_runs')
-        .upsert({
-          employee_id: rec.employeeId,
-          month: rec.month,
-          basic_salary: rec.basicSalary,
-          transport_allowance: rec.allowances.transport,
-          housing_allowance: rec.allowances.housing,
-          other_allowance: rec.allowances.other,
-          deductions: rec.deductions,
-          overtime: rec.overtime,
-          incentives: rec.incentives,
-          bonuses: rec.bonuses,
-          net_salary: calculateNetSalary(rec),
-          status: nextStatus
-        }, { onConflict: 'employee_id,month' });
+        .select('id')
+        .eq('employee_id', rec.employeeId)
+        .eq('month', rec.month)
+        .maybeSingle();
+
+      const payload = {
+        employee_id: rec.employeeId,
+        month: rec.month,
+        basic_salary: rec.basicSalary,
+        transport_allowance: rec.allowances.transport,
+        housing_allowance: rec.allowances.housing,
+        other_allowance: rec.allowances.other,
+        deductions: rec.deductions,
+        overtime: rec.overtime,
+        incentives: rec.incentives,
+        bonuses: rec.bonuses,
+        net_salary: calculateNetSalary(rec),
+        status: nextStatus
+      };
+
+      if (existingRun?.id) {
+        await supabase
+          .from('hr_payroll_runs')
+          .update(payload)
+          .eq('id', existingRun.id);
+      } else {
+        await supabase
+          .from('hr_payroll_runs')
+          .insert([payload]);
+      }
     } catch (err) {
       console.warn('DB upsert notice for hr_payroll_runs:', err);
     } finally {
