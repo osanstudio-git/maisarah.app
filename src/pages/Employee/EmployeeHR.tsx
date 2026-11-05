@@ -351,7 +351,8 @@ export default function EmployeeHR() {
   const fetchAttendanceLogs = useCallback(async () => {
     try {
       const empId = await getEffectiveEmployeeId();
-      const todayStr = new Date().toLocaleDateString('en-CA');
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
       const { data: dbLogs, error } = await supabase
         .from('hr_attendance')
@@ -514,7 +515,7 @@ export default function EmployeeHR() {
     setIsTogglingClock(true);
 
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-CA');
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
     const shortTime = timeStr.slice(0, 5);
     const empId = await getEffectiveEmployeeId();

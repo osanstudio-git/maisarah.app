@@ -131,8 +131,9 @@ export default function EmployeeTimesheet({
     setLoading(true);
 
     try {
+      const daysInThisMonth = new Date(year, month + 1, 0).getDate();
       const startDate = `${monthKey}-01`;
-      const endDate = `${monthKey}-31`;
+      const endDate = `${monthKey}-${String(daysInThisMonth).padStart(2, '0')}`;
 
       const { data: records, error } = await supabase
         .from('hr_attendance')
@@ -146,7 +147,12 @@ export default function EmployeeTimesheet({
         console.warn('Error fetching hr_attendance:', error);
       }
 
-      const todayStr = new Date().toLocaleDateString('en-CA');
+      const now = new Date();
+      const todayYear = now.getFullYear();
+      const todayMonth = String(now.getMonth() + 1).padStart(2, '0');
+      const todayDay = String(now.getDate()).padStart(2, '0');
+      const todayStr = `${todayYear}-${todayMonth}-${todayDay}`;
+
       const recordsByDate = new Map<string, any>();
       (records || []).forEach(r => {
         recordsByDate.set(r.work_date, r);
@@ -155,7 +161,7 @@ export default function EmployeeTimesheet({
       // Scheduled work shift start: 08:30 (510 minutes from midnight)
       const SCHEDULED_START_MINS = 8 * 60 + 30; // 08:30 AM
 
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const daysInMonth = daysInThisMonth;
       const generatedLogs: AttendanceLogItem[] = [];
 
       for (let day = 1; day <= daysInMonth; day++) {
@@ -198,8 +204,14 @@ export default function EmployeeTimesheet({
               durationFormatted = `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m`;
             } else if (isToday) {
               isActiveShift = true;
-              status = 'active';
-              durationFormatted = isAr ? 'قيد العمل' : 'In Progress';
+              const curMins = now.getHours() * 60 + now.getMinutes();
+              durationMinutes = Math.max(0, curMins - inMins - breakMins);
+              const elapsedH = Math.floor(durationMinutes / 60);
+              const elapsedM = durationMinutes % 60;
+              durationFormatted = `${elapsedH}h ${elapsedM}m (${isAr ? 'قيد العمل' : 'In Progress'})`;
+              if (lateMinutes === 0) {
+                status = 'active';
+              }
             } else {
               durationFormatted = isAr ? 'غير مكتمل' : 'Incomplete';
             }
@@ -237,19 +249,8 @@ export default function EmployeeTimesheet({
               isActiveShift: false
             });
           } else if (isPast) {
-            // Past workday without log: Absent
-            generatedLogs.push({
-              id: `absent_${dateStr}`,
-              date: dateStr,
-              checkIn: null,
-              checkOut: null,
-              status: 'absent',
-              lateMinutes: 0,
-              durationMinutes: 0,
-              durationFormatted: '0m',
-              isToday: false,
-              isActiveShift: false
-            });
+            // Past days without DB records: do not create false absence records
+            continue;
           } else if (isToday) {
             // Today but not clocked in yet
             generatedLogs.push({
@@ -686,11 +687,12 @@ export default function EmployeeTimesheet({
                     </tr>
                   ) : (
                     displayedFeed.map(item => {
-                      const itemDate = new Date(item.date);
+                      const [iYear, iMonth, iDay] = item.date.split('-').map(Number);
+                      const itemDate = new Date(iYear, iMonth - 1, iDay);
                       const dayName = itemDate.toLocaleDateString('en-US', { weekday: 'short' });
-                      const dayNumFormatted = String(itemDate.getDate()).padStart(2, '0');
+                      const dayNumFormatted = String(iDay).padStart(2, '0');
                       const monthAbbrFormatted = itemDate.toLocaleDateString('en-US', { month: 'short' });
-                      const dateTitle = `${dayNumFormatted} ${monthAbbrFormatted} ${year}`;
+                      const dateTitle = `${dayNumFormatted} ${monthAbbrFormatted} ${iYear}`;
 
                       return (
                         <tr
