@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Briefcase,
   Layers,
+  Calendar,
 } from 'lucide-react';
 import DepartmentAdaptiveWorkspace from '../../components/employee/DepartmentAdaptiveWorkspace';
 import {
@@ -497,11 +498,12 @@ const EmployeeDashboard = () => {
       </div>
 
       {/* ── Quick Action Bar ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-4">
         {[
           { label: isAr ? 'فاتورة جديدة' : 'New Invoice',    icon: <FileText size={20} />,  path: '/employee/invoices', color: 'bg-brand-dark text-white hover:bg-red-800' },
           { label: isAr ? 'إدارة العملاء' : 'Clients',       icon: <Users size={20} />,     path: '/employee/clients',  color: 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200' },
           { label: isAr ? 'المهام' : 'My Tasks',              icon: <Briefcase size={20} />, path: '/employee/tasks',    color: 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200' },
+          { label: isAr ? 'سجل الدوام والتايم شيت' : 'My Timesheet', icon: <Calendar size={20} />, path: '/employee/hr?tab=timesheet', color: 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200' },
           { label: isAr ? 'الخدمة الذاتية (ESS)' : 'HR Self-Service', icon: <Clock size={20} />, path: '/employee/hr', color: 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200' },
           { label: isAr ? 'المستندات' : 'Documents',          icon: <FileText size={20} />,  path: '/employee/documents', color: 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200' },
         ].map((action, i) => (

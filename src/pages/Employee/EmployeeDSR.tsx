@@ -152,6 +152,7 @@ export default function EmployeeDSR() {
     installment_number: '',
     payment_date: new Date().toISOString().split('T')[0],
     payment_method: 'Mobile Payment' as DSREntry['payment_method'],
+    payment_reference: '',
     accountant_note: '',
   });
 
@@ -410,8 +411,9 @@ export default function EmployeeDSR() {
       paid_amount: paidNow,
       remaining_balance: remaining,
       installment_number: newForm.installment_number,
-      payment_date: newForm.status === 'Paid' || newForm.status === 'Partial' ? newForm.payment_date : '',
+      payment_date: newForm.status === 'Paid' || newForm.status === 'Partial' ? (newForm.payment_date || newForm.date) : '',
       payment_method: newForm.status === 'Paid' || newForm.status === 'Partial' ? newForm.payment_method : '',
+      payment_reference: newForm.payment_reference,
       accountant_note: newForm.accountant_note,
       invoice_issued: false,
     });
@@ -454,6 +456,7 @@ export default function EmployeeDSR() {
       installment_number: '',
       payment_date: new Date().toISOString().split('T')[0],
       payment_method: 'Mobile Payment',
+      payment_reference: '',
       accountant_note: '',
     });
     loadData();
@@ -540,7 +543,10 @@ export default function EmployeeDSR() {
             gov_fee: Number(editingEntry.gov_fee),
             profit: Number(editingEntry.amount) - Number(editingEntry.gov_fee),
             accountant_note: editingEntry.accountant_note,
-            payment_reference: editingEntry.payment_reference
+            payment_reference: editingEntry.payment_reference,
+            status: editingEntry.status,
+            payment_method: editingEntry.payment_method,
+            payment_date: editingEntry.payment_date,
           })
           .eq('id', editingEntry.id);
       } catch (err) {
@@ -1335,6 +1341,33 @@ export default function EmployeeDSR() {
                   </select>
                 </div>
 
+                {/* Payment Date */}
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'تاريخ السداد / التحويل' : 'Payment Date'}
+                  </label>
+                  <input
+                    type="date"
+                    value={newForm.payment_date}
+                    onChange={e => setNewForm({ ...newForm, payment_date: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
+                  />
+                </div>
+
+                {/* Payment Reference */}
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'مرجع التحويل / الإيصال' : 'Payment Reference / Ref'}
+                  </label>
+                  <input
+                    type="text"
+                    value={newForm.payment_reference || ''}
+                    onChange={e => setNewForm({ ...newForm, payment_reference: e.target.value })}
+                    placeholder={isAr ? 'رقم الإيصال أو مرجع التحويل...' : 'Receipt # or TXN ref...'}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-mono text-xs"
+                  />
+                </div>
+
                 {/* Note */}
                 <div className="col-span-2">
                   <label className="font-semibold text-gray-700 block mb-1">
@@ -1543,6 +1576,33 @@ export default function EmployeeDSR() {
                     <option value="Bank transfer">{isAr ? 'تحويل بنكي' : 'Bank transfer'}</option>
                     <option value="Cash">{isAr ? 'نقداً' : 'Cash'}</option>
                   </select>
+                </div>
+
+                {/* Payment Date */}
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'تاريخ السداد / التحويل' : 'Payment Date'}
+                  </label>
+                  <input
+                    type="date"
+                    value={editingEntry.payment_date || ''}
+                    onChange={e => setEditingEntry({ ...editingEntry, payment_date: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
+                  />
+                </div>
+
+                {/* Payment Reference */}
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'مرجع التحويل / الإيصال' : 'Payment Reference / Ref'}
+                  </label>
+                  <input
+                    type="text"
+                    value={editingEntry.payment_reference || ''}
+                    onChange={e => setEditingEntry({ ...editingEntry, payment_reference: e.target.value })}
+                    placeholder={isAr ? 'رقم الإيصال أو مرجع التحويل...' : 'Receipt # or TXN ref...'}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-mono text-xs"
+                  />
                 </div>
 
                 <div className="col-span-2">

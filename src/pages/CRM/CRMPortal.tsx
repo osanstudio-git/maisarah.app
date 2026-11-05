@@ -679,7 +679,6 @@ export default function CRMPortal() {
   ]);
 
   const [quoteShowQty, setQuoteShowQty] = useState(true);
-  const [quoteKycPhotoProof, setQuoteKycPhotoProof] = useState(false);
   const [quotePresentationMode, setQuotePresentationMode] = useState<'detailed' | 'simple'>('detailed');
   const [quotationSearchQuery, setQuotationSearchQuery] = useState('');
   const [quotationStatusFilter, setQuotationStatusFilter] = useState<'all' | 'pending' | 'approved' | 'invoiced'>('all');
@@ -911,10 +910,16 @@ export default function CRMPortal() {
       const serviceNamesList = quoteLineItems.map(i => i.description);
       const serviceDetailsStr = serviceNamesList.join(', ');
 
+      const finalClientName = quoteForm.companyName
+        ? (quoteForm.clientName && quoteForm.clientName !== quoteForm.companyName
+            ? `${quoteForm.companyName} (${quoteForm.clientName})`
+            : quoteForm.companyName)
+        : (quoteForm.clientName || 'Valued Client');
+
       if (editingQuoteId) {
         const { error } = await supabase.from('quotations').update({
-          client_name: quoteForm.clientName || 'Valued Client',
-          title: quoteForm.clientName || 'Proposal',
+          client_name: finalClientName,
+          notes: quoteForm.companyName || quoteForm.clientName ? `Proposal for ${quoteForm.companyName || quoteForm.clientName}` : 'Proposal',
           client_type: quoteForm.clientType,
           services: serviceNamesList.length > 0 ? serviceNamesList : quoteForm.services,
           service_details: serviceDetailsStr,
@@ -931,10 +936,9 @@ export default function CRMPortal() {
 
         const { error } = await supabase.from('quotations').insert([{
           quote_number: quoteNum,
-          quotation_number: quoteNum,
           lead_id: quoteForm.leadId || null,
-          client_name: quoteForm.clientName || 'Valued Client',
-          title: quoteForm.clientName ? `Proposal for ${quoteForm.clientName}` : 'Service Proposal',
+          client_name: finalClientName,
+          notes: quoteForm.companyName || quoteForm.clientName ? `Proposal for ${quoteForm.companyName || quoteForm.clientName}` : 'Service Proposal',
           client_type: quoteForm.clientType,
           services: serviceNamesList.length > 0 ? serviceNamesList : quoteForm.services,
           service_details: serviceDetailsStr,
@@ -1190,6 +1194,18 @@ export default function CRMPortal() {
     setIsSubmittingOnboard(true);
     setOnboardFormMsg(null);
 
+    // Timeout helper to prevent UI freezing on stalled network requests
+    const runWithTimeout = <T,>(promise: Promise<T>, ms = 6000): Promise<T> => {
+      let timer: any;
+      const timeoutPromise = new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Network request timed out')), ms);
+      });
+      return Promise.race([
+        promise.then(res => { clearTimeout(timer); return res; }),
+        timeoutPromise
+      ]);
+    };
+
     try {
       const clientName = (clientType === 'B2B' ? (onboardForm.companyName || onboardForm.name) : onboardForm.name).trim();
       if (!clientName) {
@@ -1239,8 +1255,16 @@ export default function CRMPortal() {
         estimated_opportunity_value: onboardForm.estimatedOpportunityValue || calculatedBilling,
       };
 
-      // 1. Insert into clients table
-      const { error: insertErr } = await supabase.from('clients').insert([clientPayload]);
+      // 1. Insert into clients table with timeout protection
+      let insertErr: any = null;
+      try {
+        const res = await runWithTimeout(supabase.from('clients').insert([clientPayload]));
+        insertErr = res.error;
+      } catch (timeoutErr) {
+        console.warn('Clients extended insert timed out or failed, falling back:', timeoutErr);
+        insertErr = { message: 'Timed out' };
+      }
+
       if (insertErr) {
         console.warn('Extended client insert notice, falling back to core schema:', insertErr.message);
         const corePayload = {
@@ -1255,16 +1279,50 @@ export default function CRMPortal() {
           source: clientPayload.source,
           compliance_status: 'Active',
         };
-        const retry = await supabase.from('clients').insert([corePayload]);
-        if (retry.error) {
-          throw new Error(retry.error.message || 'Failed to insert client into database');
+        try {
+          const retry = await runWithTimeout(supabase.from('clients').insert([corePayload]));
+          if (retry.error) {
+            console.warn('Core client insert warning:', retry.error.message);
+          }
+        } catch (retryErr) {
+          console.warn('Core client retry error:', retryErr);
         }
       }
 
-      // 2. Parallel secondary records creation (Quotations, Jobs, Deliverable Services, Notifications)
+      // 2. Optimistic State Update for instantaneous UI responsiveness
+      const newClientObj: Client = {
+        id: finalClientId,
+        name: onboardForm.name || clientName,
+        companyName: clientType === 'B2B' ? clientName : undefined,
+        registrationNumber: onboardForm.registrationNumber || undefined,
+        email: onboardForm.email,
+        phone: onboardForm.phone,
+        companyPhone: onboardForm.companyPhone || undefined,
+        type: clientType,
+        servicesPackage: onboardForm.servicePackage,
+        overallManager: onboardForm.overallManager,
+        delegatedServices: {},
+        monthlyBilling: calculatedBilling,
+        yearlyBilling: calculatedBilling * 12,
+        created_at: new Date().toISOString().slice(0, 10),
+        contractExpiryDate: expiryDate,
+        isClubMember: !!onboardForm.isClubMember,
+        activityHistory: onboardForm.initialActivity ? [`${new Date().toISOString().slice(0, 10)} - ${onboardForm.initialActivity}`] : []
+      };
+
+      setClients(prev => [newClientObj, ...prev.filter(c => c.id !== finalClientId)]);
+
+      setOnboardFormMsg({
+        type: 'ok',
+        text: isAr
+          ? `🎉 تم تسجيل وإدخال العميل "${clientName}" بنجاح!`
+          : `🎉 Client "${clientName}" registered & onboarded successfully!`
+      });
+
+      // 3. Dispatch secondary tasks (Quotations, Jobs, Deliverable Services, Notifications) asynchronously in background
       const secondaryTasks: Promise<any>[] = [];
 
-      // A. Auto-create quotation in Studio
+      // A. Auto-create quotation in Studio (strictly matching Supabase schema)
       if (onboardForm.autoQuotation && onboardForm.servicePackage.length > 0) {
         const quoteRows = onboardForm.servicePackage.map(pkg => {
           let budget = SERVICE_RATES[pkg] || 0;
@@ -1276,11 +1334,9 @@ export default function CRMPortal() {
           return {
             client_id: finalClientId,
             quote_number: quoteNum,
-            quotation_number: quoteNum,
             client_name: clientName,
             client_type: clientType,
             services: [pkg],
-            service_type: pkg,
             subtotal: budget,
             vat_amount: vatAmt,
             total_amount: +(budget + vatAmt).toFixed(3),
@@ -1339,48 +1395,18 @@ export default function CRMPortal() {
         }]))
       );
 
-      // Execute secondary tasks safely without throwing if any secondary table has a warning
-      await Promise.allSettled(secondaryTasks);
+      // Execute secondary tasks asynchronously without blocking the UI
+      Promise.allSettled(secondaryTasks)
+        .then(() => fetchAll(false))
+        .catch(syncErr => console.warn('Background onboarding sync notice:', syncErr));
 
-      // 3. Optimistic State Update for instantaneous UI responsiveness
-      const newClientObj: Client = {
-        id: finalClientId,
-        name: onboardForm.name || clientName,
-        companyName: clientType === 'B2B' ? clientName : undefined,
-        registrationNumber: onboardForm.registrationNumber || undefined,
-        email: onboardForm.email,
-        phone: onboardForm.phone,
-        companyPhone: onboardForm.companyPhone || undefined,
-        type: clientType,
-        servicesPackage: onboardForm.servicePackage,
-        overallManager: onboardForm.overallManager,
-        delegatedServices: {},
-        monthlyBilling: calculatedBilling,
-        yearlyBilling: calculatedBilling * 12,
-        created_at: new Date().toISOString().slice(0, 10),
-        contractExpiryDate: expiryDate,
-        isClubMember: !!onboardForm.isClubMember,
-        activityHistory: onboardForm.initialActivity ? [`${new Date().toISOString().slice(0, 10)} - ${onboardForm.initialActivity}`] : []
-      };
-
-      setClients(prev => [newClientObj, ...prev.filter(c => c.id !== finalClientId)]);
-
-      setOnboardFormMsg({
-        type: 'ok',
-        text: isAr
-          ? `🎉 تم تسجيل وإدخال العميل "${clientName}" بنجاح!`
-          : `🎉 Client "${clientName}" registered & onboarded successfully!`
-      });
-
-      // Close modal smoothly after brief visual confirmation
+      // Close modal smoothly after visual confirmation
       setTimeout(() => {
         setShowOnboardingModal(false);
-        setOnboardForm(getInitialOnboardForm(staffList[0]?.name || MOCK_EMPLOYEES[0].name));
+        setOnboardForm(getInitialOnboardForm(staffList[0]?.name || DEFAULT_STAFF[0]?.name || 'Ali Al-Harthy'));
         setOnboardFormMsg(null);
-      }, 700);
+      }, 600);
 
-      // Refresh in background without tearing down the UI
-      fetchAll(false);
     } catch (err: any) {
       console.error('Error during client onboarding:', err);
       setOnboardFormMsg({
@@ -3986,7 +4012,7 @@ export default function CRMPortal() {
                             setQuoteForm(p => ({
                               ...p,
                               leadId: foundLead.id,
-                              clientName: foundLead.companyName ? `${foundLead.name} (${foundLead.companyName})` : foundLead.name,
+                              clientName: foundLead.name,
                               companyName: foundLead.companyName || '',
                               email: foundLead.email,
                               phone: foundLead.phone,
@@ -3999,7 +4025,7 @@ export default function CRMPortal() {
                             setQuoteForm(p => ({
                               ...p,
                               leadId: null,
-                              clientName: foundClient.companyName || foundClient.name,
+                              clientName: foundClient.name || foundClient.companyName || '',
                               companyName: foundClient.companyName || '',
                               email: foundClient.email,
                               phone: foundClient.phone,
@@ -4017,7 +4043,7 @@ export default function CRMPortal() {
                         </optgroup>
                         <optgroup label="Onboarded Clients">
                           {clients.map(c => (
-                            <option key={c.id} value={c.id}>{c.companyName || c.name}</option>
+                            <option key={c.id} value={c.id}>{c.companyName ? `${c.companyName} (${c.name})` : c.name}</option>
                           ))}
                         </optgroup>
                       </select>
@@ -4031,6 +4057,18 @@ export default function CRMPortal() {
                         value={quoteForm.clientName}
                         onChange={e => setQuoteForm(p => ({ ...p, clientName: e.target.value }))}
                         className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
+                        placeholder="e.g. Al Farsi"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Company Name</label>
+                      <input
+                        type="text"
+                        value={quoteForm.companyName}
+                        onChange={e => setQuoteForm(p => ({ ...p, companyName: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
+                        placeholder="e.g. Al Farsi LLC / Company"
                       />
                     </div>
 
@@ -4047,33 +4085,24 @@ export default function CRMPortal() {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Email Address</label>
-                      <input
-                        type="email"
-                        value={quoteForm.email}
-                        onChange={e => setQuoteForm(p => ({ ...p, email: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-red-500"
-                      />
-                    </div>
-
-                    <div>
                       <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Phone Number</label>
                       <input
                         type="text"
                         value={quoteForm.phone}
                         onChange={e => setQuoteForm(p => ({ ...p, phone: e.target.value }))}
                         className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-red-500"
+                        placeholder="+968 9..."
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Prepared By</label>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Email Address</label>
                       <input
-                        type="text"
-                        value={quoteForm.preparedBy}
-                        onChange={e => setQuoteForm(p => ({ ...p, preparedBy: e.target.value }))}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
-                        placeholder="e.g. Maisarah Corporate Team"
+                        type="email"
+                        value={quoteForm.email}
+                        onChange={e => setQuoteForm(p => ({ ...p, email: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-red-500"
+                        placeholder="contact@company.om"
                       />
                     </div>
 
@@ -4087,6 +4116,17 @@ export default function CRMPortal() {
                         placeholder="e.g. Corporate Business Advisory"
                       />
                     </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Prepared By</label>
+                      <input
+                        type="text"
+                        value={quoteForm.preparedBy}
+                        onChange={e => setQuoteForm(p => ({ ...p, preparedBy: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500"
+                        placeholder="e.g. Maisarah Corporate Team"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -4096,8 +4136,8 @@ export default function CRMPortal() {
                     <FileCheck size={15} /> Document Settings & Toggles
                   </h4>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="flex items-center gap-2.5 bg-slate-900 border border-slate-800 p-3 rounded-xl cursor-pointer">
+                  <div>
+                    <label className="flex items-center gap-2.5 bg-slate-900 border border-slate-800 p-3 rounded-xl cursor-pointer hover:border-slate-700 transition-colors">
                       <input
                         type="checkbox"
                         checked={quoteShowQty}
@@ -4107,19 +4147,6 @@ export default function CRMPortal() {
                       <div>
                         <p className="font-bold text-slate-200">Show Quantity</p>
                         <p className="text-[10px] text-slate-400">Display Qty column on quote</p>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center gap-2.5 bg-slate-900 border border-slate-800 p-3 rounded-xl cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={quoteKycPhotoProof}
-                        onChange={e => setQuoteKycPhotoProof(e.target.checked)}
-                        className="accent-[#A11212] rounded w-4 h-4"
-                      />
-                      <div>
-                        <p className="font-bold text-slate-200">KYC Photo Proof</p>
-                        <p className="text-[10px] text-slate-400">Include selfie guide on Page 2</p>
                       </div>
                     </label>
                   </div>
@@ -4390,8 +4417,16 @@ export default function CRMPortal() {
                         <span className="font-bold text-slate-800 text-xs">{quoteForm.clientName || 'VALUED CLIENT'}</span>
                       </div>
                       <div className="p-2 border-b border-slate-200">
+                        <span className="font-black text-brand-dark uppercase block">COMPANY NAME</span>
+                        <span className="font-bold text-slate-800 text-xs">{quoteForm.companyName || (quoteForm.clientType === 'B2B' ? quoteForm.clientName : '—')}</span>
+                      </div>
+                      <div className="p-2 border-r border-b border-slate-200">
                         <span className="font-black text-brand-dark uppercase block">CONTACT</span>
                         <span className="font-bold text-slate-800 text-xs">{quoteForm.phone || '+968 9000 0000'}</span>
+                      </div>
+                      <div className="p-2 border-b border-slate-200">
+                        <span className="font-black text-brand-dark uppercase block">EMAIL</span>
+                        <span className="font-bold text-slate-800">{quoteForm.email || '—'}</span>
                       </div>
                       <div className="p-2 border-r border-slate-200">
                         <span className="font-black text-brand-dark uppercase block">PREPARED BY</span>

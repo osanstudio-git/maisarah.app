@@ -67,6 +67,7 @@ export default function DSRRegister() {
     status: 'Paid' as 'Paid' | 'Unpaid' | 'Partial',
     payment_date: new Date().toISOString().split('T')[0],
     payment_method: 'Bank transfer' as DSREntry['payment_method'],
+    payment_reference: '',
     accountant_note: '',
   });
 
@@ -479,8 +480,9 @@ export default function DSRRegister() {
       amount: Number(newForm.amount),
       gov_fee: Number(newForm.gov_fee),
       status: newForm.status,
-      payment_date: newForm.payment_date,
+      payment_date: newForm.payment_date || newForm.date,
       payment_method: newForm.payment_method,
+      payment_reference: newForm.payment_reference,
       accountant_note: newForm.accountant_note,
       invoice_issued: false,
     });
@@ -497,6 +499,7 @@ export default function DSRRegister() {
       status: 'Paid',
       payment_date: new Date().toISOString().split('T')[0],
       payment_method: 'Bank transfer',
+      payment_reference: '',
       accountant_note: '',
     });
     loadData();
@@ -1288,7 +1291,14 @@ export default function DSRRegister() {
                   <input
                     type="date"
                     value={newForm.date}
-                    onChange={e => setNewForm({ ...newForm, date: e.target.value })}
+                    onChange={e => {
+                      const d = e.target.value;
+                      setNewForm(prev => ({
+                        ...prev,
+                        date: d,
+                        payment_date: prev.payment_date === prev.date ? d : prev.payment_date
+                      }));
+                    }}
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700"
                     required
                   />
@@ -1373,7 +1383,16 @@ export default function DSRRegister() {
                   <label className="font-semibold text-gray-700 block mb-1">{isAr ? 'حالة الدفع' : 'Payment Status'}</label>
                   <select
                     value={newForm.status}
-                    onChange={e => setNewForm({ ...newForm, status: e.target.value as any })}
+                    onChange={e => {
+                      const nextStatus = e.target.value as any;
+                      setNewForm(prev => ({
+                        ...prev,
+                        status: nextStatus,
+                        payment_date: (nextStatus === 'Paid' || nextStatus === 'Partial') && !prev.payment_date
+                          ? (prev.date || new Date().toISOString().split('T')[0])
+                          : prev.payment_date
+                      }));
+                    }}
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
                   >
                     <option value="Paid">{isAr ? 'مدفوع (Paid)' : 'Paid'}</option>
@@ -1394,6 +1413,31 @@ export default function DSRRegister() {
                     <option value="Bank transfer">{isAr ? 'تحويل بنكي' : 'Bank transfer'}</option>
                     <option value="Cash">{isAr ? 'نقداً' : 'Cash'}</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'تاريخ الدفع' : 'Payment Date'}
+                  </label>
+                  <input
+                    type="date"
+                    value={newForm.payment_date}
+                    onChange={e => setNewForm({ ...newForm, payment_date: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-1">
+                    {isAr ? 'مرجع التحويل / الإيصال' : 'Payment Reference / Ref'}
+                  </label>
+                  <input
+                    type="text"
+                    value={newForm.payment_reference || ''}
+                    onChange={e => setNewForm({ ...newForm, payment_reference: e.target.value })}
+                    placeholder={isAr ? 'مثال: TXN-9841 أو رقم الإيصال' : 'e.g. TXN-9841 or Receipt #'}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-red-700 font-mono text-xs"
+                  />
                 </div>
 
                 <div className="col-span-2">

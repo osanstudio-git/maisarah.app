@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabaseClient';
@@ -7,6 +8,7 @@ import {
   Timer, TrendingUp, Check, RotateCcw, Filter, Coffee, Eye, X, CreditCard, ShieldCheck, RefreshCw
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import EmployeeTimesheet from '../../components/employee/EmployeeTimesheet';
 
 interface AttendanceLog {
   id: string;
@@ -53,6 +55,11 @@ export default function EmployeeHR() {
   const { i18n, t } = useTranslation();
   const isAr = i18n.language === 'ar';
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Active Tab: Timesheet (default) | Overview & Leave | Payslips
+  const initialTab = (searchParams.get('tab') as 'timesheet' | 'overview' | 'payslips') || 'timesheet';
+  const [activeTab, setActiveTab] = useState<'timesheet' | 'overview' | 'payslips'>(initialTab);
 
   // --- Dynamic Employee Profile ---
   const [employeeProfile, setEmployeeProfile] = useState<{
@@ -1112,11 +1119,71 @@ export default function EmployeeHR() {
         </div>
       </div>
 
-      {/* Grid section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* --- ESS Navigation Tabs --- */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-gray-200/80 pb-3">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('timesheet');
+            setSearchParams({ tab: 'timesheet' });
+          }}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            activeTab === 'timesheet'
+              ? 'bg-[#A11212] text-white shadow-md shadow-red-900/20'
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+          }`}
+        >
+          <Calendar size={15} />
+          <span>{isAr ? 'سجل الدوام والتايم شيت (My Timesheet)' : 'My Timesheet & Attendance'}</span>
+        </button>
 
-        {/* Column 1 & 2: Leave & History */}
-        <div className="lg:col-span-2 space-y-6">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('overview');
+            setSearchParams({ tab: 'overview' });
+          }}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            activeTab === 'overview'
+              ? 'bg-[#A11212] text-white shadow-md shadow-red-900/20'
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+          }`}
+        >
+          <Clock size={15} />
+          <span>{isAr ? 'تقديم الإجازات وحالة الوردية' : 'Leave Requests & Shift Overview'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('payslips');
+            setSearchParams({ tab: 'payslips' });
+          }}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            activeTab === 'payslips'
+              ? 'bg-[#A11212] text-white shadow-md shadow-red-900/20'
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+          }`}
+        >
+          <FileText size={15} />
+          <span>{isAr ? 'كشوف الرواتب' : 'My Payslip Statements'}</span>
+        </button>
+      </div>
+
+      {/* --- Tab 1: My Timesheet & Attendance (Matching User Model & Image 2) --- */}
+      {activeTab === 'timesheet' && (
+        <EmployeeTimesheet
+          currentEmployeeId={employeeProfile.id}
+          currentEmployeeName={employeeProfile.name}
+          isAr={isAr}
+        />
+      )}
+
+      {/* --- Tab 2: Overview & Leave Requests --- */}
+      {activeTab === 'overview' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Column 1 & 2: Leave & History */}
+          <div className="lg:col-span-2 space-y-6">
           {/* Submit Leave Card */}
           <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
             <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -1371,184 +1438,74 @@ export default function EmployeeHR() {
         </div>
 
       </div>
+      )}
 
-      {/* --- Full Detailed Attendance & Shift Timesheet (Day-wise & Month-wise) --- */}
-      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-6">
-        {/* Controls & Export Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-100 pb-5">
-          <div>
-            <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
-              <Timer className="text-[#A11212]" size={20} />
-              {isAr ? 'سجل الحضور والدوام المفصل (يومي وشهري)' : 'Detailed Attendance & Shift Timesheet'}
+      {/* --- Tab 3: Payslips Dedicated Tab --- */}
+      {activeTab === 'payslips' && (
+        <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+            <h3 className="text-base font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
+              <FileText className="text-[#A11212]" size={20} />
+              {isAr ? 'كشوف الرواتب والتحويلات الرسمية' : 'Verified Payslip Statements & Records'}
             </h3>
-            <p className="text-xs text-gray-500 font-medium mt-0.5">
-              {isAr
-                ? 'استعراض سجلات الحضور، الانصراف، الساعات المنجزة مع إمكانية التصدير والتحميل'
-                : 'Review check-in/out logs, total hours worked, shift status, and download statements'}
-            </p>
+            <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+              {payslips.length} {isAr ? 'كشوف صادرة' : 'Statements Issued'}
+            </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Month Filter */}
-            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl">
-              <Calendar size={14} className="text-gray-400" />
-              <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider">{isAr ? 'الشهر:' : 'Month:'}</label>
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => {
-                  setSelectedMonth(e.target.value);
-                  setSelectedDay('');
-                }}
-                className="bg-transparent text-xs font-bold text-gray-900 outline-none cursor-pointer"
-              />
+          {loadingPayslips ? (
+            <div className="py-12 text-center text-gray-400 text-xs flex items-center justify-center gap-2">
+              <RefreshCw size={16} className="animate-spin text-[#A11212]" />
+              {isAr ? 'جاري تحميل كشوف الرواتب...' : 'Loading verified payslips...'}
             </div>
-
-            {/* Day Filter */}
-            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl">
-              <Filter size={14} className="text-gray-400" />
-              <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider">{isAr ? 'اليوم:' : 'Day:'}</label>
-              <input
-                type="date"
-                value={selectedDay}
-                onChange={(e) => setSelectedDay(e.target.value)}
-                className="bg-transparent text-xs font-bold text-gray-900 outline-none cursor-pointer"
-              />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {payslips.map(payslip => (
+                <div
+                  key={payslip.id}
+                  className="p-4 bg-gray-50 hover:bg-gray-100/70 rounded-2xl border border-gray-150 flex justify-between items-center transition-all group shadow-xs"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-black text-sm text-gray-900">{payslip.month}</h4>
+                      <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        {payslip.status || 'Disbursed'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 font-bold mt-1">
+                      <span className="text-[#A11212] font-black text-sm">{payslip.netSalary.toLocaleString()} OMR</span> Net
+                      <span className="text-gray-400 font-normal ml-2">({payslip.paymentRef || 'WPS Verified'})</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelectedPayslipModal(payslip)}
+                      className="p-2.5 bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-700 border border-gray-200 rounded-xl transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold"
+                      title={isAr ? 'عرض التفاصيل' : 'View Statement Breakdown'}
+                    >
+                      <Eye size={14} />
+                      <span>{isAr ? 'عرض' : 'View'}</span>
+                    </button>
+                    <button
+                      onClick={() => handleDownloadPayslip(payslip)}
+                      className="p-2.5 bg-white hover:bg-red-50 text-gray-700 hover:text-[#A11212] border border-gray-200 rounded-xl transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold"
+                      title={isAr ? 'تحميل PDF' : 'Download PDF Statement'}
+                    >
+                      <Download size={14} />
+                      <span>PDF</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {payslips.length === 0 && (
+                <p className="col-span-2 text-xs text-gray-400 italic text-center py-8">
+                  {isAr ? 'لا توجد كشوف رواتب صادرة بعد' : 'No payslip statements issued yet.'}
+                </p>
+              )}
             </div>
-
-            {selectedDay && (
-              <button
-                onClick={() => setSelectedDay('')}
-                className="text-[10px] font-bold text-gray-500 hover:text-[#A11212] underline"
-              >
-                {isAr ? 'إلغاء فلتر اليوم' : 'Clear Day'}
-              </button>
-            )}
-
-            {/* Export CSV Button */}
-            <button
-              onClick={handleExportAttendanceCSV}
-              className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95"
-            >
-              <Download size={14} />
-              <span>{isAr ? 'تحميل التقرير (CSV)' : 'Download Report (CSV)'}</span>
-            </button>
-          </div>
+          )}
         </div>
-
-        {/* 4 Summary Metrics Cards for Period */}
-        {(() => {
-          const filtered = clockLogs.filter(log => {
-            if (!log.date) return false;
-            if (selectedDay) return log.date === selectedDay;
-            if (selectedMonth) return log.date.startsWith(selectedMonth);
-            return true;
-          });
-          const totalDays = filtered.filter(l => l.checkIn !== '--').length;
-          const totalMins = filtered.reduce((acc, curr) => acc + (curr.durationMinutes || 0), 0);
-          const totalHours = `${Math.floor(totalMins / 60)}h ${totalMins % 60}m`;
-          const avgMins = totalDays > 0 ? Math.round(totalMins / totalDays) : 0;
-          const avgHours = `${Math.floor(avgMins / 60)}h ${avgMins % 60}m`;
-          const late = filtered.filter(l => l.status === 'late').length;
-
-          return (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-gray-50 border border-gray-150 p-4 rounded-2xl">
-                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'أيام العمل المسجلة' : 'Days Worked'}</p>
-                <h4 className="text-xl font-black text-gray-900 mt-1">{totalDays} {isAr ? 'يوم' : 'Days'}</h4>
-              </div>
-              <div className="bg-gray-50 border border-gray-150 p-4 rounded-2xl">
-                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'إجمالي الساعات المنجزة' : 'Total Hours Logged'}</p>
-                <h4 className="text-xl font-black text-[#A11212] mt-1">{totalHours}</h4>
-              </div>
-              <div className="bg-gray-50 border border-gray-150 p-4 rounded-2xl">
-                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'المعدل اليومي' : 'Daily Average'}</p>
-                <h4 className="text-xl font-black text-gray-900 mt-1">{avgHours} / {isAr ? 'يوم' : 'day'}</h4>
-              </div>
-              <div className="bg-gray-50 border border-gray-150 p-4 rounded-2xl">
-                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">{isAr ? 'مرات التأخير' : 'Late Check-ins'}</p>
-                <h4 className={`text-xl font-black mt-1 ${late > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                  {late} {isAr ? 'يوم' : 'Days'}
-                </h4>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Detailed Logs Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-gray-150 text-[9px] font-black text-gray-400 uppercase tracking-widest bg-gray-50/50">
-                <th className="py-3 px-4">{isAr ? 'التاريخ' : 'Date'}</th>
-                <th className="py-3 px-4">{isAr ? 'وقت الحضور' : 'Check-In'}</th>
-                <th className="py-3 px-4">{isAr ? 'وقت الانصراف' : 'Check-Out'}</th>
-                <th className="py-3 px-4">{isAr ? 'ساعات العمل' : 'Hours Worked'}</th>
-                <th className="py-3 px-4">{isAr ? 'الاستراحة' : 'Break'}</th>
-                <th className="py-3 px-4">{isAr ? 'الحالة' : 'Status'}</th>
-                <th className="py-3 px-4">{isAr ? 'الموقع' : 'Location'}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {(() => {
-                const filtered = clockLogs.filter(log => {
-                  if (!log.date) return false;
-                  if (selectedDay) return log.date === selectedDay;
-                  if (selectedMonth) return log.date.startsWith(selectedMonth);
-                  return true;
-                });
-
-                if (filtered.length === 0) {
-                  return (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-gray-400 italic">
-                        {isAr ? 'لا توجد سجلات دوام في الفترة المحددة' : 'No attendance logs recorded for this selected period.'}
-                      </td>
-                    </tr>
-                  );
-                }
-
-                return filtered.map((log) => {
-                  const isCurrentActive = isClockedIn && log.date === new Date().toISOString().split('T')[0];
-
-                  return (
-                    <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-gray-900">{log.date}</td>
-                      <td className="py-3.5 px-4 font-semibold text-gray-700">{log.checkIn}</td>
-                      <td className="py-3.5 px-4 font-semibold text-gray-700">
-                        {isCurrentActive ? (
-                          <span className="text-emerald-600 font-bold flex items-center gap-1.5">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            {isAr ? 'مستمر الآن' : 'In Progress'}
-                          </span>
-                        ) : log.checkOut}
-                      </td>
-                      <td className="py-3.5 px-4 font-mono font-bold text-gray-900">
-                        {isCurrentActive ? (
-                          <span className="text-[#A11212]">{formatTimerDigits(elapsedSeconds)}</span>
-                        ) : (
-                          log.duration || '--'
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-500">{log.breakDuration || 0} min</td>
-                      <td className="py-3.5 px-4">
-                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
-                          log.status === 'present'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}>
-                          {log.status}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-500">{log.location}</td>
-                    </tr>
-                  );
-                });
-              })()}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
 
       {/* --- Payslip Itemized Breakdown Modal --- */}
       {selectedPayslipModal && (

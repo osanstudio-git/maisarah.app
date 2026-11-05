@@ -64,6 +64,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
           { title: t('employee.tasksView'), icon: Briefcase, path: '/employee/tasks' },
           { title: isAr ? 'إدارة الخدمات' : 'Services', icon: Receipt, path: '/employee/services' },
           { title: isAr ? 'الخدمة الذاتية (ESS)' : 'Self-Service (ESS)', icon: Clock, path: '/employee/hr' },
+          { title: isAr ? 'سجل الدوام والتايم شيت' : 'My Timesheet', icon: Calendar, path: '/employee/hr?tab=timesheet' },
           { title: t('messaging.messages'), icon: MessageCircle, path: '/employee/messages' },
           { title: t('vault.documents'), icon: Folder, path: '/employee/documents' },
         ];

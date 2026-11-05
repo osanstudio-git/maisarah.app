@@ -345,7 +345,13 @@ export default function CRMLeadManagement() {
       if (quotesRes.data) {
         const qMap: Record<string, QuotationRecord> = {};
         quotesRes.data.forEach((q: any) => {
-          if (q.lead_id) qMap[q.lead_id] = q;
+          if (q.lead_id) {
+            qMap[q.lead_id] = {
+              ...q,
+              quotation_number: q.quotation_number || q.quote_number || '',
+              title: q.title || q.notes || ''
+            };
+          }
         });
         setQuotationsMap(qMap);
       }
@@ -502,10 +508,10 @@ export default function CRMLeadManagement() {
       const { data: newQuote, error: insertErr } = await supabase
         .from('quotations')
         .insert([{
-          quotation_number: quotationNumber,
+          quote_number: quotationNumber,
           lead_id: lead.id,
           client_id: lead.converted_client_id || null,
-          title: docTitle,
+          notes: docTitle,
           service_details: spec.defaultDetails,
           department_id: lead.department_id || 'audit',
           subtotal: subtotal,
@@ -523,7 +529,11 @@ export default function CRMLeadManagement() {
 
       if (insertErr) throw insertErr;
 
-      const createdRecord = newQuote as QuotationRecord;
+      const createdRecord: QuotationRecord = {
+        ...(newQuote as any),
+        quotation_number: (newQuote as any)?.quote_number || quotationNumber,
+        title: (newQuote as any)?.notes || docTitle
+      };
       setQuotationsMap(prev => ({ ...prev, [lead.id]: createdRecord }));
       return createdRecord;
     } catch (err: any) {
@@ -986,7 +996,7 @@ export default function CRMLeadManagement() {
       const { error: quoteErr } = await supabase
         .from('quotations')
         .update({
-          title: quoteForm.title,
+          notes: quoteForm.title,
           service_details: quoteForm.service_details,
           subtotal: subtotalNum,
           vat_rate: vatRateNum,
