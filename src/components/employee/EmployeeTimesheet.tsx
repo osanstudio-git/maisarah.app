@@ -190,9 +190,12 @@ export default function EmployeeTimesheet({
             const [ih, im] = rawIn.split(':').map(Number);
             const inMins = ih * 60 + im;
 
-            if (inMins > SCHEDULED_START_MINS) {
+            // Only mark as late for morning shift (before 12:00 PM)
+            if (ih < 12 && inMins > SCHEDULED_START_MINS) {
               lateMinutes = inMins - SCHEDULED_START_MINS;
               status = 'late';
+            } else if (!rawOut && isToday) {
+              status = 'active';
             } else {
               status = 'present';
             }
@@ -204,14 +207,12 @@ export default function EmployeeTimesheet({
               durationFormatted = `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m`;
             } else if (isToday) {
               isActiveShift = true;
+              status = 'active';
               const curMins = now.getHours() * 60 + now.getMinutes();
               durationMinutes = Math.max(0, curMins - inMins - breakMins);
               const elapsedH = Math.floor(durationMinutes / 60);
               const elapsedM = durationMinutes % 60;
-              durationFormatted = `${elapsedH}h ${elapsedM}m (${isAr ? 'قيد العمل' : 'In Progress'})`;
-              if (lateMinutes === 0) {
-                status = 'active';
-              }
+              durationFormatted = `${elapsedH}h ${elapsedM}m (${isAr ? 'قيد العمل' : 'Active'})`;
             } else {
               durationFormatted = isAr ? 'غير مكتمل' : 'Incomplete';
             }
@@ -280,6 +281,11 @@ export default function EmployeeTimesheet({
   useEffect(() => {
     fetchMonthAttendance();
 
+    // Auto-update live shift duration every 30 seconds
+    const ticker = setInterval(() => {
+      fetchMonthAttendance();
+    }, 30000);
+
     // Realtime subscription on hr_attendance
     const ch = supabase
       .channel('hr_attendance_timesheet')
@@ -291,6 +297,7 @@ export default function EmployeeTimesheet({
       .subscribe();
 
     return () => {
+      clearInterval(ticker);
       supabase.removeChannel(ch);
     };
   }, [fetchMonthAttendance]);
@@ -725,7 +732,10 @@ export default function EmployeeTimesheet({
                           {/* SHIFT HOURS Column */}
                           <td className="py-3.5 px-4 font-mono font-bold text-gray-900">
                             {item.isActiveShift ? (
-                              <span className="text-emerald-700 font-bold">{isAr ? 'قيد العمل' : 'In Progress'}</span>
+                              <span className="text-emerald-700 font-bold flex items-center gap-1.5">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                {item.durationFormatted}
+                              </span>
                             ) : item.durationFormatted}
                           </td>
 

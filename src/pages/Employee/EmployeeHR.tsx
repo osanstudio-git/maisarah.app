@@ -499,10 +499,21 @@ function formatDisplayTime(rawTime?: string | null): string {
       return;
     }
 
-    const parts = activeClockLog.checkIn.split(':');
-    const startHour = parseInt(parts[0], 10) || 0;
-    const startMin = parseInt(parts[1], 10) || 0;
-    const startSec = parseInt(parts[2], 10) || 0;
+    const checkInStr = activeClockLog.checkIn;
+    const is12Hour = checkInStr.toLowerCase().includes('am') || checkInStr.toLowerCase().includes('pm');
+    const isPM = checkInStr.toLowerCase().includes('pm');
+    const isAM = checkInStr.toLowerCase().includes('am');
+
+    const clean = checkInStr.replace(/[apm\s]/gi, '');
+    const parts = clean.split(':').map(Number);
+    let startHour = parts[0] || 0;
+    const startMin = parts[1] || 0;
+    const startSec = parts[2] || 0;
+
+    if (is12Hour) {
+      if (isPM && startHour < 12) startHour += 12;
+      if (isAM && startHour === 12) startHour = 0;
+    }
 
     const startDate = new Date();
     startDate.setHours(startHour, startMin, startSec, 0);
