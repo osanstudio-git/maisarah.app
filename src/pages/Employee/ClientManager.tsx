@@ -198,8 +198,8 @@ const ClientDetail = ({
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`flex-1 min-w-[120px] py-4 text-sm font-bold transition-colors flex items-center justify-center gap-2 ${activeTab === tab
-                  ? 'text-brand-dark border-b-2 border-brand-dark bg-red-50/40'
-                  : 'text-gray-500 hover:text-gray-700'
+                ? 'text-brand-dark border-b-2 border-brand-dark bg-red-50/40'
+                : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
               {tab === 'checklist' ? <ClipboardCheck size={16} /> : tab === 'services' ? <Briefcase size={15} /> : tab === 'invoices' ? <Receipt size={15} /> : <UserCircle2 size={15} />}
