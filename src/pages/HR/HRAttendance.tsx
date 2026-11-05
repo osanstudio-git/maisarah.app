@@ -107,6 +107,22 @@ export default function HRAttendance() {
         );
       };
 
+// Helper to format 24h string to 12h AM/PM
+function formatDisplayTime(rawTime?: string | null): string {
+  if (!rawTime || rawTime === '--') return '--';
+  const clean = rawTime.trim();
+  if (clean.includes('AM') || clean.includes('PM') || clean.includes('ص') || clean.includes('م')) {
+    return clean;
+  }
+  const parts = clean.split(':');
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1] || '0', 10);
+  if (isNaN(h) || isNaN(m)) return rawTime;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+}
+
       let calculatedRecords: AttendanceRecord[] = [];
 
       if (viewMode === 'month') {
@@ -119,19 +135,21 @@ export default function HRAttendance() {
             dept: 'General'
           };
 
-          const checkIn = log.check_in ? log.check_in.slice(0, 5) : '--';
-          const checkOut = log.check_out ? log.check_out.slice(0, 5) : '--';
+          const rawIn = log.check_in ? log.check_in.slice(0, 5) : null;
+          const rawOut = log.check_out ? log.check_out.slice(0, 5) : null;
+          const checkIn = rawIn ? formatDisplayTime(rawIn) : '--';
+          const checkOut = rawOut ? formatDisplayTime(rawOut) : '--';
           const breakDuration = Number(log.break_duration || 0);
 
           let workingHours = '0h';
-          if (checkIn !== '--' && checkOut !== '--') {
-            const [ih, im] = checkIn.split(':').map(Number);
-            const [oh, om] = checkOut.split(':').map(Number);
+          if (rawIn && rawOut) {
+            const [ih, im] = rawIn.split(':').map(Number);
+            const [oh, om] = rawOut.split(':').map(Number);
             if (!isNaN(ih) && !isNaN(im) && !isNaN(oh) && !isNaN(om)) {
               const diffM = Math.max(0, (oh * 60 + om) - (ih * 60 + im) - breakDuration);
               workingHours = `${Math.floor(diffM / 60)}h ${diffM % 60}m`;
             }
-          } else if (checkIn !== '--') {
+          } else if (rawIn) {
             workingHours = isAr ? 'قيد العمل' : 'Active';
           }
 
@@ -156,9 +174,12 @@ export default function HRAttendance() {
           const log = (attLogs || []).find((a: any) => a.employee_id === emp.id);
           const onLeave = isOnLeaveOnDate(emp.id, activeDate);
 
+          const rawIn = log?.check_in ? log.check_in.slice(0, 5) : null;
+          const rawOut = log?.check_out ? log.check_out.slice(0, 5) : null;
+          const checkIn = rawIn ? formatDisplayTime(rawIn) : '--';
+          const checkOut = rawOut ? formatDisplayTime(rawOut) : '--';
+
           let status: AttendanceRecord['status'] = 'Absent';
-          let checkIn = '--';
-          let checkOut = '--';
           let breakDuration = 0;
           let location = 'Office HQ (Muscat)';
 
@@ -166,24 +187,22 @@ export default function HRAttendance() {
             status = 'On Leave';
           } else if (log) {
             status = (log.status as any) || 'Present';
-            checkIn = log.check_in ? log.check_in.slice(0, 5) : '--';
-            checkOut = log.check_out ? log.check_out.slice(0, 5) : '--';
             breakDuration = Number(log.break_duration || 0);
             location = log.location || 'Office HQ (Muscat)';
           }
 
           // Calculate hours
           let workingHours = '0h';
-          if (checkIn !== '--' && checkOut !== '--') {
-            const [ih, im] = checkIn.split(':').map(Number);
-            const [oh, om] = checkOut.split(':').map(Number);
+          if (rawIn && rawOut) {
+            const [ih, im] = rawIn.split(':').map(Number);
+            const [oh, om] = rawOut.split(':').map(Number);
             if (!isNaN(ih) && !isNaN(im) && !isNaN(oh) && !isNaN(om)) {
               const diffM = Math.max(0, (oh * 60 + om) - (ih * 60 + im) - breakDuration);
               workingHours = `${Math.floor(diffM / 60)}h ${diffM % 60}m`;
             }
-          } else if (checkIn !== '--') {
+          } else if (rawIn) {
             if (activeDate === todayStr) {
-              const [ih, im] = checkIn.split(':').map(Number);
+              const [ih, im] = rawIn.split(':').map(Number);
               if (!isNaN(ih) && !isNaN(im)) {
                 const now = new Date();
                 const elapsedM = Math.max(0, (now.getHours() * 60 + now.getMinutes()) - (ih * 60 + im));

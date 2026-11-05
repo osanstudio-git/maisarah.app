@@ -347,6 +347,22 @@ export default function EmployeeHR() {
     }
   }, [employeeProfile.name, employeeProfile.role, getEffectiveEmployeeId, user?.email]);
 
+// Helper to format 24h string to 12h AM/PM
+function formatDisplayTime(rawTime?: string | null): string {
+  if (!rawTime || rawTime === '--') return '--';
+  const clean = rawTime.trim();
+  if (clean.includes('AM') || clean.includes('PM') || clean.includes('ص') || clean.includes('م')) {
+    return clean;
+  }
+  const parts = clean.split(':');
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1] || '0', 10);
+  if (isNaN(h) || isNaN(m)) return rawTime;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+}
+
   // --- Real-time Authoritative Attendance Sync from Supabase ---
   const fetchAttendanceLogs = useCallback(async () => {
     try {
@@ -367,21 +383,21 @@ export default function EmployeeHR() {
 
       if (dbLogs) {
         const mapped: AttendanceLog[] = dbLogs.map(l => {
-          const checkIn = l.check_in ? l.check_in.slice(0, 8) : '--';
-          const checkOut = l.check_out ? l.check_out.slice(0, 8) : '--';
+          const rawIn = l.check_in ? l.check_in.slice(0, 8) : '--';
+          const rawOut = l.check_out ? l.check_out.slice(0, 8) : '--';
           const breakMins = Number(l.break_duration || 0);
 
           let duration = '--';
           let durationMinutes = 0;
 
-          if (checkIn !== '--' && checkOut !== '--') {
-            const [ih, im] = checkIn.split(':').map(Number);
-            const [oh, om] = checkOut.split(':').map(Number);
+          if (rawIn !== '--' && rawOut !== '--') {
+            const [ih, im] = rawIn.split(':').map(Number);
+            const [oh, om] = rawOut.split(':').map(Number);
             if (!isNaN(ih) && !isNaN(im) && !isNaN(oh) && !isNaN(om)) {
               durationMinutes = Math.max(0, (oh * 60 + om) - (ih * 60 + im) - breakMins);
               duration = `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m`;
             }
-          } else if (checkIn !== '--') {
+          } else if (rawIn !== '--') {
             duration = isAr ? 'قيد العمل' : 'Active';
           }
 
@@ -390,8 +406,8 @@ export default function EmployeeHR() {
             name: employeeName,
             role: employeeRole,
             date: l.work_date,
-            checkIn: checkIn !== '--' ? checkIn.slice(0, 5) : '--',
-            checkOut: checkOut !== '--' ? checkOut.slice(0, 5) : '--',
+            checkIn: rawIn !== '--' ? formatDisplayTime(rawIn.slice(0, 5)) : '--',
+            checkOut: rawOut !== '--' ? formatDisplayTime(rawOut.slice(0, 5)) : '--',
             duration,
             durationMinutes,
             breakDuration: breakMins,
@@ -517,7 +533,7 @@ export default function EmployeeHR() {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-    const shortTime = timeStr.slice(0, 5);
+    const shortTime = formatDisplayTime(timeStr.slice(0, 5));
     const empId = await getEffectiveEmployeeId();
 
     try {
