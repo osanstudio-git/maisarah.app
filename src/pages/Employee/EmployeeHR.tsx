@@ -1066,12 +1066,12 @@ function formatDisplayTime(rawTime?: string | null): string {
         <div>
           <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
             <Clock className="text-[#A11212]" size={24} />
-            {isAr ? 'الخدمة الذاتية للموظفين (ESS)' : 'Employee Self-Service (ESS)'}
+            {isAr ? 'الحضور والإجازات' : 'Attendance & Leave'}
           </h2>
           <p className="text-xs text-gray-500 font-bold mt-1">
             {isAr
-              ? 'إدارة الحضور والانصراف المباشر، ساعات العمل، تقديم الإجازات ومراجعة كشوف الرواتب'
-              : 'Directly manage your work attendance, live shift counter, leave applications, and view statements'}
+              ? 'سجل الحضور اليومي، ساعات العمل، وطلبات الإجازات'
+              : 'Daily attendance records, working hours, and leave management'}
           </p>
         </div>
 
@@ -1168,7 +1168,7 @@ function formatDisplayTime(rawTime?: string | null): string {
           }`}
         >
           <Calendar size={15} />
-          <span>{isAr ? 'سجل الدوام والتايم شيت (My Timesheet)' : 'My Timesheet & Attendance'}</span>
+          <span>{isAr ? 'سجل الحضور والدوام' : 'Attendance Sheet'}</span>
         </button>
 
         <button

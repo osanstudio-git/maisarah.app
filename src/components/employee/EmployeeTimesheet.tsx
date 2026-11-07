@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabaseClient';
 import {
@@ -57,6 +57,7 @@ export default function EmployeeTimesheet({
   const [selectedEmpId, setSelectedEmpId] = useState<string>(currentEmployeeId || '');
   const [loading, setLoading] = useState(false);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLogItem[]>([]);
+  const isInitialLoad = useRef(true);
 
   // ── 1. Fetch available employees ──────────────────────────────────────────
   const fetchEmployees = useCallback(async () => {
@@ -96,13 +97,13 @@ export default function EmployeeTimesheet({
       // Lock strictly to the logged in employee
       if (currentEmployeeId) {
         setSelectedEmpId(currentEmployeeId);
-      } else if (!selectedEmpId && list.length > 0) {
-        setSelectedEmpId(list[0].id);
+      } else {
+        setSelectedEmpId(prev => prev || (list.length > 0 ? list[0].id : ''));
       }
     } catch (err) {
       console.warn('Error loading employees for timesheet:', err);
     }
-  }, [currentEmployeeId, selectedEmpId]);
+  }, [currentEmployeeId]);
 
   useEffect(() => {
     fetchEmployees();
@@ -125,6 +126,8 @@ export default function EmployeeTimesheet({
     };
   }, [employees, selectedEmpId, currentEmployeeName]);
 
+  const empCategory = useMemo(() => resolveEmployeeCategory(activeEmployee), [activeEmployee]);
+
   // Year and Month strings
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth(); // 0-indexed
@@ -135,9 +138,14 @@ export default function EmployeeTimesheet({
   const monthAbbr = currentDate.toLocaleString('default', { month: 'short' });
 
   // ── 2. Fetch Attendance for Selected Employee & Month ───────────────────────
-  const fetchMonthAttendance = useCallback(async () => {
-    if (!selectedEmpId) return;
-    setLoading(true);
+  const fetchMonthAttendance = useCallback(async (isSilent = false) => {
+    if (!selectedEmpId) {
+      setLoading(false);
+      return;
+    }
+    if (!isSilent && isInitialLoad.current) {
+      setLoading(true);
+    }
 
     try {
       const daysInThisMonth = new Date(year, month + 1, 0).getDate();
@@ -168,14 +176,14 @@ export default function EmployeeTimesheet({
       });
 
       // Resolve employee category: Omani vs Expat based on nationality
-      const empCategory = resolveEmployeeCategory(activeEmployee);
+      const categoryToUse = empCategory;
 
       const daysInMonth = daysInThisMonth;
       const generatedLogs: AttendanceLogItem[] = [];
 
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${monthStr}-${String(day).padStart(2, '0')}`;
-        const daySchedule = getDayScheduleForEmployee(dateStr, empCategory);
+        const daySchedule = getDayScheduleForEmployee(dateStr, categoryToUse);
         const isToday = dateStr === todayStr;
         const isPast = dateStr < todayStr;
         const isFuture = dateStr > todayStr;
@@ -317,29 +325,30 @@ export default function EmployeeTimesheet({
       console.warn('Error computing timesheet logs:', err);
     } finally {
       setLoading(false);
+      isInitialLoad.current = false;
     }
-  }, [selectedEmpId, monthKey, year, month, monthStr, activeEmployee, isAr]);
+  }, [selectedEmpId, monthKey, year, month, monthStr, empCategory, isAr]);
 
   useEffect(() => {
     fetchMonthAttendance();
 
-    // Auto-update live shift duration every 30 seconds
+    // Auto-update live shift duration every 30 seconds silently
     const ticker = setInterval(() => {
-      fetchMonthAttendance();
+      fetchMonthAttendance(true);
     }, 30000);
 
-    // Subscribe to schedule and holiday configuration changes across tabs
+    // Subscribe to schedule and holiday configuration changes across tabs silently
     const unsubSchedule = subscribeWorkSchedules(() => {
-      fetchMonthAttendance();
+      fetchMonthAttendance(true);
     });
 
     // Realtime subscription on hr_attendance
     const ch = supabase
-      .channel('hr_attendance_timesheet')
+      .channel(`hr_attendance_timesheet_${selectedEmpId || 'me'}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'hr_attendance' },
-        () => fetchMonthAttendance()
+        () => fetchMonthAttendance(true)
       )
       .subscribe();
 
@@ -348,7 +357,7 @@ export default function EmployeeTimesheet({
       unsubSchedule();
       supabase.removeChannel(ch);
     };
-  }, [fetchMonthAttendance]);
+  }, [fetchMonthAttendance, selectedEmpId]);
 
   // Helper 24h -> 12h
   function formatTime12(time24: string): string {
@@ -703,7 +712,7 @@ export default function EmployeeTimesheet({
             </p>
           </div>
 
-          {loading ? (
+          {loading && attendanceLogs.length === 0 ? (
             <div className="py-12 flex items-center justify-center gap-2 text-gray-400 text-xs">
               <RefreshCw size={16} className="animate-spin text-[#A11212]" />
               <span>{isAr ? 'جاري تحميل السجلات...' : 'Loading attendance logs...'}</span>

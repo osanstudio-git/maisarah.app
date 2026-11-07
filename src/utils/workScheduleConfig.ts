@@ -116,7 +116,6 @@ export const fetchWorkSchedulesFromDB = async (): Promise<{ omani: DaySchedule[]
     const result = { omani, expat };
     if (typeof window !== 'undefined') {
       localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(result));
-      window.dispatchEvent(new CustomEvent(EVENT_SCHEDULE_CHANGED, { detail: result }));
     }
     return result;
   } catch (e) {
@@ -145,7 +144,6 @@ export const fetchHolidaysFromDB = async (): Promise<HolidayItem[] | null> => {
 
     if (typeof window !== 'undefined') {
       localStorage.setItem(HOLIDAY_STORAGE_KEY, JSON.stringify(holidays));
-      window.dispatchEvent(new CustomEvent(EVENT_HOLIDAY_CHANGED, { detail: holidays }));
     }
     return holidays;
   } catch (e) {
@@ -353,13 +351,9 @@ export const getDayScheduleForEmployee = (
 export const subscribeWorkSchedules = (callback: () => void): (() => void) => {
   if (typeof window === 'undefined') return () => {};
 
-  // 1. Initial background fetch from Supabase DB to ensure fresh data
-  fetchWorkSchedulesFromDB().then((res) => {
-    if (res) callback();
-  });
-  fetchHolidaysFromDB().then((res) => {
-    if (res) callback();
-  });
+  // 1. Initial background fetch from Supabase DB to ensure fresh cache
+  fetchWorkSchedulesFromDB();
+  fetchHolidaysFromDB();
 
   // 2. Local window event listener for instant multi-tab sync
   const handleLocalUpdate = () => callback();
