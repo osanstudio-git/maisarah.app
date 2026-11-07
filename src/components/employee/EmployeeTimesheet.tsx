@@ -93,13 +93,11 @@ export default function EmployeeTimesheet({
       const list = Array.from(empMap.values());
       setEmployees(list);
 
-      // Default selected employee
-      if (!selectedEmpId && list.length > 0) {
-        if (currentEmployeeId && list.some(e => e.id === currentEmployeeId)) {
-          setSelectedEmpId(currentEmployeeId);
-        } else {
-          setSelectedEmpId(list[0].id);
-        }
+      // Lock strictly to the logged in employee
+      if (currentEmployeeId) {
+        setSelectedEmpId(currentEmployeeId);
+      } else if (!selectedEmpId && list.length > 0) {
+        setSelectedEmpId(list[0].id);
       }
     } catch (err) {
       console.warn('Error loading employees for timesheet:', err);
@@ -478,36 +476,9 @@ export default function EmployeeTimesheet({
             <h2 className="text-2xl font-black text-gray-900 tracking-tight">
               {monthName} {year}
             </h2>
-
-            <div className="flex flex-wrap items-center gap-2 mt-1 text-xs">
-              {/* Employee Selector Dropdown */}
-              <div className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200/80 px-2.5 py-1 rounded-xl transition-colors cursor-pointer border border-gray-200">
-                <Users size={13} className="text-gray-500" />
-                <select
-                  value={selectedEmpId}
-                  onChange={(e) => setSelectedEmpId(e.target.value)}
-                  className="bg-transparent font-black text-gray-900 outline-none cursor-pointer text-xs"
-                  title="Switch employee to view their attendance"
-                >
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.dept || emp.role})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <span className="text-gray-300">•</span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-black bg-gray-100 text-gray-700 border border-gray-200">
-                {resolveEmployeeCategory(activeEmployee) === 'Omani' ? '🇴🇲 عُماني (Omani Staff)' : '🌍 وافد (Expat Staff)'}
-              </span>
-              <span className="text-gray-300">•</span>
-              <span className="text-gray-500 font-bold">
-                {resolveEmployeeCategory(activeEmployee) === 'Omani'
-                  ? (isAr ? 'الدوام المجدول: الأحد-الأربعاء ٠٨:٣٠-١٧:٠٠ | الخميس ٠٨:٣٠-١٦:٠٠ | الجمعة والسبت إجازة (L)' : 'Schedule: Sun-Wed 08:30-17:00 | Thu 08:30-16:00 | Fri & Sat: Off (L)')
-                  : (isAr ? 'الدوام المجدول: الأحد-الأربعاء ٠٨:٣٠-١٧:٠٠ | الخميس ٠٨:٣٠-١٦:٠٠ | السبت ١٠:٠٠-١٦:٠٠ | الجمعة إجازة (L)' : 'Schedule: Sun-Wed 08:30-17:00 | Thu 08:30-16:00 | Sat 10:00-16:00 | Fri: Off (L)')}
-              </span>
-            </div>
+            <p className="text-xs text-gray-400 font-medium mt-1">
+              {isAr ? 'سجل الحضور والدوام الشهري' : 'Monthly attendance & shift history'}
+            </p>
           </div>
         </div>
 
