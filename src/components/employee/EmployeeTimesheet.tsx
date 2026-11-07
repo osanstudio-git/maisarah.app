@@ -3,14 +3,21 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabaseClient';
 import {
   Calendar as CalendarIcon, Clock, CheckCircle2, AlertTriangle, AlertCircle,
-  ChevronLeft, ChevronRight, Download, Users, RefreshCw, UserCheck
+  ChevronLeft, ChevronRight, Download, Users, RefreshCw, UserCheck, Palmtree
 } from 'lucide-react';
+import {
+  getDayScheduleForEmployee,
+  resolveEmployeeCategory,
+  subscribeWorkSchedules,
+  type EmployeeCategory
+} from '../../utils/workScheduleConfig';
 
 interface EmployeeOption {
   id: string;
   name: string;
   role: string;
   dept: string;
+  nationality?: string | null;
 }
 
 interface AttendanceLogItem {
@@ -18,12 +25,14 @@ interface AttendanceLogItem {
   date: string; // YYYY-MM-DD
   checkIn: string | null;
   checkOut: string | null;
-  status: 'present' | 'late' | 'active' | 'scheduled' | 'absent';
+  status: 'present' | 'late' | 'active' | 'scheduled' | 'absent' | 'off_day' | 'holiday';
+  holidayName?: string;
   lateMinutes: number;
   durationMinutes: number;
   durationFormatted: string;
   isToday: boolean;
   isActiveShift: boolean;
+  scheduledTime?: string;
 }
 
 interface EmployeeTimesheetProps {
@@ -53,8 +62,8 @@ export default function EmployeeTimesheet({
   const fetchEmployees = useCallback(async () => {
     try {
       const [{ data: hrData }, { data: profData }] = await Promise.all([
-        supabase.from('hr_employees').select('id, full_name, email, role, dept'),
-        supabase.from('profiles').select('id, full_name, email, role')
+        supabase.from('hr_employees').select('id, full_name, email, role, dept, nationality'),
+        supabase.from('profiles').select('id, full_name, email, role, nationality')
       ]);
 
       const empMap = new Map<string, EmployeeOption>();
@@ -64,7 +73,8 @@ export default function EmployeeTimesheet({
           id: h.id,
           name: h.full_name || h.email?.split('@')[0] || 'Staff Member',
           role: h.role || 'Employee',
-          dept: h.dept || 'Operations'
+          dept: h.dept || 'Operations',
+          nationality: h.nationality || null
         });
       });
 
@@ -74,7 +84,8 @@ export default function EmployeeTimesheet({
             id: p.id,
             name: p.full_name || p.email?.split('@')[0] || 'Staff Member',
             role: p.role || 'Employee',
-            dept: 'Operations'
+            dept: 'Operations',
+            nationality: p.nationality || null
           });
         }
       });
@@ -158,17 +169,15 @@ export default function EmployeeTimesheet({
         recordsByDate.set(r.work_date, r);
       });
 
-      // Scheduled work shift start: 08:30 (510 minutes from midnight)
-      const SCHEDULED_START_MINS = 8 * 60 + 30; // 08:30 AM
+      // Resolve employee category: Omani vs Expat based on nationality
+      const empCategory = resolveEmployeeCategory(activeEmployee);
 
       const daysInMonth = daysInThisMonth;
       const generatedLogs: AttendanceLogItem[] = [];
 
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${monthStr}-${String(day).padStart(2, '0')}`;
-        const dayDate = new Date(year, month, day);
-        const dayOfWeek = dayDate.getDay(); // 0 = Sun, 5 = Fri, 6 = Sat
-        const isWeekend = dayOfWeek === 5 || dayOfWeek === 6; // Friday & Saturday in Oman
+        const daySchedule = getDayScheduleForEmployee(dateStr, empCategory);
         const isToday = dateStr === todayStr;
         const isPast = dateStr < todayStr;
         const isFuture = dateStr > todayStr;
@@ -190,9 +199,12 @@ export default function EmployeeTimesheet({
             const [ih, im] = rawIn.split(':').map(Number);
             const inMins = ih * 60 + im;
 
-            // Only mark as late for morning shift (before 12:00 PM)
-            if (ih < 12 && inMins > SCHEDULED_START_MINS) {
-              lateMinutes = inMins - SCHEDULED_START_MINS;
+            // Target scheduled start time based on policy for this day & category (e.g. 10:00 on Saturday for Expats)
+            const targetStartMins = daySchedule.scheduledStartMins || (8 * 60 + 30);
+
+            // Only mark as late for shift if inMins > targetStartMins and not on day off / holiday
+            if (!daySchedule.isOffDay && !daySchedule.isHoliday && inMins > targetStartMins) {
+              lateMinutes = inMins - targetStartMins;
               status = 'late';
             } else if (!rawOut && isToday) {
               status = 'active';
@@ -224,19 +236,49 @@ export default function EmployeeTimesheet({
             checkIn: rawIn ? formatTime12(rawIn) : null,
             checkOut: rawOut ? formatTime12(rawOut) : (isActiveShift ? (isAr ? 'دوام مستمر' : 'Active Shift') : null),
             status,
+            holidayName: daySchedule.holidayName,
             lateMinutes,
             durationMinutes,
             durationFormatted,
             isToday,
-            isActiveShift
+            isActiveShift,
+            scheduledTime: `${daySchedule.startTime} – ${daySchedule.endTime}`
           });
         } else {
           // No DB log for this day
-          if (isWeekend) {
-            // Weekend day: not listed as scheduled workday
-            continue;
+          if (daySchedule.isHoliday) {
+            // Official Registered Holiday (e.g. Oman National Day)
+            generatedLogs.push({
+              id: `hol_${dateStr}`,
+              date: dateStr,
+              checkIn: null,
+              checkOut: null,
+              status: 'holiday',
+              holidayName: daySchedule.holidayName,
+              lateMinutes: 0,
+              durationMinutes: 0,
+              durationFormatted: isAr ? 'عطلة رسمية' : 'Official Holiday',
+              isToday,
+              isActiveShift: false,
+              scheduledTime: isAr ? 'إجازة رسمية' : 'Public Holiday'
+            });
+          } else if (daySchedule.isOffDay) {
+            // Day Off (L) (e.g. Friday for all; Saturday for Omani)
+            generatedLogs.push({
+              id: `off_${dateStr}`,
+              date: dateStr,
+              checkIn: null,
+              checkOut: null,
+              status: 'off_day',
+              lateMinutes: 0,
+              durationMinutes: 0,
+              durationFormatted: isAr ? 'إجازة أسبوعية' : 'Day Off (L)',
+              isToday,
+              isActiveShift: false,
+              scheduledTime: isAr ? 'إجازة أسبوعية' : 'Day Off (L)'
+            });
           } else if (isFuture) {
-            // Future scheduled day
+            // Future scheduled working day (e.g. Saturday for Expat from 10:00 to 16:00, or Sun-Wed 08:30-17:00)
             generatedLogs.push({
               id: `sched_${dateStr}`,
               date: dateStr,
@@ -247,13 +289,14 @@ export default function EmployeeTimesheet({
               durationMinutes: 0,
               durationFormatted: '--:--',
               isToday: false,
-              isActiveShift: false
+              isActiveShift: false,
+              scheduledTime: `${daySchedule.startTime} – ${daySchedule.endTime}`
             });
           } else if (isPast) {
-            // Past days without DB records: do not create false absence records
+            // Past working day without punch
             continue;
           } else if (isToday) {
-            // Today but not clocked in yet
+            // Today working day, pending punch
             generatedLogs.push({
               id: `today_${dateStr}`,
               date: dateStr,
@@ -264,7 +307,8 @@ export default function EmployeeTimesheet({
               durationMinutes: 0,
               durationFormatted: '--:--',
               isToday: true,
-              isActiveShift: false
+              isActiveShift: false,
+              scheduledTime: `${daySchedule.startTime} – ${daySchedule.endTime}`
             });
           }
         }
@@ -276,7 +320,7 @@ export default function EmployeeTimesheet({
     } finally {
       setLoading(false);
     }
-  }, [selectedEmpId, monthKey, year, month, monthStr, isAr]);
+  }, [selectedEmpId, monthKey, year, month, monthStr, activeEmployee, isAr]);
 
   useEffect(() => {
     fetchMonthAttendance();
@@ -285,6 +329,11 @@ export default function EmployeeTimesheet({
     const ticker = setInterval(() => {
       fetchMonthAttendance();
     }, 30000);
+
+    // Subscribe to schedule and holiday configuration changes across tabs
+    const unsubSchedule = subscribeWorkSchedules(() => {
+      fetchMonthAttendance();
+    });
 
     // Realtime subscription on hr_attendance
     const ch = supabase
@@ -298,6 +347,7 @@ export default function EmployeeTimesheet({
 
     return () => {
       clearInterval(ticker);
+      unsubSchedule();
       supabase.removeChannel(ch);
     };
   }, [fetchMonthAttendance]);
@@ -448,8 +498,14 @@ export default function EmployeeTimesheet({
               </div>
 
               <span className="text-gray-300">•</span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-black bg-gray-100 text-gray-700 border border-gray-200">
+                {resolveEmployeeCategory(activeEmployee) === 'Omani' ? '🇴🇲 عُماني (Omani Staff)' : '🌍 وافد (Expat Staff)'}
+              </span>
+              <span className="text-gray-300">•</span>
               <span className="text-gray-500 font-bold">
-                {isAr ? 'الدوام المجدول: ٠٨:٣٠ – ١٧:٠٠' : 'Scheduled: 08:30 – 17:00'}
+                {resolveEmployeeCategory(activeEmployee) === 'Omani'
+                  ? (isAr ? 'الدوام المجدول: الأحد-الأربعاء ٠٨:٣٠-١٧:٠٠ | الخميس ٠٨:٣٠-١٦:٠٠ | الجمعة والسبت إجازة (L)' : 'Schedule: Sun-Wed 08:30-17:00 | Thu 08:30-16:00 | Fri & Sat: Off (L)')
+                  : (isAr ? 'الدوام المجدول: الأحد-الأربعاء ٠٨:٣٠-١٧:٠٠ | الخميس ٠٨:٣٠-١٦:٠٠ | السبت ١٠:٠٠-١٦:٠٠ | الجمعة إجازة (L)' : 'Schedule: Sun-Wed 08:30-17:00 | Thu 08:30-16:00 | Sat 10:00-16:00 | Fri: Off (L)')}
               </span>
             </div>
           </div>
@@ -609,6 +665,10 @@ export default function EmployeeTimesheet({
               if (log) {
                 if (log.isActiveShift) {
                   badgeColor = 'bg-purple-600 text-white font-black shadow-xs shadow-purple-600/30';
+                } else if (log.status === 'holiday') {
+                  badgeColor = 'bg-purple-100 text-purple-700 border border-purple-300 font-bold';
+                } else if (log.status === 'off_day') {
+                  badgeColor = 'bg-gray-100 text-gray-400 border border-gray-200';
                 } else if (log.status === 'late' || log.lateMinutes > 0) {
                   badgeColor = 'bg-amber-500 text-white font-black shadow-xs shadow-amber-500/30';
                 } else if (log.status === 'present') {
@@ -626,7 +686,7 @@ export default function EmployeeTimesheet({
                   className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black transition-all cursor-pointer ${badgeColor} ${
                     isSelected ? 'ring-2 ring-offset-2 ring-[#A11212] scale-105' : ''
                   }`}
-                  title={`${dateStr}: ${log ? log.status : 'No record'}`}
+                  title={`${dateStr}: ${log ? (log.status === 'holiday' ? `Holiday: ${log.holidayName || 'Public Holiday'}` : log.status === 'off_day' ? 'Day Off (L)' : log.status) : 'No record'}`}
                 >
                   {dayNum}
                 </button>
@@ -649,8 +709,12 @@ export default function EmployeeTimesheet({
               {isAr ? 'نشط الآن' : 'Active'}
             </span>
             <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-md bg-purple-100 border border-purple-300"></span>
+              {isAr ? 'عطلة رسمية' : 'Holiday'}
+            </span>
+            <span className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md bg-gray-100 border border-gray-300"></span>
-              {isAr ? 'مجدول' : 'Scheduled'}
+              {isAr ? 'إجازة أسبوعية' : 'Day Off (L)'}
             </span>
           </div>
         </div>
@@ -741,7 +805,16 @@ export default function EmployeeTimesheet({
 
                           {/* STATUS Column (Pill Badges matching Image 2) */}
                           <td className="py-3.5 px-4 text-center">
-                            {item.status === 'late' || item.lateMinutes > 0 ? (
+                            {item.status === 'holiday' ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black tracking-wide bg-purple-50 text-purple-700 border border-purple-200">
+                                <span>🌴</span>
+                                {item.holidayName || (isAr ? 'عطلة رسمية' : 'Official Holiday')}
+                              </span>
+                            ) : item.status === 'off_day' ? (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold tracking-wide bg-gray-100 text-gray-500 border border-gray-200">
+                                {isAr ? 'إجازة أسبوعية (L)' : 'Day Off (L)'}
+                              </span>
+                            ) : item.status === 'late' || item.lateMinutes > 0 ? (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black tracking-wide bg-amber-50 text-amber-700 border border-amber-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                                 {isAr ? `تأخير (${item.lateMinutes}د)` : `Late Warning (${item.lateMinutes}m)`}

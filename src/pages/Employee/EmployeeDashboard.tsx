@@ -320,6 +320,7 @@ const EmployeeDashboard = () => {
       .channel(`employee-dashboard-${user?.id || 'live'}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => fetchDashboardData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, () => fetchDashboardData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, () => fetchDashboardData())
       .subscribe();
 
     return () => {

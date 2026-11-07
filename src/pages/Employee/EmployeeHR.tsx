@@ -71,11 +71,11 @@ export default function EmployeeHR() {
     basicSalary: number;
     allowances: { housing: number; transport: number; other: number };
   }>({
-    id: 'b1a85438-dcc9-4964-a251-7de0a0b07897',
-    name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Ajan',
-    role: 'Client Relationship Officer',
-    dept: 'Client Success & Coordination',
-    email: user?.email || 'marketing@maisarah.net',
+    id: user?.id || '',
+    name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Staff Member',
+    role: 'Employee',
+    dept: 'Operations',
+    email: user?.email || '',
     basicSalary: 1400,
     allowances: { housing: 300, transport: 150, other: 50 }
   });
@@ -111,9 +111,8 @@ export default function EmployeeHR() {
     notes: ''
   });
 
-  // --- Resolve Authoritative Employee UUID ---
+  // --- Resolve Authoritative Employee UUID strictly for the logged-in user ---
   const getEffectiveEmployeeId = useCallback(async (): Promise<string> => {
-    if (employeeProfile.id) return employeeProfile.id;
     if (user?.email) {
       const { data: byEmail } = await supabase.from('hr_employees').select('id').ilike('email', user.email).maybeSingle();
       if (byEmail?.id) return byEmail.id;
@@ -121,9 +120,12 @@ export default function EmployeeHR() {
     if (user?.id) {
       const { data: byId } = await supabase.from('hr_employees').select('id').eq('id', user.id).maybeSingle();
       if (byId?.id) return byId.id;
+      const { data: byProf } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
+      if (byProf?.id) return byProf.id;
     }
-    return 'b1a85438-dcc9-4964-a251-7de0a0b07897'; // Ajan UUID in hr_employees
-  }, [employeeProfile.id, user]);
+    if (employeeProfile.id) return employeeProfile.id;
+    return user?.id || '';
+  }, [user, employeeProfile.id]);
 
   // --- Sync / Load Live Leave Requests & Local Storage ---
   const fetchLeaves = useCallback(async () => {
@@ -226,11 +228,15 @@ export default function EmployeeHR() {
       let other = 50;
 
       // Authoritative profile lookup from hr_employees
-      const { data: empData } = await supabase
-        .from('hr_employees')
-        .select('*')
-        .or(`id.eq.${empId},email.ilike.${user?.email || 'marketing@maisarah.net'}`)
-        .maybeSingle();
+      let empQuery = supabase.from('hr_employees').select('*');
+      if (empId && user?.email) {
+        empQuery = empQuery.or(`id.eq.${empId},email.ilike.${user.email}`);
+      } else if (empId) {
+        empQuery = empQuery.eq('id', empId);
+      } else if (user?.email) {
+        empQuery = empQuery.ilike('email', user.email);
+      }
+      const { data: empData } = await empQuery.maybeSingle();
 
       const resolvedEmpId = empData?.id || empId;
 
