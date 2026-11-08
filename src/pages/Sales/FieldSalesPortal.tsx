@@ -7,9 +7,11 @@ import {
   TrendingUp, Award, Calendar, CheckCircle2, Clock, DollarSign,
   ChevronRight, ArrowLeft, RefreshCw, Send, Sparkles, Filter,
   FileSpreadsheet, Target, ShieldCheck, Compass, Navigation,
-  HelpCircle, ExternalLink, Bookmark, Check, X, AlertCircle
+  HelpCircle, ExternalLink, Bookmark, Check, X, AlertCircle,
+  UserCheck, UserPlus, FileText, CheckCircle
 } from 'lucide-react';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
+import { parseLeadNotes, encodeLeadNotes } from '../../utils/salesCrmSync';
 
 interface SalesLead {
   id: string;
@@ -25,6 +27,16 @@ interface SalesLead {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   notes?: string | null;
   created_at: string;
+  converted_client_id?: string | null;
+  converted_at?: string | null;
+}
+
+interface QuotationSummary {
+  id: string;
+  quote_number?: string;
+  lead_id?: string;
+  total_amount?: number;
+  status?: string;
 }
 
 interface VisitRecord {
@@ -105,6 +117,7 @@ export default function FieldSalesPortal() {
   // Data State
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [visits, setVisits] = useState<VisitRecord[]>([]);
+  const [quotationsMap, setQuotationsMap] = useState<Record<string, QuotationSummary>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -125,6 +138,23 @@ export default function FieldSalesPortal() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [captureSuccess, setCaptureSuccess] = useState(false);
 
+  // Client Conversion & Direct Client Registration States
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [convertModalLead, setConvertModalLead] = useState<SalesLead | null>(null);
+  const [isDirectClientMode, setIsDirectClientMode] = useState(false);
+  const [convertForm, setConvertForm] = useState({
+    company_name: '',
+    contact_person: '',
+    cr_number: '',
+    phone: '',
+    email: '',
+    activity: SERVICE_RATE_CARD[0].nameEn,
+    monthly_billing: '150'
+  });
+  const [isConverting, setIsConverting] = useState(false);
+  const [convertSuccess, setConvertSuccess] = useState<string | null>(null);
+  const [crCheckMessage, setCrCheckMessage] = useState<string | null>(null);
+
   // Visit Form State
   const [visitForm, setVisitForm] = useState({
     client_name: '',
@@ -142,17 +172,65 @@ export default function FieldSalesPortal() {
   // Rep Display Info
   const repName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || (isAr ? 'مندوب المبيعات' : 'Sales Representative');
 
-  // Fetch Leads for this rep
+  // Debounced CR Check for Client Registration
+  useEffect(() => {
+    const cr = convertForm.cr_number.trim();
+    if (cr.length !== 7) {
+      setCrCheckMessage(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await supabase
+          .from('clients')
+          .select('id, company_name')
+          .eq('cr_number', cr)
+          .maybeSingle();
+        if (data) {
+          setCrCheckMessage(
+            isAr
+              ? `⚠️ تنبيه: السجل التجاري مسجل بالفعل لـ "${data.company_name}"`
+              : `⚠️ Warning: CR is already registered for "${data.company_name}"`
+          );
+        } else {
+          setCrCheckMessage(
+            isAr ? '✓ السجل التجاري متاح وجديد' : '✓ CR Number is valid & unique'
+          );
+        }
+      } catch {
+        setCrCheckMessage(null);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [convertForm.cr_number, isAr]);
+
+  // Fetch Leads & Quotations for this rep
   const fetchSalesData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('crm_leads')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [leadsRes, quotesRes] = await Promise.all([
+        supabase
+          .from('crm_leads')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('quotations')
+          .select('id, quote_number, lead_id, total_amount, status')
+          .order('created_at', { ascending: false })
+      ]);
 
-      if (!error && data) {
-        setLeads(data as SalesLead[]);
+      if (!leadsRes.error && leadsRes.data) {
+        setLeads(leadsRes.data as SalesLead[]);
+      }
+
+      if (quotesRes.data) {
+        const qMap: Record<string, QuotationSummary> = {};
+        quotesRes.data.forEach((q: any) => {
+          if (q.lead_id) {
+            qMap[q.lead_id] = q;
+          }
+        });
+        setQuotationsMap(qMap);
       }
 
       // Load visits from local store cache
@@ -172,13 +250,16 @@ export default function FieldSalesPortal() {
   useEffect(() => {
     fetchSalesData();
 
-    // Subscribe to real-time changes on crm_leads and clients
+    // Subscribe to real-time changes on crm_leads, quotations, and clients
     const channel = supabase
       .channel('field_sales_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_leads' }, () => {
         fetchSalesData(true);
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => {
+        fetchSalesData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
         fetchSalesData(true);
       })
       .subscribe();
@@ -277,33 +358,231 @@ export default function FieldSalesPortal() {
     }
   };
 
-  // Log Visit
-  const handleSaveVisit = (e: React.FormEvent) => {
+  // Quick Status Change directly from card
+  const handleQuickStatusChange = async (lead: SalesLead, newStatus: SalesLead['status']) => {
+    try {
+      const { error } = await supabase
+        .from('crm_leads')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', lead.id);
+
+      if (error) throw error;
+
+      setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, status: newStatus } : l));
+
+      // Broadcast update to CRM
+      await supabase.from('notifications').insert([{
+        sender_id: user?.id || null,
+        recipient_role: 'manager',
+        title: isAr ? 'تحديث مرحلة الفرصة البيعية' : 'Lead Stage Updated',
+        message: isAr
+          ? `قام ${repName} بتحديث حالة العميل "${lead.contact_name}" إلى (${newStatus}).`
+          : `${repName} updated status of "${lead.contact_name}" to (${newStatus}).`,
+        type: 'general'
+      }]);
+
+      if (newStatus === 'accepted' && !lead.converted_client_id) {
+        handleOpenConvert(lead);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error updating status');
+    }
+  };
+
+  // Open Convert Modal from an existing lead
+  const handleOpenConvert = (lead: SalesLead) => {
+    setIsDirectClientMode(false);
+    setConvertModalLead(lead);
+
+    const crMatch = lead.notes?.match(/CR Number:\s*(\d+)/i);
+    const detectedCr = crMatch ? crMatch[1] : '';
+
+    setConvertForm({
+      company_name: lead.company_name || lead.contact_name,
+      contact_person: lead.contact_name,
+      cr_number: detectedCr,
+      phone: lead.phone || '',
+      email: lead.email || '',
+      activity: lead.interested_service || SERVICE_RATE_CARD[0].nameEn,
+      monthly_billing: String(lead.estimated_value || '150')
+    });
+    setCrCheckMessage(null);
+    setShowConvertModal(true);
+  };
+
+  // Open Direct Client Registration (no prior lead)
+  const handleOpenDirectRegister = () => {
+    setIsDirectClientMode(true);
+    setConvertModalLead(null);
+    setConvertForm({
+      company_name: '',
+      contact_person: '',
+      cr_number: '',
+      phone: '',
+      email: '',
+      activity: SERVICE_RATE_CARD[0].nameEn,
+      monthly_billing: '150'
+    });
+    setCrCheckMessage(null);
+    setShowConvertModal(true);
+  };
+
+  // Submit Client Conversion or Direct Registration
+  const handleConvertSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const company = convertForm.company_name.trim();
+    const contact = convertForm.contact_person.trim();
+    if (!company && !contact) return;
+
+    setIsConverting(true);
+    try {
+      const billingNum = Number(convertForm.monthly_billing) || 0;
+      const cleanCr = convertForm.cr_number.trim() || null;
+
+      // 1. Insert into clients table
+      const { data: newClient, error: clientErr } = await supabase
+        .from('clients')
+        .insert([{
+          company_name: company || contact,
+          contact_person: contact || company,
+          cr_number: cleanCr,
+          phone: convertForm.phone.trim() || null,
+          email: convertForm.email.trim() || null,
+          activity: convertForm.activity.trim() || null,
+          monthly_billing: billingNum,
+          source: 'sales',
+          lead_id: convertModalLead?.id || null,
+          assigned_employee_id: user?.id || null,
+          compliance_status: 'compliant'
+        }])
+        .select()
+        .single();
+
+      if (clientErr) throw clientErr;
+
+      // 2. If converting an existing lead, mark status=accepted and link client ID
+      if (convertModalLead) {
+        await supabase
+          .from('crm_leads')
+          .update({
+            status: 'accepted',
+            converted_client_id: newClient.id,
+            converted_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', convertModalLead.id);
+      }
+
+      // 3. Insert onboarding task into client_jobs
+      const serviceName = convertModalLead?.interested_service || convertForm.activity || 'Sales Client Onboarding';
+      await supabase.from('client_jobs').insert([{
+        client_id: newClient.id,
+        service_type: serviceName,
+        billing_type: 'one_time',
+        status: 'pending',
+        amount: billingNum,
+        vat_amount: +(billingNum * 0.05).toFixed(3),
+        description: `New Client Onboarding task from Sales Rep ${repName}`,
+        deadline: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
+      }]);
+
+      // 4. Send notification to CRM & Managers
+      await supabase.from('notifications').insert([{
+        sender_id: user?.id || null,
+        recipient_role: 'manager',
+        title: isAr ? '🎉 عميل رسمي جديد من المبيعات' : '🎉 New Official Client from Field Sales',
+        message: isAr
+          ? `قام مندوب المبيعات ${repName} بتسجيل وتأكيد العميل "${newClient.company_name}" رسمياً في النظام!`
+          : `Sales Rep ${repName} confirmed & registered client "${newClient.company_name}" into the system!`,
+        type: 'general'
+      }]);
+
+      setConvertSuccess(
+        isAr
+          ? `تم تسجيل العميل "${newClient.company_name}" بنجاح في قاعدة البيانات ومزامنته مع CRM!`
+          : `Client "${newClient.company_name}" successfully registered & synced with CRM!`
+      );
+
+      setShowConvertModal(false);
+      fetchSalesData(true);
+      setTimeout(() => setConvertSuccess(null), 5000);
+
+    } catch (err: any) {
+      alert(err.message || 'Error converting client');
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  // Log Visit with Real-Time Notification & CRM Timeline Update
+  const handleSaveVisit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!visitForm.client_name.trim()) return;
 
-    const newVisit: VisitRecord = {
-      id: `v-${Date.now()}`,
-      client_name: visitForm.client_name,
-      location: visitForm.location || 'Client Office',
-      purpose: visitForm.purpose,
-      outcome: visitForm.outcome,
-      follow_up_date: visitForm.follow_up_date,
-      created_at: new Date().toISOString()
-    };
+    setIsAddingVisit(true);
+    try {
+      const newVisit: VisitRecord = {
+        id: `v-${Date.now()}`,
+        client_name: visitForm.client_name.trim(),
+        location: visitForm.location || 'Client Office',
+        purpose: visitForm.purpose,
+        outcome: visitForm.outcome,
+        follow_up_date: visitForm.follow_up_date,
+        created_at: new Date().toISOString()
+      };
 
-    const updated = [newVisit, ...visits];
-    setVisits(updated);
-    localStorage.setItem('maisarah_field_visits', JSON.stringify(updated));
+      // 1. Send live visit notification to CRM & Managers
+      await supabase.from('notifications').insert([{
+        sender_id: user?.id || null,
+        recipient_role: 'manager',
+        title: isAr ? '📍 زيارة ميدانية جديدة' : '📍 Field Visit Check-In',
+        message: isAr
+          ? `قام ${repName} بزيارة "${newVisit.client_name}" في (${newVisit.location}). النتيجة: "${newVisit.outcome}".`
+          : `${repName} checked in at "${newVisit.client_name}" (${newVisit.location}). Outcome: "${newVisit.outcome}".`,
+        type: 'general'
+      }]);
 
-    setVisitForm({
-      client_name: '',
-      location: '',
-      purpose: 'New Service Pitch',
-      outcome: 'Interested - Requesting Quotation',
-      follow_up_date: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0]
-    });
-    setShowVisitModal(false);
+      // 2. If matching lead exists, append to lead's activity log in crm_leads
+      const matchedLead = leads.find(l =>
+        (l.contact_name && l.contact_name.toLowerCase().includes(newVisit.client_name.toLowerCase())) ||
+        (l.company_name && l.company_name.toLowerCase().includes(newVisit.client_name.toLowerCase()))
+      );
+
+      if (matchedLead) {
+        const { userNotes, meta } = parseLeadNotes(matchedLead.notes);
+        const updatedLog = meta.activity_log || [];
+        updatedLog.unshift({
+          id: `act-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          action: 'Field Visit Check-in',
+          details: `${newVisit.outcome} at ${newVisit.location}. Follow-up: ${newVisit.follow_up_date}`,
+          author: repName
+        });
+        const newNotes = encodeLeadNotes(userNotes, { ...meta, activity_log: updatedLog });
+        await supabase
+          .from('crm_leads')
+          .update({ notes: newNotes, updated_at: new Date().toISOString() })
+          .eq('id', matchedLead.id);
+      }
+
+      // 3. Save to local state and cache
+      const updated = [newVisit, ...visits];
+      setVisits(updated);
+      localStorage.setItem('maisarah_field_visits', JSON.stringify(updated));
+
+      setVisitForm({
+        client_name: '',
+        location: '',
+        purpose: 'New Service Pitch',
+        outcome: 'Interested - Requesting Quotation',
+        follow_up_date: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0]
+      });
+      setShowVisitModal(false);
+    } catch (err: any) {
+      console.warn('Notice saving visit notification:', err.message);
+    } finally {
+      setIsAddingVisit(false);
+    }
   };
 
   // Open WhatsApp directly
@@ -498,6 +777,17 @@ export default function FieldSalesPortal() {
         {activeTab === 'leads' && (
           <div className="space-y-3">
 
+            {/* Convert / Sync Success Banner */}
+            {convertSuccess && (
+              <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-2xl text-xs font-black flex items-center justify-between gap-2 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                  <span>{convertSuccess}</span>
+                </div>
+                <button onClick={() => setConvertSuccess(null)} className="text-emerald-700 hover:text-emerald-900"><X size={15} /></button>
+              </div>
+            )}
+
             {/* Search & Filter Bar */}
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -522,17 +812,28 @@ export default function FieldSalesPortal() {
                 <option value="contacted">{isAr ? 'تم التواصل' : 'Contacted'}</option>
                 <option value="quoted">{isAr ? 'تم العرض' : 'Quoted'}</option>
                 <option value="accepted">{isAr ? 'مقبولة (Won)' : 'Accepted'}</option>
+                <option value="lost">{isAr ? 'ملغاة' : 'Lost'}</option>
               </select>
             </div>
 
-            {/* Quick Hero Add Button */}
-            <button
-              onClick={() => setActiveTab('capture')}
-              className="w-full py-3.5 bg-brand-dark hover:bg-red-800 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-brand-dark/25 active:scale-98 transition-all cursor-pointer"
-            >
-              <Plus size={18} />
-              <span>{isAr ? '+ إضافة فرصة جديدة (10 ثوانٍ)' : '+ Quick Add Lead (10s)'}</span>
-            </button>
+            {/* Quick Hero Dual Action Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                onClick={() => setActiveTab('capture')}
+                className="py-3 bg-brand-dark hover:bg-red-800 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-brand-dark/20 active:scale-98 transition-all cursor-pointer"
+              >
+                <Plus size={16} />
+                <span>{isAr ? '+ إضافة فرصة سريعة (10 ثوانٍ)' : '+ Quick Add Lead (10s)'}</span>
+              </button>
+
+              <button
+                onClick={handleOpenDirectRegister}
+                className="py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20 active:scale-98 transition-all cursor-pointer"
+              >
+                <UserPlus size={16} />
+                <span>{isAr ? '+ تسجيل عميل رسمي مباشر' : '+ Direct Register Client'}</span>
+              </button>
+            </div>
 
             {/* Leads Cards Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -546,6 +847,7 @@ export default function FieldSalesPortal() {
               ) : (
                 filteredLeads.map((lead) => {
                   const isWon = lead.status === 'accepted';
+                  const quote = quotationsMap[lead.id];
                   return (
                     <div
                       key={lead.id}
@@ -555,8 +857,11 @@ export default function FieldSalesPortal() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-0.5">
                             <h3 className="font-black text-xs text-gray-900 truncate">{lead.contact_name}</h3>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${isWon ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
-                              }`}>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                              isWon ? 'bg-emerald-100 text-emerald-700' :
+                              lead.status === 'quoted' ? 'bg-amber-100 text-amber-700' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>
                               {lead.status}
                             </span>
                           </div>
@@ -574,14 +879,76 @@ export default function FieldSalesPortal() {
                         </div>
                       </div>
 
+                      {/* Official Registered Client Indicator */}
+                      {lead.converted_client_id && (
+                        <div className="flex items-center gap-1.5 text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200/90 px-3 py-1.5 rounded-xl">
+                          <CheckCircle size={13} className="text-emerald-600 shrink-0" />
+                          <span>{isAr ? '✓ عميل رسمي مسجل في النظام ومزامن مع CRM' : '✓ Official Registered Client in CRM'}</span>
+                        </div>
+                      )}
+
+                      {/* Linked Quotation Summary Badge (if CRM generated quote) */}
+                      {quote && (
+                        <div className="flex items-center justify-between text-[10px] font-bold bg-amber-50/80 border border-amber-200 text-amber-900 px-3 py-1.5 rounded-xl">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <FileText size={12} className="text-amber-600 shrink-0" />
+                            <span className="font-mono font-black">{quote.quote_number || 'Quotation'}</span>
+                            <span>•</span>
+                            <span>OMR {Number(quote.total_amount || 0).toFixed(0)}</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            quote.status === 'approved' || quote.status === 'accepted'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {quote.status}
+                          </span>
+                        </div>
+                      )}
+
                       {/* Service Tag */}
                       <div className="flex items-center gap-1.5 text-[10px] font-bold bg-gray-50 text-gray-600 px-3 py-1.5 rounded-xl">
                         <Sparkles size={11} className="text-amber-500 shrink-0" />
                         <span className="truncate">{lead.interested_service}</span>
                       </div>
 
+                      {/* Stage Quick Switcher */}
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                          {isAr ? 'المرحلة:' : 'Stage:'}
+                        </span>
+                        <select
+                          value={lead.status}
+                          onChange={(e) => handleQuickStatusChange(lead, e.target.value as any)}
+                          className={`text-[10px] font-black py-1 px-2.5 rounded-xl border outline-none cursor-pointer transition-all ${
+                            lead.status === 'accepted' ? 'bg-emerald-50 border-emerald-300 text-emerald-800' :
+                            lead.status === 'quoted' ? 'bg-amber-50 border-amber-300 text-amber-800' :
+                            lead.status === 'contacted' ? 'bg-blue-50 border-blue-300 text-blue-800' :
+                            lead.status === 'rejected' || lead.status === 'lost' ? 'bg-rose-50 border-rose-300 text-rose-800' :
+                            'bg-gray-50 border-gray-200 text-gray-700'
+                          }`}
+                        >
+                          <option value="new">{isAr ? 'جديدة (New)' : 'New'}</option>
+                          <option value="contacted">{isAr ? 'تم التواصل (Contacted)' : 'Contacted'}</option>
+                          <option value="quoted">{isAr ? 'تم تقديم عرض (Quoted)' : 'Quoted'}</option>
+                          <option value="accepted">{isAr ? 'صفقة رابحة (Won)' : 'Accepted (Won)'}</option>
+                          <option value="lost">{isAr ? 'ملغاة (Lost)' : 'Lost'}</option>
+                        </select>
+                      </div>
+
+                      {/* 1-Click Convert to Client Button (if not already converted) */}
+                      {!lead.converted_client_id && (
+                        <button
+                          onClick={() => handleOpenConvert(lead)}
+                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                        >
+                          <UserCheck size={13} />
+                          <span>{isAr ? 'تحويل إلى عميل رسمي وتسجيل' : 'Convert & Register Client'}</span>
+                        </button>
+                      )}
+
                       {/* Action Bar (1-Click Call & WhatsApp) */}
-                      <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                      <div className="flex items-center gap-2 pt-1">
                         {lead.phone ? (
                           <>
                             <a
@@ -920,6 +1287,23 @@ export default function FieldSalesPortal() {
                       <p>⏱️ <span className="font-bold">{isAr ? 'المدة التقديرية:' : 'Turnaround:'}</span> {srv.turnaround}</p>
                       <p>📋 <span className="font-bold">{isAr ? 'المستندات المطلوبة:' : 'Req. Docs:'}</span> {srv.docs}</p>
                     </div>
+
+                    <div className="pt-2">
+                      <button
+                        onClick={() => {
+                          setLeadForm(prev => ({
+                            ...prev,
+                            interested_service: srv.nameEn,
+                            department_id: srv.dept
+                          }));
+                          setActiveTab('capture');
+                        }}
+                        className="w-full py-2 bg-slate-50 hover:bg-brand-dark hover:text-white text-slate-700 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        <span>{isAr ? 'تسجيل فرصة بهذه الخدمة' : 'Capture Lead for this Service'}</span>
+                      </button>
+                    </div>
                   </div>
                 ))}
             </div>
@@ -956,6 +1340,161 @@ export default function FieldSalesPortal() {
                   <p className="text-base font-black text-amber-800 mt-1">{metrics.estimatedCommission.toFixed(3)}</p>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── CONVERT LEAD TO CLIENT / DIRECT REGISTER MODAL ────────────────── */}
+        {showConvertModal && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-scale-up border border-gray-100 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl font-black">
+                    <UserCheck size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm text-gray-900">
+                      {isDirectClientMode
+                        ? (isAr ? 'تسجيل عميل رسمي جديد' : 'Direct Client Registration')
+                        : (isAr ? 'تحويل الفرصة إلى عميل رسمي' : 'Convert Lead to Official Client')}
+                    </h3>
+                    <p className="text-[10px] text-gray-400 font-bold">
+                      {isAr ? 'مزامنة فورية مع قاعدة بيانات CRM والعمليات' : 'Instant Sync with CRM & Operations'}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setShowConvertModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              </div>
+
+              <form onSubmit={handleConvertSubmit} className="space-y-3.5">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                    {isAr ? 'اسم الشركة / المنشأة *' : 'Company Name *'}
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    placeholder={isAr ? 'شركة مسقط للحلول ش.م.م' : 'Company Name LLC'}
+                    value={convertForm.company_name}
+                    onChange={(e) => setConvertForm(prev => ({ ...prev, company_name: e.target.value }))}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark focus:bg-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                      {isAr ? 'السجل التجاري (7 أرقام)' : 'CR Number (7-Digits)'}
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={7}
+                      placeholder="1234567"
+                      value={convertForm.cr_number}
+                      onChange={(e) => setConvertForm(prev => ({ ...prev, cr_number: e.target.value.replace(/[^0-9]/g, '') }))}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                      {isAr ? 'الشخص المسؤول *' : 'Contact Person *'}
+                    </label>
+                    <input
+                      required
+                      type="text"
+                      placeholder={isAr ? 'سالم العامري' : 'Salim Al-Amri'}
+                      value={convertForm.contact_person}
+                      onChange={(e) => setConvertForm(prev => ({ ...prev, contact_person: e.target.value }))}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark focus:bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Live Duplicate / Valid CR Status */}
+                {crCheckMessage && (
+                  <div className={`p-2.5 rounded-xl text-[11px] font-black flex items-center gap-1.5 ${
+                    crCheckMessage.includes('⚠️') ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                  }`}>
+                    <span>{crCheckMessage}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                      {isAr ? 'رقم الهاتف / الواتساب' : 'Phone / WhatsApp'}
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="+968 9123 4567"
+                      value={convertForm.phone}
+                      onChange={(e) => setConvertForm(prev => ({ ...prev, phone: e.target.value }))}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                      {isAr ? 'البريد الإلكتروني' : 'Email Address'}
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="client@company.om"
+                      value={convertForm.email}
+                      onChange={(e) => setConvertForm(prev => ({ ...prev, email: e.target.value }))}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark focus:bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                      {isAr ? 'الخدمة / النشاط' : 'Service / Activity'}
+                    </label>
+                    <select
+                      value={convertForm.activity}
+                      onChange={(e) => setConvertForm(prev => ({ ...prev, activity: e.target.value }))}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark focus:bg-white"
+                    >
+                      {SERVICE_RATE_CARD.map(s => (
+                        <option key={s.id} value={s.nameEn}>{isAr ? s.nameAr : s.nameEn}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                      {isAr ? 'قيمة العقد / الفاتورة (OMR)' : 'Contract Value (OMR)'}
+                    </label>
+                    <input
+                      type="number"
+                      value={convertForm.monthly_billing}
+                      onChange={(e) => setConvertForm(prev => ({ ...prev, monthly_billing: e.target.value }))}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark focus:bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={isConverting}
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all cursor-pointer"
+                  >
+                    {isConverting ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Check size={16} />
+                        <span>{isAr ? 'تأكيد التسجيل والمزامنة مع CRM فوراً' : 'Confirm Registration & Sync to CRM'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
