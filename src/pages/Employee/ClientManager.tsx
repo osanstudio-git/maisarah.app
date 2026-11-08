@@ -16,6 +16,7 @@ import {
   Clock,
   AlertCircle,
   ArrowLeft,
+  ArrowRight,
   Hash,
   Percent,
   Briefcase,
@@ -32,6 +33,10 @@ import {
   KeyRound,
   RefreshCw,
   ClipboardCheck,
+  Users,
+  TrendingUp,
+  Filter,
+  Check
 } from 'lucide-react';
 import {
   normalizeDepartmentId,
@@ -47,6 +52,20 @@ import ClientDepartmentChecklist from '../../components/employee/ClientDepartmen
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+export interface B2BPartner {
+  id: string;
+  name: string;
+  partner_type: string;
+  contact_person: string;
+  phone: string;
+  email?: string | null;
+  location?: string | null;
+  cr_number?: string | null;
+  agreement_tier?: string | null;
+  notes?: string | null;
+  created_at?: string;
+}
+
 interface Client {
   id: string;
   company_name: string;
@@ -61,6 +80,9 @@ interface Client {
   portal_access_sent?: boolean;
   portal_sent_at?: string | null;
   portal_user_id?: string | null;
+  b2b_partner_id?: string | null;
+  b2b_partner_name?: string | null;
+  source?: string | null;
 }
 
 interface Invoice {
@@ -426,6 +448,12 @@ const ClientManager = () => {
   const ticketRef = useRef<HTMLDivElement>(null);
 
   const isManager = role === 'manager' || role === 'admin';
+  const canManageB2B = useMemo(() => {
+    if (role === 'manager' || role === 'admin' || role === 'crm') return true;
+    const secRoles = (user?.user_metadata?.secondary_roles || (user as any)?.secondary_roles || []) as string[];
+    return secRoles.includes('b2b_coordinator') || secRoles.includes('crm') || secRoles.includes('manager');
+  }, [role, user]);
+
   const effectiveDeptId = useMemo(() => {
     return normalizeDepartmentId(departmentId || user?.user_metadata?.department_id);
   }, [departmentId, user?.user_metadata?.department_id]);
@@ -438,6 +466,26 @@ const ClientManager = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [registrationStep, setRegistrationStep] = useState<1 | 2>(1);
+
+  // B2B Partner Coordination States
+  const [b2bPartners, setB2bPartners] = useState<B2BPartner[]>([]);
+  const [loadingB2B, setLoadingB2B] = useState(false);
+  const [b2bTab, setB2bTab] = useState<'directory' | 'b2b_network'>('directory');
+  const [selectedPartnerFilter, setSelectedPartnerFilter] = useState<string | null>(null);
+  const [isAddPartnerModalOpen, setIsAddPartnerModalOpen] = useState(false);
+  const [newPartnerForm, setNewPartnerForm] = useState({
+    name: '',
+    partner_type: 'sanad',
+    contact_person: '',
+    phone: '',
+    email: '',
+    location: 'Muscat',
+    cr_number: '',
+    notes: ''
+  });
+  const [isSavingPartner, setIsSavingPartner] = useState(false);
+  const [b2bJobs, setB2bJobs] = useState<any[]>([]);
+
   const [crValidation, setCrValidation] = useState<{
     status: 'idle' | 'checking' | 'valid' | 'duplicate';
     message?: string;
@@ -501,6 +549,8 @@ const ClientManager = () => {
     email: '',
     password: '',
     phone: '',
+    b2b_partner_id: '',
+    b2b_partner_name: '',
   });
 
   const [createInitialTask, setCreateInitialTask] = useState(true);
@@ -621,6 +671,112 @@ const ClientManager = () => {
   }, [formData.company_name, isModalOpen, editingClient?.id, clients, isAr]);
 
 
+  // ── Fetch B2B Partners & Live Deliverable Jobs ───────────────────────────
+  const fetchB2BData = useCallback(async () => {
+    try {
+      setLoadingB2B(true);
+      const [partnersRes, jobsRes] = await Promise.all([
+        supabase.from('b2b_partners').select('*').order('name'),
+        supabase.from('client_jobs').select('id, client_id, service_type, status, amount, deadline')
+      ]);
+
+      if (!partnersRes.error && Array.isArray(partnersRes.data)) {
+        setB2bPartners(partnersRes.data);
+      }
+      if (!jobsRes.error && Array.isArray(jobsRes.data)) {
+        setB2bJobs(jobsRes.data);
+      }
+    } catch (err) {
+      console.warn('Error fetching B2B data:', err);
+    } finally {
+      setLoadingB2B(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (canManageB2B) {
+      fetchB2BData();
+      const pChannel = supabase
+        .channel('b2b-partners-realtime-sub')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'b2b_partners' }, () => {
+          fetchB2BData();
+        })
+        .subscribe();
+      return () => {
+        supabase.removeChannel(pChannel);
+      };
+    }
+  }, [canManageB2B, fetchB2BData]);
+
+  // Aggregate Partner Performance & Deliverables Progress
+  const partnerPerformance = useMemo(() => {
+    return b2bPartners.map(partner => {
+      const referredClients = clients.filter(c =>
+        c.b2b_partner_id === partner.id ||
+        (c.b2b_partner_name && c.b2b_partner_name.trim().toLowerCase() === partner.name.trim().toLowerCase())
+      );
+      const clientIds = new Set(referredClients.map(c => c.id));
+
+      const jobs = b2bJobs.filter(j => clientIds.has(j.client_id));
+      const completed = jobs.filter(j => j.status === 'completed').length;
+      const inProgress = jobs.filter(j => j.status === 'in_progress' || j.status === 'ongoing').length;
+      const pending = jobs.filter(j => j.status === 'pending' || j.status === 'under_review').length;
+      const totalRevenue = jobs.reduce((sum, j) => sum + (Number(j.amount) || 0), 0);
+
+      return {
+        ...partner,
+        referredClientsCount: referredClients.length,
+        referredClients,
+        totalJobs: jobs.length,
+        completedJobs: completed,
+        inProgressJobs: inProgress,
+        pendingJobs: pending,
+        totalRevenue
+      };
+    });
+  }, [b2bPartners, clients, b2bJobs]);
+
+  // Save New B2B Partner Handler
+  const handleSaveNewPartner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPartnerForm.name.trim() || isSavingPartner) return;
+    setIsSavingPartner(true);
+    try {
+      const payload = {
+        name: newPartnerForm.name.trim(),
+        partner_type: newPartnerForm.partner_type || 'sanad',
+        contact_person: newPartnerForm.contact_person.trim() || 'General Manager',
+        phone: newPartnerForm.phone.trim() || '+968 9000 0000',
+        email: newPartnerForm.email.trim() || null,
+        location: newPartnerForm.location.trim() || 'Muscat',
+        cr_number: newPartnerForm.cr_number.trim() || null,
+        notes: newPartnerForm.notes.trim() || null,
+      };
+      const { data, error } = await supabase.from('b2b_partners').insert([payload]).select().single();
+      if (error) throw error;
+      if (data) {
+        setB2bPartners(prev => [...prev, data]);
+        // Also auto-select in client form if registration modal is open
+        setFormData(prev => ({ ...prev, b2b_partner_id: data.id, b2b_partner_name: data.name }));
+      }
+      setIsAddPartnerModalOpen(false);
+      setNewPartnerForm({
+        name: '',
+        partner_type: 'sanad',
+        contact_person: '',
+        phone: '',
+        email: '',
+        location: 'Muscat',
+        cr_number: '',
+        notes: ''
+      });
+    } catch (err: any) {
+      alert(err.message || 'Failed to save B2B Partner');
+    } finally {
+      setIsSavingPartner(false);
+    }
+  };
+
   // ── Fetch clients (Strictly scoped to employee department) ────────────────
   const fetchClients = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -628,7 +784,7 @@ const ClientManager = () => {
       const [clientsRes, servicesRes] = await Promise.all([
         supabase
           .from('clients')
-          .select('id, company_name, cr_number, vat_number, activity, compliance_status, email, phone, created_at, assigned_employee_id, portal_access_sent, portal_sent_at, portal_user_id')
+          .select('id, company_name, cr_number, vat_number, activity, compliance_status, email, phone, created_at, assigned_employee_id, portal_access_sent, portal_sent_at, portal_user_id, b2b_partner_id, b2b_partner_name, source')
           .eq('is_archived', false)
           .order('created_at', { ascending: false }),
         supabase
@@ -711,9 +867,21 @@ const ClientManager = () => {
       compliance_status: 'Active',
       email: '',
       password: '',
-      phone: ''
+      phone: '',
+      b2b_partner_id: '',
+      b2b_partner_name: ''
     });
     setIsModalOpen(true);
+  };
+
+  const openCreateModalWithPartner = (partner: B2BPartner) => {
+    openCreateModal();
+    setFormData(prev => ({
+      ...prev,
+      b2b_partner_id: partner.id,
+      b2b_partner_name: partner.name
+    }));
+    setB2bTab('directory');
   };
 
   const openEditModal = (client: Client) => {
@@ -733,6 +901,8 @@ const ClientManager = () => {
       email: client.email || '',
       password: '',
       phone: client.phone || '',
+      b2b_partner_id: client.b2b_partner_id || '',
+      b2b_partner_name: client.b2b_partner_name || '',
     });
     setIsModalOpen(true);
   };
@@ -756,7 +926,9 @@ const ClientManager = () => {
       compliance_status: 'Active',
       email: '',
       password: '',
-      phone: ''
+      phone: '',
+      b2b_partner_id: '',
+      b2b_partner_name: ''
     });
   };
 
@@ -864,6 +1036,9 @@ const ClientManager = () => {
           compliance_status: formData.compliance_status || 'Active',
           email: formData.email?.trim() || null,
           phone: formData.phone?.trim() || null,
+          b2b_partner_id: formData.b2b_partner_id || null,
+          b2b_partner_name: formData.b2b_partner_name || null,
+          source: formData.b2b_partner_id ? 'b2b' : 'direct',
         };
         const { error } = await supabase.from('clients').update(payload).eq('id', editingClient.id);
         if (error) throw error;
@@ -932,6 +1107,9 @@ const ClientManager = () => {
           portal_access_sent: portalCreated,
           portal_sent_at: portalCreated ? new Date().toISOString() : null,
           portal_user_id: portalCreated ? finalClientId : null,
+          b2b_partner_id: formData.b2b_partner_id || null,
+          b2b_partner_name: formData.b2b_partner_name || null,
+          source: formData.b2b_partner_id ? 'b2b' : 'direct',
         };
 
         let { data: insertedClient, error: clientError } = await supabase
@@ -1082,11 +1260,18 @@ const ClientManager = () => {
   };
 
   // ── Filtered list ─────────────────────────────────────────────────────────
-  const filtered = clients.filter(c =>
-    c.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.cr_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.activity || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = clients.filter(c => {
+    const matchesSearch = c.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.cr_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.activity || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.b2b_partner_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesPartner = !selectedPartnerFilter ||
+      c.b2b_partner_id === selectedPartnerFilter ||
+      (c.b2b_partner_name && c.b2b_partner_name.toLowerCase() === selectedPartnerFilter.toLowerCase());
+
+    return matchesSearch && matchesPartner;
+  });
 
   // ── Drill-down view ───────────────────────────────────────────────────────
   if (selectedClient) {
@@ -1140,8 +1325,306 @@ const ClientManager = () => {
         </button>
       </div>
 
-      {/* Directory Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* Primary Mode Tabs (Clients Directory vs B2B Partner Network) */}
+      {canManageB2B && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-2">
+          <button
+            type="button"
+            onClick={() => {
+              setB2bTab('directory');
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              b2bTab === 'directory'
+                ? 'bg-brand-dark text-white shadow-sm shadow-brand-dark/20'
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            <Building2 size={15} />
+            <span>{isAr ? 'دليل العملاء' : 'Clients Directory'}</span>
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${b2bTab === 'directory' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>
+              {clients.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setB2bTab('b2b_network')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              b2bTab === 'b2b_network'
+                ? 'bg-indigo-700 text-white shadow-sm shadow-indigo-700/20'
+                : 'bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200'
+            }`}
+          >
+            <Users size={15} />
+            <span>{isAr ? 'شبكة شركاء B2B ومتابعة الأعمال' : 'B2B Partner Network & Works'}</span>
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${b2bTab === 'b2b_network' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'}`}>
+              {b2bPartners.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAddPartnerModalOpen(true)}
+            className="ms-auto px-3.5 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Plus size={14} />
+            <span>{isAr ? '+ إضافة شركة B2B جديدة' : '+ Add B2B Company'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Selected Partner Active Filter Banner */}
+      {selectedPartnerFilter && b2bTab === 'directory' && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-indigo-900">
+            <span>🏢</span>
+            <span>{isAr ? `تصفية العملاء المحالين من الشريك: ${b2bPartners.find(p => p.id === selectedPartnerFilter)?.name || selectedPartnerFilter}` : `Filtering clients referred by: ${b2bPartners.find(p => p.id === selectedPartnerFilter)?.name || selectedPartnerFilter}`}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedPartnerFilter(null)}
+            className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 underline cursor-pointer"
+          >
+            {isAr ? 'عرض جميع العملاء (إلغاء التصفية)' : 'Show All Clients (Clear Filter)'}
+          </button>
+        </div>
+      )}
+
+      {/* Conditional View: B2B Network vs Directory Card */}
+      {canManageB2B && b2bTab === 'b2b_network' ? (
+        <div className="space-y-6">
+          {/* Top Metrics Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xl flex-shrink-0">
+                🏢
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">
+                  {isAr ? 'شركاء الأعمال المسجلين' : 'Registered B2B Partners'}
+                </p>
+                <p className="text-2xl font-black text-gray-900 mt-0.5">{b2bPartners.length}</p>
+                <p className="text-[11px] text-indigo-600 font-semibold">{isAr ? 'مكاتب سند وشركات محاماة' : 'Sanad & Corporate Hubs'}</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xl flex-shrink-0">
+                👥
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">
+                  {isAr ? 'العملاء المحالين' : 'Total Referred Clients'}
+                </p>
+                <p className="text-2xl font-black text-gray-900 mt-0.5">
+                  {clients.filter(c => c.b2b_partner_id || c.b2b_partner_name).length}
+                </p>
+                <p className="text-[11px] text-blue-600 font-semibold">{isAr ? 'من شبكة الشركاء' : 'Via Partner Network'}</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold text-xl flex-shrink-0">
+                ⚡
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">
+                  {isAr ? 'إجمالي الأعمال والمهام' : 'Total Assigned Works'}
+                </p>
+                <p className="text-2xl font-black text-gray-900 mt-0.5">{b2bJobs.length}</p>
+                <p className="text-[11px] text-amber-600 font-semibold">
+                  {b2bJobs.filter(j => j.status === 'in_progress' || j.status === 'ongoing').length} {isAr ? 'قيد الإنجاز حالياً' : 'In Progress'}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xl flex-shrink-0">
+                ✓
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">
+                  {isAr ? 'نسبة الإنجاز والتسليم' : 'Completion Rate'}
+                </p>
+                <p className="text-2xl font-black text-gray-900 mt-0.5">
+                  {b2bJobs.length > 0
+                    ? Math.round((b2bJobs.filter(j => j.status === 'completed').length / b2bJobs.length) * 100)
+                    : 100}%
+                </p>
+                <p className="text-[11px] text-emerald-600 font-semibold">
+                  {b2bJobs.filter(j => j.status === 'completed').length} {isAr ? 'مهمة منجزة' : 'Jobs Completed'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Partners Grid */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 pb-4">
+              <div>
+                <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                  <Building2 size={18} className="text-indigo-600" />
+                  <span>{isAr ? 'سجل شركاء الأعمال ومتابعة الأعمال والعملاء' : 'B2B Partners Directory & Works Progress'}</span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {isAr
+                    ? 'تابع حجم الأعمال المستلمة من كل شريك وحالة إنجازها وجودة تقديم الخدمة لعملائهم'
+                    : 'Track the volume of works received from each partner, delivery progress, and referred client health.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddPartnerModalOpen(true)}
+                className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-sm shadow-indigo-700/20"
+              >
+                <Plus size={15} />
+                <span>{isAr ? 'إضافة شركة / مكتب جديد' : 'Add Partner Company'}</span>
+              </button>
+            </div>
+
+            {loadingB2B ? (
+              <div className="flex justify-center p-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+              </div>
+            ) : b2bPartners.length === 0 ? (
+              <div className="text-center py-16 text-gray-400 space-y-3">
+                <Building2 size={40} className="mx-auto opacity-30 text-indigo-400" />
+                <p className="text-sm font-semibold text-gray-600">
+                  {isAr ? 'لم يتم تسجيل شركات أو مكاتب B2B بعد' : 'No B2B Partners registered yet'}
+                </p>
+                <p className="text-xs text-gray-400 max-w-md mx-auto">
+                  {isAr
+                    ? 'أضف أول مكتب سند أو شركة محاماة لبدء تسجيل العملاء المحالين وتتبع تقدم أعمالهم.'
+                    : 'Register your first Sanad center or corporate partner to start tracking referred clients and works.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsAddPartnerModalOpen(true)}
+                  className="mt-2 px-5 py-2.5 bg-indigo-700 text-white rounded-xl text-xs font-bold hover:bg-indigo-800 transition cursor-pointer"
+                >
+                  {isAr ? 'إضافة أول شريك الآن' : 'Add First Partner'}
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                {partnerPerformance.map(partner => (
+                  <div
+                    key={partner.id}
+                    className="p-5 rounded-2xl border border-gray-200/90 hover:border-indigo-300 hover:shadow-md transition-all bg-gradient-to-b from-white to-gray-50/40 flex flex-col justify-between gap-4"
+                  >
+                    <div>
+                      {/* Card Header */}
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-700 flex items-center justify-center font-black text-sm flex-shrink-0">
+                            {partner.name.charAt(0)}
+                          </div>
+                          <div>
+                            <h4 className="font-black text-sm text-gray-900 line-clamp-1">{partner.name}</h4>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                {partner.partner_type === 'sanad' ? (isAr ? 'مكتب سند' : 'Sanad Center') :
+                                  partner.partner_type === 'law_firm' ? (isAr ? 'مكتب محاماة' : 'Law Firm') :
+                                    partner.partner_type === 'pro' ? (isAr ? 'تخليص معاملات' : 'PRO Office') :
+                                      (partner.partner_type || 'B2B Partner')}
+                              </span>
+                              {partner.location && (
+                                <span className="text-[10px] text-gray-400 font-medium">{partner.location}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Contact Info */}
+                      <div className="space-y-1 text-xs text-gray-600 bg-white p-3 rounded-xl border border-gray-150 mb-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 font-medium">{isAr ? 'المسؤول:' : 'Contact:'}</span>
+                          <span className="font-bold text-gray-800">{partner.contact_person || '—'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 font-medium">{isAr ? 'الهاتف:' : 'Phone:'}</span>
+                          <span className="font-bold text-gray-800 font-mono" dir="ltr">{partner.phone || '—'}</span>
+                        </div>
+                      </div>
+
+                      {/* Work & Task Health Indicator */}
+                      <div className="space-y-2 bg-indigo-50/30 p-3 rounded-xl border border-indigo-100/70">
+                        <div className="flex items-center justify-between text-xs font-bold">
+                          <span className="text-gray-700 flex items-center gap-1">
+                            <Briefcase size={13} className="text-indigo-600" />
+                            {isAr ? 'تقدم الأعمال والمهام:' : 'Works Progress:'}
+                          </span>
+                          <span className="text-indigo-900 font-mono">{partner.totalJobs} {isAr ? 'مهمة' : 'Jobs'}</span>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden flex">
+                          <div
+                            className="bg-emerald-500 h-full transition-all"
+                            style={{ width: `${partner.totalJobs > 0 ? (partner.completedJobs / partner.totalJobs) * 100 : 0}%` }}
+                            title={`${partner.completedJobs} Completed`}
+                          />
+                          <div
+                            className="bg-blue-500 h-full transition-all"
+                            style={{ width: `${partner.totalJobs > 0 ? (partner.inProgressJobs / partner.totalJobs) * 100 : 0}%` }}
+                            title={`${partner.inProgressJobs} In Progress`}
+                          />
+                          <div
+                            className="bg-amber-400 h-full transition-all"
+                            style={{ width: `${partner.totalJobs > 0 ? (partner.pendingJobs / partner.totalJobs) * 100 : 0}%` }}
+                            title={`${partner.pendingJobs} Pending`}
+                          />
+                        </div>
+
+                        {/* Pill Breakdown */}
+                        <div className="flex items-center justify-between text-[10px] font-bold pt-1">
+                          <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                            ✓ {partner.completedJobs} {isAr ? 'مكتمل' : 'Done'}
+                          </span>
+                          <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                            ⏳ {partner.inProgressJobs} {isAr ? 'قيد التنفيذ' : 'Active'}
+                          </span>
+                          <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">
+                            ⚠️ {partner.pendingJobs} {isAr ? 'معلق' : 'Pending'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="pt-3 border-t border-gray-150 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPartnerFilter(partner.id);
+                          setB2bTab('directory');
+                        }}
+                        className="flex-1 py-2 px-2.5 rounded-xl text-xs font-bold bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Users size={13} />
+                        <span>{partner.referredClientsCount} {isAr ? 'عملاء' : 'Clients'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openCreateModalWithPartner(partner)}
+                        className="py-2 px-3 rounded-xl text-xs font-bold bg-indigo-700 hover:bg-indigo-800 text-white transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
+                        title={isAr ? 'تسجيل عميل جديد من هذا الشريك' : 'Register client from this partner'}
+                      >
+                        <Plus size={14} />
+                        <span>{isAr ? 'تسجيل عميل' : 'New Client'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Directory Card */
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {/* Search bar */}
         <div className="p-4 border-b border-gray-50 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           <div className="relative flex-1 w-full sm:max-w-sm">
@@ -1197,7 +1680,15 @@ const ClientManager = () => {
                           <div className="w-9 h-9 rounded-full bg-brand-dark/10 text-brand-dark flex items-center justify-center font-bold text-sm flex-shrink-0">
                             {client.company_name.charAt(0)}
                           </div>
-                          <span className="font-semibold text-gray-800">{client.company_name}</span>
+                          <div>
+                            <span className="font-semibold text-gray-800">{client.company_name}</span>
+                            {client.b2b_partner_name && (
+                              <div className="flex items-center gap-1 mt-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded-md w-fit">
+                                <span>🏢</span>
+                                <span>{client.b2b_partner_name}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-5 py-4 text-gray-500">
@@ -1311,9 +1802,16 @@ const ClientManager = () => {
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-sm text-gray-800 truncate">{client.company_name}</p>
                       <p className="text-xs text-gray-400">{client.cr_number || '—'}</p>
-                      <span className={`mt-1 inline-block px-2 py-0.5 text-[9px] font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
-                        {client.compliance_status}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                        <span className={`inline-block px-2 py-0.5 text-[9px] font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
+                          {client.compliance_status}
+                        </span>
+                        {client.b2b_partner_name && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-150">
+                            🏢 {client.b2b_partner_name}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1395,6 +1893,7 @@ const ClientManager = () => {
           </>
         )}
       </div>
+      )}
 
       {/* Form Modal (Add/Edit) */}
       {isModalOpen && (
@@ -1512,6 +2011,52 @@ const ClientManager = () => {
                         hint={isAr ? 'نشاط السجل' : 'Business sector'}
                       />
                     </div>
+
+                    {/* B2B Partner Referral Selector (Authorized Staff & Managers) */}
+                    {canManageB2B && (
+                      <div className="bg-gradient-to-r from-indigo-50/60 to-blue-50/60 p-3.5 rounded-2xl border border-indigo-150 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                            <Building2 size={14} className="text-indigo-600" />
+                            <span>{isAr ? 'جهة الإحالة / شريك الأعمال (B2B Partner)' : 'Referral Source / B2B Partner'}</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddPartnerModalOpen(true)}
+                            className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white px-2 py-0.5 rounded-lg border border-indigo-200 flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                          >
+                            <Plus size={12} />
+                            <span>{isAr ? '+ إضافة شريك جديد' : '+ New Partner'}</span>
+                          </button>
+                        </div>
+                        <select
+                          value={formData.b2b_partner_id}
+                          onChange={e => {
+                            const selectedId = e.target.value;
+                            const found = b2bPartners.find(p => p.id === selectedId);
+                            setFormData(prev => ({
+                              ...prev,
+                              b2b_partner_id: selectedId,
+                              b2b_partner_name: found ? found.name : ''
+                            }));
+                          }}
+                          className="w-full p-2.5 bg-white border border-indigo-200 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        >
+                          <option value="">{isAr ? 'عميل مباشر (بدون وسيط أو شريك إحالة)' : 'Direct Client (No B2B Partner)'}</option>
+                          {b2bPartners.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} — ({p.partner_type === 'sanad' ? (isAr ? 'مكتب سند' : 'Sanad Center') : (p.partner_type || 'B2B Partner')})
+                            </option>
+                          ))}
+                        </select>
+                        {formData.b2b_partner_name && (
+                          <p className="text-[11px] text-indigo-700 font-medium flex items-center gap-1">
+                            <CheckCircle2 size={12} />
+                            {isAr ? `سيتم ربط العميل وسجل أعماله مع الشريك: ${formData.b2b_partner_name}` : `Client & jobs will be attributed to: ${formData.b2b_partner_name}`}
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     <div className="pt-3 border-t border-gray-150 flex items-center justify-between gap-3">
                       <button
@@ -1881,6 +2426,144 @@ const ClientManager = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add New B2B Partner Modal (For Authorized Staff & Managers) ── */}
+      {isAddPartnerModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-5 border-b border-gray-100 sticky top-0 bg-white z-10">
+              <h3 className="font-bold text-base text-gray-900 flex items-center gap-2">
+                <Building2 size={18} className="text-indigo-600" />
+                <span>{isAr ? 'تسجيل شركة أو شريك أعمال B2B جديد' : 'Register New B2B Partner Company'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAddPartnerModalOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNewPartner} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  {isAr ? 'اسم المكتب أو الشركة' : 'Partner Company Name'} <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={isAr ? 'مثال: مركز سند للخدمات - الخوير' : 'e.g. Sanad Services Center - Al Khuwair'}
+                  value={newPartnerForm.name}
+                  onChange={e => setNewPartnerForm({ ...newPartnerForm, name: e.target.value })}
+                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/10"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    {isAr ? 'نوع الشريك' : 'Partner Type'}
+                  </label>
+                  <select
+                    value={newPartnerForm.partner_type}
+                    onChange={e => setNewPartnerForm({ ...newPartnerForm, partner_type: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                  >
+                    <option value="sanad">{isAr ? 'مكتب سند للخدمات' : 'Sanad Service Center'}</option>
+                    <option value="law_firm">{isAr ? 'مكتب محاماة واستشارات قانونية' : 'Law Firm / Legal Advocacy'}</option>
+                    <option value="pro">{isAr ? 'مكتب تخليص معاملات (PRO)' : 'PRO / Typing Center'}</option>
+                    <option value="agent">{isAr ? 'وكيل أعمال ومستشار مستقل' : 'Corporate Agent / Consultant'}</option>
+                    <option value="company">{isAr ? 'شركة أو مؤسسة شريكة' : 'Corporate Partner'}</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    {isAr ? 'المدينة / الفرع' : 'Location / Branch'}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Muscat / Seeb"
+                    value={newPartnerForm.location}
+                    onChange={e => setNewPartnerForm({ ...newPartnerForm, location: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    {isAr ? 'اسم الشخص المسؤول' : 'Contact Person'}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={isAr ? 'مدير المكتب' : 'Managing Director'}
+                    value={newPartnerForm.contact_person}
+                    onChange={e => setNewPartnerForm({ ...newPartnerForm, contact_person: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    {isAr ? 'رقم الهاتف / الواتساب' : 'Phone / WhatsApp'} <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="+968 9000 0000"
+                    value={newPartnerForm.phone}
+                    onChange={e => setNewPartnerForm({ ...newPartnerForm, phone: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  {isAr ? 'ملاحظات الشراكة ونسبة الإحالة (اختياري)' : 'Partnership Notes & Terms (Optional)'}
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder={isAr ? 'تفاصيل الاتفاقية أو نوع العملاء المحالين...' : 'Referral notes or preferred services...'}
+                  value={newPartnerForm.notes}
+                  onChange={e => setNewPartnerForm({ ...newPartnerForm, notes: e.target.value })}
+                  className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-indigo-600 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-150">
+                <button
+                  type="button"
+                  onClick={() => setIsAddPartnerModalOpen(false)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingPartner || !newPartnerForm.name.trim()}
+                  className="px-5 py-2 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm shadow-indigo-700/20 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingPartner ? (
+                    <>
+                      <RefreshCw size={13} className="animate-spin" />
+                      <span>{isAr ? 'جاري الحفظ...' : 'Saving...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      <span>{isAr ? 'تسجيل وحفظ الشريك' : 'Save Partner'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

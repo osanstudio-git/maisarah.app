@@ -1254,6 +1254,15 @@ const EmployeeManagement = () => {
       descAr: 'التحكم الإداري الكامل والرقابة المالية وتشغيل النظام',
       icon: '⭐',
       badgeColor: 'bg-slate-900 text-white border-slate-700'
+    },
+    {
+      id: 'b2b_coordinator',
+      nameEn: 'B2B Partner Coordinator',
+      nameAr: 'مسؤول شركاء الأعمال (B2B)',
+      descEn: 'Register external B2B companies (Sanad, Law firms), link incoming clients, and track partner job progress & volume',
+      descAr: 'صلاحية تسجيل وإدارة شركات وشركاء B2B ومكاتب سند، وربط العملاء ومتابعة تقدم إنجاز أعمالهم',
+      icon: '🏢',
+      badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200'
     }
   ];
 
@@ -2294,6 +2303,7 @@ const EmployeeManagement = () => {
                         { id: 'department_head', labelEn: '👑 HOD Leadership', labelAr: '👑 رئيس قسم' },
                         { id: 'crm', labelEn: '🤝 CRM Portal', labelAr: '🤝 علاقات العملاء' },
                         { id: 'sales', labelEn: '🎯 Field Sales', labelAr: '🎯 المبيعات الميدانية' },
+                        { id: 'b2b_coordinator', labelEn: '🏢 B2B Partner Coordinator', labelAr: '🏢 مسؤول شركاء B2B' },
                         { id: 'hr', labelEn: '📋 HR Manager', labelAr: '📋 الموارد البشرية' },
                         { id: 'manager', labelEn: '🏛️ Executive Manager', labelAr: '🏛️ المدير التنفيذي' }
                       ].map(sec => {
@@ -3205,10 +3215,12 @@ const EmployeeManagement = () => {
                               <span key={sec} className="bg-red-50 text-[#A11212] border border-red-200 text-[10px] font-black px-2 py-0.5 rounded-lg uppercase">
                                 {sec === 'accountant' ? (isAr ? '💼 محاسب' : '💼 Accountant') :
                                   sec === 'crm' ? (isAr ? '🤝 علاقات العملاء' : '🤝 CRM') :
-                                    sec === 'department_head' ? (isAr ? '👑 رئيس قسم' : '👑 HOD') :
-                                      sec === 'hr' ? (isAr ? '📋 موارد بشرية' : '📋 HR') :
-                                        sec === 'manager' ? (isAr ? '🏛️ إدارة تنفيذية' : '🏛️ Management') :
-                                          (isAr ? '👤 موظف' : '👤 Staff')}
+                                    sec === 'b2b_coordinator' ? (isAr ? '🏢 منسق B2B' : '🏢 B2B Coordinator') :
+                                      sec === 'sales' ? (isAr ? '🎯 مبيعات' : '🎯 Sales') :
+                                        sec === 'department_head' ? (isAr ? '👑 رئيس قسم' : '👑 HOD') :
+                                          sec === 'hr' ? (isAr ? '📋 موارد بشرية' : '📋 HR') :
+                                            sec === 'manager' ? (isAr ? '🏛️ إدارة تنفيذية' : '🏛️ Management') :
+                                              (isAr ? '👤 موظف' : '👤 Staff')}
                               </span>
                             ))
                           ) : (

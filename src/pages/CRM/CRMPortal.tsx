@@ -22,6 +22,7 @@ import CRMB2BPartners from '../../components/crm/CRMB2BPartners';
 import ModernCRMDashboard from '../../components/crm/ModernCRMDashboard';
 import type { B2BPartner } from '../../components/crm/CRMB2BPartners';
 import { addDSREntry } from '../../utils/dsrSync';
+import { normalizeDepartmentId } from '../../utils/departmentScoping';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 
 // --- Types & Interfaces ---
@@ -125,14 +126,24 @@ const DEPT_STAFF_FALLBACK: Record<string, string> = {
 
 const DEFAULT_STAFF = [
   { id: '2b71648c-86a0-454a-8c46-ad0a69cf8664', name: 'Ali Al-Harthy', dept: 'Audit' },
-  { id: 'e8fbb851-713d-473a-83f3-dd1da4aa81b4', name: 'Afrah Khan', dept: 'Tax & VAT' },
-  { id: 'emp_04', name: 'Zahra Al-Lawati', dept: 'Bookkeeping' },
-  { id: 'emp_05', name: 'Dr. Salim Al-Maskari', dept: 'Business Advisory' }
+  { id: 'e8fbb851-713d-473a-83f3-dd1da4aa81b4', name: 'Afrah Khan', dept: 'Tax & VAT' }
 ];
 
 const MOCK_EMPLOYEES = DEFAULT_STAFF;
 
-const DEPARTMENTS = ['Tax & VAT', 'Audit', 'Bookkeeping', 'Business Advisory'];
+const DEPARTMENTS = [
+  'Tax & VAT',
+  'Audit',
+  'Bookkeeping',
+  'Income Tax',
+  'Business Advisory',
+  'Liquidation & Legal'
+];
+
+const isValidUUID = (str?: string | null): boolean => {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+};
 
 export default function CRMPortal() {
   const { i18n } = useTranslation();
@@ -605,8 +616,14 @@ export default function CRMPortal() {
   const [comboSetup, setComboSetup] = useState({
     overallManager: DEFAULT_STAFF[0].name,
     services: ['Tax & VAT'] as string[],
-    delegation: { 'Tax & VAT': DEFAULT_STAFF[1].name } as Record<string, string>
+    delegation: { 'Tax & VAT': DEFAULT_STAFF[1]?.name || DEFAULT_STAFF[0].name } as Record<string, string>,
+    prices: { 'Tax & VAT': 120 } as Record<string, number>,
+    cycles: { 'Tax & VAT': 'quarterly' } as Record<string, string>,
+    deadlines: { 'Tax & VAT': new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0] } as Record<string, string>,
+    notes: {} as Record<string, string>
   });
+  const [isSavingCombo, setIsSavingCombo] = useState(false);
+  const [comboSuccessMsg, setComboSuccessMsg] = useState<string | null>(null);
 
   // --- Export & Approval States ---
   const [isVpSignedOff, setIsVpSignedOff] = useState(false);
@@ -1531,21 +1548,120 @@ export default function CRMPortal() {
     }
   };
 
-  // --- Update Combo Work Settings ---
-  const handleUpdateCombo = (e: React.FormEvent) => {
+  // --- Update Combo Work Settings (Real Database & Real-Time Sync) ---
+  const handleUpdateCombo = async (e: React.FormEvent) => {
     e.preventDefault();
-    setClients(prevClients => prevClients.map(c => {
-      if (c.id === selectedClientForCombo) {
-        return {
-          ...c,
-          overallManager: comboSetup.overallManager,
-          servicesPackage: comboSetup.services,
-          delegatedServices: comboSetup.delegation
-        };
+    if (!selectedClientForCombo) {
+      alert(isAr ? 'يرجى اختيار العميل أولاً' : 'Please select an active client first');
+      return;
+    }
+
+    const targetClient = clients.find(c => c.id === selectedClientForCombo);
+    if (!targetClient) return;
+
+    setIsSavingCombo(true);
+    try {
+      const clientName = targetClient.companyName || targetClient.name;
+
+      // 1. Find overall manager profile ID if available
+      const managerStaff = staffList.find(s => s.name === comboSetup.overallManager);
+      if (managerStaff?.id && isValidUUID(managerStaff.id)) {
+        await supabase
+          .from('clients')
+          .update({
+            assigned_employee_id: managerStaff.id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', selectedClientForCombo);
       }
-      return c;
-    }));
-    alert('Combo account assignments updated successfully!');
+
+      // 2. Loop through each active department/service and save real tasks & services
+      for (const dept of comboSetup.services) {
+        const assigneeName = comboSetup.delegation[dept];
+        const assignedStaff = staffList.find(s => s.name === assigneeName) || staffList[0];
+        const assignedId = assignedStaff?.id && isValidUUID(assignedStaff.id) ? assignedStaff.id : null;
+        const price = Number(comboSetup.prices[dept]) || 0;
+        const cycle = comboSetup.cycles[dept] || 'monthly';
+        const deadline = comboSetup.deadlines[dept] || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+        const notes = comboSetup.notes[dept] || `${dept} deliverable for ${clientName}`;
+
+        // Insert / Update in client_jobs
+        const { error: jobErr } = await supabase
+          .from('client_jobs')
+          .insert([{
+            client_id: selectedClientForCombo,
+            service_type: dept,
+            billing_type: cycle,
+            status: 'in_progress',
+            assigned_employee: assignedId,
+            amount: price,
+            vat_amount: +(price * 0.05).toFixed(3),
+            description: notes,
+            deadline: deadline
+          }]);
+
+        if (jobErr) console.warn('client_jobs insert notice:', jobErr.message);
+
+        // Insert / Update in services table for employee workspace scoping
+        await supabase.from('services').insert([{
+          title: `${dept} - ${clientName}`,
+          description: notes,
+          client_id: selectedClientForCombo,
+          employee_id: assignedId,
+          department_id: normalizeDepartmentId(dept),
+          due_date: deadline,
+          status: 'ongoing'
+        }]);
+
+        // Send targeted real-time notification to assigned staff
+        if (assignedId) {
+          try {
+            await supabase.from('notifications').insert([{
+              recipient_id: assignedId,
+              user_id: assignedId,
+              recipient_role: 'employee',
+              role: 'employee',
+              type: 'job_assigned',
+              title: isAr ? 'تكليف بمهمة جديدة من CRM' : 'New Task Assigned from CRM',
+              message: isAr
+                ? `تم تكليفك رسمياً بخدمة (${dept}) للعميل "${clientName}". الأتعاب المتفق عليها: OMR ${price}. الموعد النهائي: ${deadline}.`
+                : `You have been assigned (${dept}) for client "${clientName}". Agreed Fee: OMR ${price}. Deadline: ${deadline}.`,
+              ref_id: selectedClientForCombo,
+              ref_table: 'clients'
+            }]);
+          } catch (notifErr) {
+            console.warn('Notification insert notice:', notifErr);
+          }
+        }
+      }
+
+      // Update local state
+      setClients(prevClients => prevClients.map(c => {
+        if (c.id === selectedClientForCombo) {
+          return {
+            ...c,
+            overallManager: comboSetup.overallManager,
+            servicesPackage: comboSetup.services,
+            delegatedServices: comboSetup.delegation
+          };
+        }
+        return c;
+      }));
+
+      setComboSuccessMsg(
+        isAr
+          ? `تم حفظ التعيينات والأتعاب بنجاح في قاعدة البيانات وتنبيه الموظفين في الوقت الفعلي!`
+          : `Tasks, custom pricing, and staff assignments saved to database & notified in real-time!`
+      );
+
+      fetchAll(false);
+      setTimeout(() => setComboSuccessMsg(null), 5000);
+
+    } catch (err: any) {
+      alert(err.message || 'Error updating assignments');
+    } finally {
+      setIsSavingCombo(false);
+    }
   };
 
   // --- Approve Quotation (Supabase) ---
@@ -1941,12 +2057,35 @@ export default function CRMPortal() {
                         )}
                       </td>
                       <td className="p-4 text-center">
-                        <button
-                          onClick={() => setSelectedClientForHistory(client)}
-                          className="bg-gray-50 border border-gray-200 hover:border-[#A11212] hover:text-[#A11212] text-gray-600 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl transition-all"
-                        >
-                          View Logs
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setSelectedClientForCombo(client.id);
+                              setComboSetup({
+                                overallManager: client.overallManager || (staffList[0]?.name || ''),
+                                services: client.servicesPackage && client.servicesPackage.length > 0 ? client.servicesPackage : ['Tax & VAT'],
+                                delegation: client.delegatedServices || {},
+                                prices: {},
+                                cycles: {},
+                                deadlines: {},
+                                notes: {}
+                              });
+                              setActiveTab('combo_work');
+                            }}
+                            className="bg-red-50 hover:bg-brand-dark hover:text-white border border-red-200 text-brand-dark text-[10px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1"
+                            title={isAr ? 'تعيين مهام وموظفي الأقسام' : 'Assign Department Tasks'}
+                          >
+                            <Briefcase size={12} />
+                            <span>{isAr ? 'تعيين المهام' : 'Assign Tasks'}</span>
+                          </button>
+
+                          <button
+                            onClick={() => setSelectedClientForHistory(client)}
+                            className="bg-gray-50 border border-gray-200 hover:border-[#A11212] hover:text-[#A11212] text-gray-600 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl transition-all"
+                          >
+                            View Logs
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1962,14 +2101,29 @@ export default function CRMPortal() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left panel: Account Configuration Form */}
           <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
-            <div>
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">Multi-Department Combo Account Settings</h3>
-              <p className="text-xs text-gray-500 font-bold">Configure client account owners and assign specialized personnel for multi-departmental services</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">
+                  {isAr ? 'إدارة مهام وتكليفات الأقسام المتعددة' : 'Multi-Department Client Tasks & Staff Assignment'}
+                </h3>
+                <p className="text-xs text-gray-500 font-bold">
+                  {isAr ? 'تعيين موظفي الأقسام وتحديد أتعاب مرنة وحقيقية لكل خدمة مع التنبيه الفوري' : 'Assign specialized department staff, custom negotiated fees, and real-time alerts'}
+                </p>
+              </div>
+
+              {comboSuccessMsg && (
+                <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-2xl text-xs font-black flex items-center gap-1.5 shadow-xs">
+                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                  <span>{comboSuccessMsg}</span>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleUpdateCombo} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Select Active Client</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                  {isAr ? 'اختر العميل النشط *' : 'Select Active Client *'}
+                </label>
                 <select
                   value={selectedClientForCombo}
                   onChange={(e) => {
@@ -1978,14 +2132,19 @@ export default function CRMPortal() {
                     const targetClient = clients.find(c => c.id === cId);
                     if (targetClient) {
                       setComboSetup({
-                        overallManager: targetClient.overallManager,
-                        services: targetClient.servicesPackage,
-                        delegation: targetClient.delegatedServices || {}
+                        overallManager: targetClient.overallManager || (staffList[0]?.name || ''),
+                        services: targetClient.servicesPackage && targetClient.servicesPackage.length > 0 ? targetClient.servicesPackage : ['Tax & VAT'],
+                        delegation: targetClient.delegatedServices || {},
+                        prices: {},
+                        cycles: {},
+                        deadlines: {},
+                        notes: {}
                       });
                     }
                   }}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212]"
                 >
+                  <option value="">{isAr ? '-- اختر العميل --' : '-- Select Client --'}</option>
                   {clients.map(c => (
                     <option key={c.id} value={c.id}>{c.companyName || c.name} ({c.type})</option>
                   ))}
@@ -1995,23 +2154,29 @@ export default function CRMPortal() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Account Lead Owner */}
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Overall Account Owner</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'المدير المشرف العام على الحساب' : 'Overall Account Supervisor'}
+                  </label>
                   <select
                     value={comboSetup.overallManager}
                     onChange={(e) => setComboSetup({ ...comboSetup, overallManager: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-[#A11212]"
                   >
-                    {MOCK_EMPLOYEES.map(emp => (
+                    {staffList.map(emp => (
                       <option key={emp.id} value={emp.name}>{emp.name} ({emp.dept})</option>
                     ))}
                   </select>
-                  <p className="text-[9px] text-gray-400 mt-1 font-bold">Account Owner oversees client correspondence across all services.</p>
+                  <p className="text-[9px] text-gray-400 mt-1 font-bold">
+                    {isAr ? 'المسؤول الرئيسي عن متابعة متطلبات العميل عبر الأقسام.' : 'Supervises overall client deliverables and client communication.'}
+                  </p>
                 </div>
 
                 {/* Sub services checkboxes */}
                 <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Active Service Departments</label>
-                  <div className="space-y-2 mt-1.5">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+                    {isAr ? 'الأقسام والخدمات المطلوبة' : 'Active Service Departments'}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 mt-1.5 max-h-36 overflow-y-auto p-2 bg-gray-50 rounded-xl border border-gray-200">
                     {DEPARTMENTS.map(dept => {
                       const active = comboSetup.services.includes(dept);
                       return (
@@ -2026,8 +2191,8 @@ export default function CRMPortal() {
 
                               if (checked) {
                                 nextServices.push(dept);
-                                const defaultEmp = MOCK_EMPLOYEES.find(emp => emp.dept === dept) || MOCK_EMPLOYEES[0];
-                                nextDelegation[dept] = defaultEmp.name;
+                                const defaultEmp = staffList.find(emp => emp.dept.toLowerCase().includes(dept.toLowerCase())) || staffList[0];
+                                nextDelegation[dept] = defaultEmp ? defaultEmp.name : '';
                               } else {
                                 nextServices = nextServices.filter(s => s !== dept);
                                 delete nextDelegation[dept];
@@ -2041,7 +2206,7 @@ export default function CRMPortal() {
                             }}
                             className="w-4 h-4 rounded text-[#A11212] accent-[#A11212]"
                           />
-                          <span>{dept}</span>
+                          <span className="truncate">{dept}</span>
                         </label>
                       );
                     })}
@@ -2052,40 +2217,163 @@ export default function CRMPortal() {
               {/* Department Personnel Delegation grid */}
               {comboSetup.services.length > 0 && (
                 <div className="border-t border-gray-100 pt-4 space-y-3">
-                  <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">Departmental Resource Assignment</h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] font-black text-[#A11212] uppercase tracking-wider">
+                      {isAr ? 'تكليف الموظفين وتحديد الأتعاب المرنة لكل قسم' : 'Staff Delegation & Flexible Department Pricing'}
+                    </h4>
+                    <span className="text-[10px] font-bold text-gray-400">
+                      {isAr ? 'أتعاب حقيقية مخصصة بدون أسعار ثابتة' : 'Custom negotiated fee per service'}
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {comboSetup.services.map(dept => (
-                      <div key={dept} className="bg-gray-50 p-4 rounded-xl border border-gray-150 space-y-2">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest">{dept} Assignee</label>
-                        <select
-                          value={comboSetup.delegation[dept] || ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setComboSetup(prev => ({
-                              ...prev,
-                              delegation: {
-                                ...prev.delegation,
-                                [dept]: val
-                              }
-                            }));
-                          }}
-                          className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
-                        >
-                          {MOCK_EMPLOYEES.filter(emp => emp.dept === dept || dept === 'Tax & VAT').map(emp => (
-                            <option key={emp.id} value={emp.name}>{emp.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    ))}
+                    {comboSetup.services.map(dept => {
+                      const assignedVal = comboSetup.delegation[dept] || '';
+                      const priceVal = comboSetup.prices[dept] !== undefined ? comboSetup.prices[dept] : 120;
+                      const cycleVal = comboSetup.cycles[dept] || 'monthly';
+                      const deadlineVal = comboSetup.deadlines[dept] || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+                      const notesVal = comboSetup.notes[dept] || '';
+
+                      return (
+                        <div key={dept} className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200 space-y-3 shadow-xs">
+                          <div className="flex items-center justify-between border-b border-gray-200/60 pb-2">
+                            <span className="text-xs font-black text-gray-900">{dept}</span>
+                            <span className="text-[9px] font-black uppercase bg-red-50 text-[#A11212] border border-red-100 px-2 py-0.5 rounded-md">
+                              Active Task
+                            </span>
+                          </div>
+
+                          {/* Staff Assignee */}
+                          <div>
+                            <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                              {isAr ? 'الموظف المسؤول المكلّف' : 'Assigned Staff Specialist'}
+                            </label>
+                            <select
+                              value={assignedVal}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setComboSetup(prev => ({
+                                  ...prev,
+                                  delegation: { ...prev.delegation, [dept]: val }
+                                }));
+                              }}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                            >
+                              <option value="">{isAr ? '-- اختر الموظف --' : '-- Select Employee --'}</option>
+                              {staffList.map(emp => (
+                                <option key={emp.id} value={emp.name}>{emp.name} ({emp.dept})</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Custom Price & Billing Frequency */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                {isAr ? 'الأتعاب المتفق عليها (OMR)' : 'Agreed Fee (OMR)'}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="5"
+                                value={priceVal}
+                                onChange={(e) => {
+                                  const num = Number(e.target.value) || 0;
+                                  setComboSetup(prev => ({
+                                    ...prev,
+                                    prices: { ...prev.prices, [dept]: num }
+                                  }));
+                                }}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono font-bold outline-none focus:border-[#A11212]"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                {isAr ? 'دورة الفوترة' : 'Billing Cycle'}
+                              </label>
+                              <select
+                                value={cycleVal}
+                                onChange={(e) => {
+                                  const c = e.target.value;
+                                  setComboSetup(prev => ({
+                                    ...prev,
+                                    cycles: { ...prev.cycles, [dept]: c }
+                                  }));
+                                }}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                              >
+                                <option value="one_time">{isAr ? 'دفعة واحدة' : 'One-Time'}</option>
+                                <option value="monthly">{isAr ? 'شهرياً' : 'Monthly'}</option>
+                                <option value="quarterly">{isAr ? 'ربع سنوي' : 'Quarterly'}</option>
+                                <option value="yearly">{isAr ? 'سنوياً' : 'Yearly'}</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Deadline & Work Scope */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                {isAr ? 'الموعد النهائي' : 'Target Deadline'}
+                              </label>
+                              <input
+                                type="date"
+                                value={deadlineVal}
+                                onChange={(e) => {
+                                  const d = e.target.value;
+                                  setComboSetup(prev => ({
+                                    ...prev,
+                                    deadlines: { ...prev.deadlines, [dept]: d }
+                                  }));
+                                }}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                {isAr ? 'نطاق العمل / ملاحظة' : 'Work Scope / Note'}
+                              </label>
+                              <input
+                                type="text"
+                                placeholder={isAr ? 'تفاصيل المهمة...' : 'Deliverable scope...'}
+                                value={notesVal}
+                                onChange={(e) => {
+                                  const t = e.target.value;
+                                  setComboSetup(prev => ({
+                                    ...prev,
+                                    notes: { ...prev.notes, [dept]: t }
+                                  }));
+                                }}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-medium outline-none focus:border-[#A11212]"
+                              />
+                            </div>
+                          </div>
+
+                          <p className="text-[9px] text-gray-400 font-bold">
+                            +5% VAT: OMR {(priceVal * 0.05).toFixed(3)} • Total: OMR {(priceVal * 1.05).toFixed(3)}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
               <button
                 type="submit"
-                className="w-full bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider py-3.5 rounded-xl transition-all"
+                disabled={isSavingCombo}
+                className="w-full bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider py-4 rounded-xl transition-all shadow-md shadow-[#A11212]/20 flex items-center justify-center gap-2 cursor-pointer"
               >
-                Save Account Structure
+                {isSavingCombo ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Check size={16} />
+                    <span>{isAr ? 'حفظ وتوزيع المهام على الموظفين فوراً' : 'Save & Dispatch Tasks to Staff in Real-Time'}</span>
+                  </>
+                )}
               </button>
 
             </form>

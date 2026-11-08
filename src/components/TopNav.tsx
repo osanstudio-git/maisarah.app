@@ -132,8 +132,8 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
     try {
       setLoadingNotifs(true);
       const orCondition = role 
-        ? `recipient_id.eq.${user.id},recipient_role.eq.${role}`
-        : `recipient_id.eq.${user.id}`;
+        ? `recipient_id.eq.${user.id},user_id.eq.${user.id},recipient_role.eq.${role},role.eq.${role}`
+        : `recipient_id.eq.${user.id},user_id.eq.${user.id}`;
 
       const { data, error } = await supabase
         .from('notifications')
@@ -165,9 +165,11 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
         { event: '*', schema: 'public', table: 'notifications' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            const newNotif = payload.new as AppNotification;
-            if (newNotif.recipient_id === user.id || newNotif.recipient_role === role) {
-              setNotifications(prev => [newNotif, ...prev.filter(n => n.id !== newNotif.id)]);
+            const newNotif = payload.new as any;
+            const matchUser = newNotif.recipient_id === user.id || newNotif.user_id === user.id;
+            const matchRole = (newNotif.recipient_role && newNotif.recipient_role === role) || (newNotif.role && newNotif.role === role);
+            if (matchUser || matchRole) {
+              setNotifications(prev => [newNotif as AppNotification, ...prev.filter(n => n.id !== newNotif.id)]);
             }
           } else {
             fetchNotifications();
@@ -197,7 +199,7 @@ const TopNav = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
         await supabase
           .from('notifications')
           .update({ is_read: true })
-          .or(role ? `recipient_id.eq.${user.id},recipient_role.eq.${role}` : `recipient_id.eq.${user.id}`);
+          .or(role ? `recipient_id.eq.${user.id},user_id.eq.${user.id},recipient_role.eq.${role},role.eq.${role}` : `recipient_id.eq.${user.id},user_id.eq.${user.id}`);
       }
     } catch { }
   };
