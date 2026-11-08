@@ -412,9 +412,8 @@ const FormField = ({
         </div>
       </div>
       {statusMessage && (
-        <p className={`text-[11px] font-bold mt-1 flex items-center gap-1 ${
-          status === 'duplicate' ? 'text-rose-600' : status === 'valid' ? 'text-emerald-600' : 'text-gray-500'
-        }`}>
+        <p className={`text-[11px] font-bold mt-1 flex items-center gap-1 ${status === 'duplicate' ? 'text-rose-600' : status === 'valid' ? 'text-emerald-600' : 'text-gray-500'
+          }`}>
           {status === 'duplicate' && <AlertCircle size={12} />}
           {status === 'valid' && <CheckCircle2 size={12} />}
           {statusMessage}
@@ -1333,11 +1332,10 @@ const ClientManager = () => {
             onClick={() => {
               setB2bTab('directory');
             }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              b2bTab === 'directory'
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${b2bTab === 'directory'
                 ? 'bg-brand-dark text-white shadow-sm shadow-brand-dark/20'
                 : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-            }`}
+              }`}
           >
             <Building2 size={15} />
             <span>{isAr ? 'دليل العملاء' : 'Clients Directory'}</span>
@@ -1349,11 +1347,10 @@ const ClientManager = () => {
           <button
             type="button"
             onClick={() => setB2bTab('b2b_network')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              b2bTab === 'b2b_network'
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${b2bTab === 'b2b_network'
                 ? 'bg-indigo-700 text-white shadow-sm shadow-indigo-700/20'
                 : 'bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200'
-            }`}
+              }`}
           >
             <Users size={15} />
             <span>{isAr ? 'شبكة شركاء B2B ومتابعة الأعمال' : 'B2B Partner Network & Works'}</span>
@@ -1625,91 +1622,111 @@ const ClientManager = () => {
       ) : (
         /* Directory Card */
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        {/* Search bar */}
-        <div className="p-4 border-b border-gray-50 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-          <div className="relative flex-1 w-full sm:max-w-sm">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
-            <input
-              type="text"
-              placeholder={t('employee.searchClients')}
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full ps-9 pe-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none
+          {/* Search bar */}
+          <div className="p-4 border-b border-gray-50 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <div className="relative flex-1 w-full sm:max-w-sm">
+              <Search className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
+              <input
+                type="text"
+                placeholder={t('employee.searchClients')}
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full ps-9 pe-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none
                 focus:border-red-700 focus:ring-2 focus:ring-red-700/10 bg-gray-50 transition"
-            />
+              />
+            </div>
+            {searchTerm && (
+              <span className="text-xs text-gray-500 font-medium">
+                {filtered.length} {isAr ? 'نتيجة' : 'result(s)'}
+              </span>
+            )}
           </div>
-          {searchTerm && (
-            <span className="text-xs text-gray-500 font-medium">
-              {filtered.length} {isAr ? 'نتيجة' : 'result(s)'}
-            </span>
-          )}
-        </div>
 
-        {/* Table — Desktop */}
-        {loading ? (
-          <div className="flex justify-center p-14">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark" />
-          </div>
-        ) : (
-          <>
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-                  <tr>
-                    <th className="px-5 py-3 text-start">{t('employee.companyName')}</th>
-                    <th className="px-5 py-3 text-start">{t('employee.crNumber')}</th>
-                    <th className="px-5 py-3 text-start">{t('employee.vatNumber')}</th>
-                    <th className="px-5 py-3 text-start">{t('employee.activity')}</th>
-                    <th className="px-5 py-3 text-start">{t('employee.status')}</th>
-                    <th className="px-5 py-3 text-start">{isAr ? 'بوابة العميل' : 'Portal Access'}</th>
-                    <th className="px-5 py-3 text-start"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filtered.length === 0 ? (
+          {/* Table — Desktop */}
+          {loading ? (
+            <div className="flex justify-center p-14">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark" />
+            </div>
+          ) : (
+            <>
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
                     <tr>
-                      <td colSpan={7} className="text-center py-12 text-gray-400">
-                        <Building2 size={32} className="mx-auto mb-2 opacity-30" />
-                        <p className="text-sm">{t('employee.noClientsFound')}</p>
-                      </td>
+                      <th className="px-5 py-3 text-start">{t('employee.companyName')}</th>
+                      <th className="px-5 py-3 text-start">{t('employee.crNumber')}</th>
+                      <th className="px-5 py-3 text-start">{t('employee.vatNumber')}</th>
+                      <th className="px-5 py-3 text-start">{t('employee.activity')}</th>
+                      <th className="px-5 py-3 text-start">{t('employee.status')}</th>
+                      <th className="px-5 py-3 text-start">{isAr ? 'بوابة العميل' : 'Portal Access'}</th>
+                      <th className="px-5 py-3 text-start"></th>
                     </tr>
-                  ) : filtered.map(client => (
-                    <tr key={client.id} className="hover:bg-gray-50/70 transition-colors">
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-brand-dark/10 text-brand-dark flex items-center justify-center font-bold text-sm flex-shrink-0">
-                            {client.company_name.charAt(0)}
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filtered.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="text-center py-12 text-gray-400">
+                          <Building2 size={32} className="mx-auto mb-2 opacity-30" />
+                          <p className="text-sm">{t('employee.noClientsFound')}</p>
+                        </td>
+                      </tr>
+                    ) : filtered.map(client => (
+                      <tr key={client.id} className="hover:bg-gray-50/70 transition-colors">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-brand-dark/10 text-brand-dark flex items-center justify-center font-bold text-sm flex-shrink-0">
+                              {client.company_name.charAt(0)}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-gray-800">{client.company_name}</span>
+                              {client.b2b_partner_name && (
+                                <div className="flex items-center gap-1 mt-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded-md w-fit">
+                                  <span>🏢</span>
+                                  <span>{client.b2b_partner_name}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <span className="font-semibold text-gray-800">{client.company_name}</span>
-                            {client.b2b_partner_name && (
-                              <div className="flex items-center gap-1 mt-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded-md w-fit">
-                                <span>🏢</span>
-                                <span>{client.b2b_partner_name}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 text-gray-500">
-                        <span className="flex items-center gap-1"><Hash size={12} />{client.cr_number || '—'}</span>
-                      </td>
-                      <td className="px-5 py-4 text-gray-500">
-                        <span className="flex items-center gap-1"><Percent size={12} />{client.vat_number || '—'}</span>
-                      </td>
-                      <td className="px-5 py-4 text-gray-500 max-w-[140px] truncate">{client.activity || '—'}</td>
-                      <td className="px-5 py-4">
-                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
-                          {client.compliance_status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        {client.portal_access_sent || client.email ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                              <CheckCircle2 size={11} className="text-emerald-600" />
-                              {isAr ? 'مفعل' : 'Active'}
-                            </span>
+                        </td>
+                        <td className="px-5 py-4 text-gray-500">
+                          <span className="flex items-center gap-1"><Hash size={12} />{client.cr_number || '—'}</span>
+                        </td>
+                        <td className="px-5 py-4 text-gray-500">
+                          <span className="flex items-center gap-1"><Percent size={12} />{client.vat_number || '—'}</span>
+                        </td>
+                        <td className="px-5 py-4 text-gray-500 max-w-[140px] truncate">{client.activity || '—'}</td>
+                        <td className="px-5 py-4">
+                          <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
+                            {client.compliance_status}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          {client.portal_access_sent || client.email ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                <CheckCircle2 size={11} className="text-emerald-600" />
+                                {isAr ? 'مفعل' : 'Active'}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  setPortalTarget({
+                                    id: client.id,
+                                    type: 'client',
+                                    name: client.company_name,
+                                    companyName: client.company_name,
+                                    email: client.email || '',
+                                    phone: client.phone,
+                                    portalAccessSent: true
+                                  });
+                                  setIsPortalModalOpen(true);
+                                }}
+                                title={isAr ? 'عرض أو إعادة إرسال بيانات الدخول' : 'View or Resend Portal Credentials'}
+                                className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <RefreshCw size={12} />
+                              </button>
+                            </div>
+                          ) : (
                             <button
                               onClick={() => {
                                 setPortalTarget({
@@ -1719,18 +1736,93 @@ const ClientManager = () => {
                                   companyName: client.company_name,
                                   email: client.email || '',
                                   phone: client.phone,
-                                  portalAccessSent: true
+                                  portalAccessSent: false
                                 });
                                 setIsPortalModalOpen(true);
                               }}
-                              title={isAr ? 'عرض أو إعادة إرسال بيانات الدخول' : 'View or Resend Portal Credentials'}
-                              className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                              className="px-2.5 py-1 text-[10px] font-bold rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer active:scale-95"
                             >
-                              <RefreshCw size={12} />
+                              <KeyRound size={11} className="text-amber-600" />
+                              <span>{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => { setSelectedClient(client); }}
+                              title={isAr ? 'عرض الخدمات والفواتير' : 'View Services & Invoices'}
+                              className="p-2 text-gray-400 hover:text-brand-dark hover:bg-red-50 rounded-xl transition-colors"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              onClick={() => { setSelectedClient(client); }}
+                              title={isAr ? 'الملف الشخصي' : 'Client Profile'}
+                              className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors"
+                            >
+                              <UserCircle2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => openEditModal(client)}
+                              title={isAr ? 'تعديل' : 'Edit'}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => setClientToDelete(client)}
+                              title={isAr ? 'حذف' : 'Delete'}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                            >
+                              <Trash2 size={16} />
                             </button>
                           </div>
-                        ) : (
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card List */}
+              <div className="md:hidden divide-y divide-gray-50">
+                {filtered.map(client => (
+                  <div
+                    key={client.id}
+                    className="w-full p-4 hover:bg-gray-50/50 transition-colors text-start flex flex-col gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-brand-dark/10 text-brand-dark flex items-center justify-center font-bold flex-shrink-0">
+                        {client.company_name.charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm text-gray-800 truncate">{client.company_name}</p>
+                        <p className="text-xs text-gray-400">{client.cr_number || '—'}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                          <span className={`inline-block px-2 py-0.5 text-[9px] font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
+                            {client.compliance_status}
+                          </span>
+                          {client.b2b_partner_name && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-150">
+                              🏢 {client.b2b_partner_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Mobile Portal Access Status */}
+                    <div className="flex items-center justify-between text-xs px-1 bg-gray-50/70 p-2 rounded-xl">
+                      <span className="text-gray-500 font-semibold text-[11px]">{isAr ? 'بوابة العميل:' : 'Client Portal:'}</span>
+                      {client.portal_access_sent || client.email ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                            <CheckCircle2 size={11} className="text-emerald-600" />
+                            {isAr ? 'مفعل' : 'Active'}
+                          </span>
                           <button
+                            type="button"
                             onClick={() => {
                               setPortalTarget({
                                 id: client.id,
@@ -1739,91 +1831,16 @@ const ClientManager = () => {
                                 companyName: client.company_name,
                                 email: client.email || '',
                                 phone: client.phone,
-                                portalAccessSent: false
+                                portalAccessSent: true
                               });
                               setIsPortalModalOpen(true);
                             }}
-                            className="px-2.5 py-1 text-[10px] font-bold rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer active:scale-95"
+                            className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                           >
-                            <KeyRound size={11} className="text-amber-600" />
-                            <span>{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => { setSelectedClient(client); }}
-                            title={isAr ? 'عرض الخدمات والفواتير' : 'View Services & Invoices'}
-                            className="p-2 text-gray-400 hover:text-brand-dark hover:bg-red-50 rounded-xl transition-colors"
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <button
-                            onClick={() => { setSelectedClient(client); }}
-                            title={isAr ? 'الملف الشخصي' : 'Client Profile'}
-                            className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors"
-                          >
-                            <UserCircle2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => openEditModal(client)}
-                            title={isAr ? 'تعديل' : 'Edit'}
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            onClick={() => setClientToDelete(client)}
-                            title={isAr ? 'حذف' : 'Delete'}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-                          >
-                            <Trash2 size={16} />
+                            <RefreshCw size={12} />
                           </button>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile Card List */}
-            <div className="md:hidden divide-y divide-gray-50">
-              {filtered.map(client => (
-                <div
-                  key={client.id}
-                  className="w-full p-4 hover:bg-gray-50/50 transition-colors text-start flex flex-col gap-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-brand-dark/10 text-brand-dark flex items-center justify-center font-bold flex-shrink-0">
-                      {client.company_name.charAt(0)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm text-gray-800 truncate">{client.company_name}</p>
-                      <p className="text-xs text-gray-400">{client.cr_number || '—'}</p>
-                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                        <span className={`inline-block px-2 py-0.5 text-[9px] font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
-                          {client.compliance_status}
-                        </span>
-                        {client.b2b_partner_name && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-150">
-                            🏢 {client.b2b_partner_name}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Mobile Portal Access Status */}
-                  <div className="flex items-center justify-between text-xs px-1 bg-gray-50/70 p-2 rounded-xl">
-                    <span className="text-gray-500 font-semibold text-[11px]">{isAr ? 'بوابة العميل:' : 'Client Portal:'}</span>
-                    {client.portal_access_sent || client.email ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                          <CheckCircle2 size={11} className="text-emerald-600" />
-                          {isAr ? 'مفعل' : 'Active'}
-                        </span>
+                      ) : (
                         <button
                           type="button"
                           onClick={() => {
@@ -1834,65 +1851,45 @@ const ClientManager = () => {
                               companyName: client.company_name,
                               email: client.email || '',
                               phone: client.phone,
-                              portalAccessSent: true
+                              portalAccessSent: false
                             });
                             setIsPortalModalOpen(true);
                           }}
-                          className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                          className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer"
                         >
-                          <RefreshCw size={12} />
+                          <KeyRound size={11} className="text-amber-600" />
+                          <span>{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPortalTarget({
-                            id: client.id,
-                            type: 'client',
-                            name: client.company_name,
-                            companyName: client.company_name,
-                            email: client.email || '',
-                            phone: client.phone,
-                            portalAccessSent: false
-                          });
-                          setIsPortalModalOpen(true);
-                        }}
-                        className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer"
-                      >
-                        <KeyRound size={11} className="text-amber-600" />
-                        <span>{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
-                      </button>
-                    )}
-                  </div>
+                      )}
+                    </div>
 
-                  {/* Mobile Actions */}
-                  <div className="flex items-center gap-2 border-t border-gray-100 pt-3 mt-1">
-                    <button
-                      onClick={() => setSelectedClient(client)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 hover:text-brand-dark rounded-xl transition-colors shadow-sm"
-                    >
-                      <Eye size={14} /> {isAr ? 'عرض' : 'View'}
-                    </button>
-                    <button
-                      onClick={() => openEditModal(client)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors shadow-sm"
-                    >
-                      <Edit size={14} /> {isAr ? 'تعديل' : 'Edit'}
-                    </button>
-                    <button
-                      onClick={() => setClientToDelete(client)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors shadow-sm"
-                    >
-                      <Trash2 size={14} /> {isAr ? 'حذف' : 'Delete'}
-                    </button>
+                    {/* Mobile Actions */}
+                    <div className="flex items-center gap-2 border-t border-gray-100 pt-3 mt-1">
+                      <button
+                        onClick={() => setSelectedClient(client)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 hover:text-brand-dark rounded-xl transition-colors shadow-sm"
+                      >
+                        <Eye size={14} /> {isAr ? 'عرض' : 'View'}
+                      </button>
+                      <button
+                        onClick={() => openEditModal(client)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors shadow-sm"
+                      >
+                        <Edit size={14} /> {isAr ? 'تعديل' : 'Edit'}
+                      </button>
+                      <button
+                        onClick={() => setClientToDelete(client)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors shadow-sm"
+                      >
+                        <Trash2 size={14} /> {isAr ? 'حذف' : 'Delete'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* Form Modal (Add/Edit) */}
@@ -1919,11 +1916,10 @@ const ClientManager = () => {
                 <button
                   type="button"
                   onClick={() => setRegistrationStep(1)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    registrationStep === 1
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${registrationStep === 1
                       ? 'bg-brand-dark text-white shadow-xs'
                       : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-                  }`}
+                    }`}
                 >
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${registrationStep === 1 ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>1</span>
                   <span>{isAr ? 'البيانات الأساسية (إلزامي)' : 'Step 1: Mandatory Info'}</span>
@@ -1932,11 +1928,10 @@ const ClientManager = () => {
                 <button
                   type="button"
                   onClick={handleProceedToStep2}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    registrationStep === 2
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${registrationStep === 2
                       ? 'bg-brand-dark text-white shadow-xs'
                       : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-                  }`}
+                    }`}
                 >
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${registrationStep === 2 ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>2</span>
                   <span>{isAr ? 'الإعدادات والمهام (اختياري)' : 'Step 2: Optional Setup'}</span>
