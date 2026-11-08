@@ -337,11 +337,11 @@ const ClientDetail = ({
 };
 
 // ---------------------------------------------------------------------------
-// Sub-component: Form Field Helper
+// Sub-component: Form Field Helper with Live Validation Feedback
 // ---------------------------------------------------------------------------
 const FormField = ({
   label, name, required = false, type = 'text', placeholder = '', value, onChange, autoComplete = 'off',
-  maxLength, inputMode, hint, isMono = false
+  maxLength, inputMode, hint, isMono = false, status = 'idle', statusMessage, rightElement
 }: {
   label: string; name: string; required?: boolean; type?: string; placeholder?: string;
   value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -350,28 +350,57 @@ const FormField = ({
   inputMode?: 'numeric' | 'text' | 'tel' | 'email' | 'url' | 'search' | 'decimal';
   hint?: string;
   isMono?: boolean;
-}) => (
-  <div>
-    <div className="flex items-center justify-between mb-1.5">
-      <label className="block text-sm font-semibold text-gray-700">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      {hint && <span className="text-[11px] text-gray-400 font-mono font-medium">{hint}</span>}
+  status?: 'idle' | 'checking' | 'valid' | 'duplicate';
+  statusMessage?: string;
+  rightElement?: React.ReactNode;
+}) => {
+  let borderColor = 'border-gray-200 focus:border-red-700 focus:ring-red-700/10';
+  if (status === 'valid') {
+    borderColor = 'border-emerald-400 focus:border-emerald-600 focus:ring-emerald-500/20 bg-emerald-50/20';
+  } else if (status === 'duplicate') {
+    borderColor = 'border-rose-400 focus:border-rose-600 focus:ring-rose-500/20 bg-rose-50/20';
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="block text-sm font-semibold text-gray-700">
+          {label} {required && <span className="text-red-500">*</span>}
+        </label>
+        {hint && <span className="text-[11px] text-gray-400 font-mono font-medium">{hint}</span>}
+      </div>
+      <div className="relative">
+        <input
+          type={type}
+          name={name}
+          required={required}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          maxLength={maxLength}
+          inputMode={inputMode}
+          className={`w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 transition-colors bg-white ${borderColor} ${isMono ? 'font-mono' : ''} ${status !== 'idle' || rightElement ? 'pe-9' : ''}`}
+        />
+        <div className="absolute inset-y-0 end-3 flex items-center pointer-events-none">
+          {status === 'checking' && <RefreshCw size={15} className="animate-spin text-gray-400" />}
+          {status === 'valid' && <CheckCircle2 size={16} className="text-emerald-600" />}
+          {status === 'duplicate' && <AlertTriangle size={16} className="text-rose-600" />}
+          {rightElement}
+        </div>
+      </div>
+      {statusMessage && (
+        <p className={`text-[11px] font-bold mt-1 flex items-center gap-1 ${
+          status === 'duplicate' ? 'text-rose-600' : status === 'valid' ? 'text-emerald-600' : 'text-gray-500'
+        }`}>
+          {status === 'duplicate' && <AlertCircle size={12} />}
+          {status === 'valid' && <CheckCircle2 size={12} />}
+          {statusMessage}
+        </p>
+      )}
     </div>
-    <input
-      type={type}
-      name={name}
-      required={required}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      autoComplete={autoComplete}
-      maxLength={maxLength}
-      inputMode={inputMode}
-      className={`w-full p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-700 focus:ring-2 focus:ring-red-700/10 transition-colors bg-white ${isMono ? 'font-mono' : ''}`}
-    />
-  </div>
-);
+  );
+};
 
 const generateUUID = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -408,6 +437,16 @@ const ClientManager = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [registrationStep, setRegistrationStep] = useState<1 | 2>(1);
+  const [crValidation, setCrValidation] = useState<{
+    status: 'idle' | 'checking' | 'valid' | 'duplicate';
+    message?: string;
+    existingClientName?: string;
+  }>({ status: 'idle' });
+  const [nameValidation, setNameValidation] = useState<{
+    status: 'idle' | 'checking' | 'valid' | 'duplicate';
+    message?: string;
+  }>({ status: 'idle' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -478,10 +517,113 @@ const ClientManager = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // ── Instant Duplicate CR Check (Debounced 250ms) ───────────────────────────
+  useEffect(() => {
+    const cr = formData.cr_number?.trim();
+    if (!isModalOpen || !cr) {
+      setCrValidation({ status: 'idle' });
+      return;
+    }
+
+    if (cr.length < 7) {
+      setCrValidation({
+        status: 'idle',
+        message: isAr ? `${cr.length}/7 أرقام مطلوبة` : `${cr.length}/7 digits required`
+      });
+      return;
+    }
+
+    if (cr.length === 7) {
+      setCrValidation({ status: 'checking' });
+      const timer = setTimeout(async () => {
+        // Fast local client check
+        const localMatch = clients.find(c => c.cr_number === cr && c.id !== editingClient?.id);
+        if (localMatch) {
+          setCrValidation({
+            status: 'duplicate',
+            message: isAr ? `مسجل لشركة: ${localMatch.company_name}` : `Registered to: ${localMatch.company_name}`,
+            existingClientName: localMatch.company_name
+          });
+          return;
+        }
+
+        // Live Supabase DB check
+        try {
+          let q = supabase.from('clients').select('id, company_name').eq('cr_number', cr);
+          if (editingClient?.id) q = q.neq('id', editingClient.id);
+          const { data } = await q.maybeSingle();
+
+          if (data) {
+            setCrValidation({
+              status: 'duplicate',
+              message: isAr ? `مسجل مسبقاً لدى: ${data.company_name}` : `Already registered to: ${data.company_name}`,
+              existingClientName: data.company_name
+            });
+          } else {
+            setCrValidation({
+              status: 'valid',
+              message: isAr ? 'رقم سجل تجاري صحيح ومتاح ✓' : 'Valid & unique 7-digit CR ✓'
+            });
+          }
+        } catch {
+          setCrValidation({ status: 'valid' });
+        }
+      }, 250);
+
+      return () => clearTimeout(timer);
+    }
+  }, [formData.cr_number, isModalOpen, editingClient?.id, clients, isAr]);
+
+  // ── Instant Duplicate Company Name Check (Debounced 300ms) ──────────────────
+  useEffect(() => {
+    const name = formData.company_name?.trim();
+    if (!isModalOpen || !name || name.length < 3) {
+      setNameValidation({ status: 'idle' });
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      // Fast local match
+      const localMatch = clients.find(
+        c => c.company_name.trim().toLowerCase() === name.toLowerCase() && c.id !== editingClient?.id
+      );
+      if (localMatch) {
+        setNameValidation({
+          status: 'duplicate',
+          message: isAr ? 'اسم الشركة مسجل مسبقاً' : 'Company name already registered'
+        });
+        return;
+      }
+
+      // Live Supabase check
+      try {
+        let q = supabase.from('clients').select('id, company_name').ilike('company_name', name);
+        if (editingClient?.id) q = q.neq('id', editingClient.id);
+        const { data } = await q.maybeSingle();
+
+        if (data) {
+          setNameValidation({
+            status: 'duplicate',
+            message: isAr ? 'يوجد عميل مسجل بهذا الاسم' : 'Client with this name already exists'
+          });
+        } else {
+          setNameValidation({
+            status: 'valid',
+            message: isAr ? 'اسم شركة متاح ✓' : 'Unique company name ✓'
+          });
+        }
+      } catch {
+        setNameValidation({ status: 'idle' });
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [formData.company_name, isModalOpen, editingClient?.id, clients, isAr]);
+
 
   // ── Fetch clients (Strictly scoped to employee department) ────────────────
-  const fetchClients = useCallback(async () => {
-    setLoading(true);
+  const fetchClients = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const [clientsRes, servicesRes] = await Promise.all([
         supabase
@@ -530,13 +672,58 @@ const ClientManager = () => {
     }
   }, [isManager, user?.id, effectiveDeptId]);
 
-  useEffect(() => { fetchClients(); }, [fetchClients]);
+  useEffect(() => {
+    fetchClients();
+
+    // Supabase Realtime Channel for instant team synchronization
+    const channel = supabase
+      .channel('clients-realtime-feed')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clients' },
+        () => {
+          fetchClients(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchClients]);
 
   // ── Modals / Form State ───────────────────────────────────────────────────
-  const openEditModal = (client: Client) => {
-    setEditingClient(client);
+  const openCreateModal = () => {
+    setEditingClient(null);
+    setRegistrationStep(1);
+    setCrValidation({ status: 'idle' });
+    setNameValidation({ status: 'idle' });
     setCreatePortalAccount(false);
     setShowPassword(false);
+    setFormMsg(null);
+    setCreateInitialTask(true);
+    setInitialTaskTitle('');
+    setFormData({
+      company_name: '',
+      cr_number: '',
+      vat_number: '',
+      activity: '',
+      compliance_status: 'Active',
+      email: '',
+      password: '',
+      phone: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (client: Client) => {
+    setEditingClient(client);
+    setRegistrationStep(1);
+    setCrValidation({ status: 'idle' });
+    setNameValidation({ status: 'idle' });
+    setCreatePortalAccount(false);
+    setShowPassword(false);
+    setFormMsg(null);
     setFormData({
       company_name: client.company_name,
       cr_number: client.cr_number || '',
@@ -553,6 +740,9 @@ const ClientManager = () => {
   const closeFormModal = () => {
     setIsModalOpen(false);
     setEditingClient(null);
+    setRegistrationStep(1);
+    setCrValidation({ status: 'idle' });
+    setNameValidation({ status: 'idle' });
     setCreatePortalAccount(false);
     setShowPassword(false);
     setFormMsg(null);
@@ -570,25 +760,101 @@ const ClientManager = () => {
     });
   };
 
+  // Step 1 Validation -> Proceed to Step 2
+  const handleProceedToStep2 = () => {
+    setFormMsg(null);
+    const trimmedName = formData.company_name?.trim();
+    if (!trimmedName) {
+      setFormMsg({ type: 'err', text: isAr ? 'يرجى إدخال اسم العميل أو اسم الشركة' : 'Company or client name is required' });
+      return;
+    }
+    const trimmedCR = formData.cr_number?.trim();
+    if (!trimmedCR || trimmedCR.length !== 7) {
+      setFormMsg({
+        type: 'err',
+        text: isAr ? 'رقم السجل التجاري (CR) إلزامي ويجب أن يتكون من 7 أرقام' : 'CR Number is required and must be strictly 7 digits'
+      });
+      return;
+    }
+    if (crValidation.status === 'duplicate') {
+      setFormMsg({
+        type: 'err',
+        text: isAr ? `رقم السجل التجاري مسجل مسبقاً (${crValidation.existingClientName || ''})` : `CR Number is already registered (${crValidation.existingClientName || ''})`
+      });
+      return;
+    }
+    if (!formData.phone?.trim()) {
+      setFormMsg({
+        type: 'err',
+        text: isAr ? 'يرجى إدخال رقم هاتف أو واتساب العميل' : 'Contact phone or WhatsApp is required'
+      });
+      return;
+    }
+    if (!formData.activity?.trim()) {
+      setFormMsg({
+        type: 'err',
+        text: isAr ? 'يرجى تحديد النشاط التجاري للعميل' : 'Primary business activity is required'
+      });
+      return;
+    }
+
+    setRegistrationStep(2);
+  };
+
   // ── Submit (Add / Edit) ───────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-    setIsSubmitting(true);
     setFormMsg(null);
 
+    const trimmedName = formData.company_name?.trim();
+    if (!trimmedName) {
+      setFormMsg({ type: 'err', text: isAr ? 'يرجى إدخال اسم العميل أو اسم الشركة' : 'Company or client name is required' });
+      setRegistrationStep(1);
+      return;
+    }
+
+    const trimmedCR = formData.cr_number?.trim();
+    if (!trimmedCR || trimmedCR.length !== 7) {
+      setFormMsg({
+        type: 'err',
+        text: isAr ? 'رقم السجل التجاري (CR) إلزامي ويجب أن يتكون من 7 أرقام' : 'CR Number is required and must be strictly 7 digits'
+      });
+      setRegistrationStep(1);
+      return;
+    }
+
+    if (crValidation.status === 'duplicate') {
+      setFormMsg({
+        type: 'err',
+        text: isAr ? `رقم السجل التجاري مسجل مسبقاً (${crValidation.existingClientName || ''})` : `CR Number is already registered (${crValidation.existingClientName || ''})`
+      });
+      setRegistrationStep(1);
+      return;
+    }
+
+    if (!formData.phone?.trim()) {
+      setFormMsg({
+        type: 'err',
+        text: isAr ? 'يرجى إدخال رقم هاتف أو واتساب العميل' : 'Contact phone or WhatsApp is required'
+      });
+      setRegistrationStep(1);
+      return;
+    }
+
+    if (!formData.activity?.trim()) {
+      setFormMsg({
+        type: 'err',
+        text: isAr ? 'يرجى تحديد النشاط التجاري للعميل' : 'Primary business activity is required'
+      });
+      setRegistrationStep(1);
+      return;
+    }
+
+    setIsSubmitting(true);
     let createdTicket = null;
 
     try {
-      const trimmedCR = formData.cr_number?.trim() || '';
-      if (trimmedCR && trimmedCR.length !== 7) {
-        throw new Error(
-          isAr
-            ? 'رقم السجل التجاري (CR) يجب أن يتكون من 7 أرقام بالضبط (مثال: 1234567)'
-            : 'CR Number must be exactly 7 digits (e.g. 1234567)'
-        );
-      }
-
       if (editingClient) {
         const payload: any = {
           company_name: formData.company_name.trim(),
@@ -604,10 +870,6 @@ const ClientManager = () => {
         setFormMsg({ type: 'ok', text: isAr ? 'تم تحديث بيانات العميل بنجاح' : 'Client updated successfully' });
         setTimeout(() => closeFormModal(), 800);
       } else {
-        if (!formData.company_name.trim()) {
-          throw new Error(isAr ? 'يرجى إدخال اسم العميل أو اسم الشركة' : 'Company or client name is required');
-        }
-
         let finalClientId: string;
         let portalCreated = false;
 
@@ -869,9 +1131,9 @@ const ClientManager = () => {
           </p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={openCreateModal}
           className="flex items-center gap-2 px-5 py-2.5 bg-brand-dark text-white rounded-xl
-            hover:bg-red-800 transition-colors text-sm font-bold shadow-sm shadow-brand-dark/20"
+            hover:bg-red-800 transition-colors text-sm font-bold shadow-sm shadow-brand-dark/20 cursor-pointer"
         >
           <Plus size={18} />
           {t('employee.registerNewClient')}
@@ -1146,10 +1408,47 @@ const ClientManager = () => {
               </h3>
               <button
                 onClick={closeFormModal}
-                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
               >
                 <X size={20} />
               </button>
+            </div>
+
+            {/* Step Wizard Progress Bar */}
+            <div className="flex items-center justify-between border-b border-gray-150 px-6 py-3 bg-gray-50/70">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRegistrationStep(1)}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    registrationStep === 1
+                      ? 'bg-brand-dark text-white shadow-xs'
+                      : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${registrationStep === 1 ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>1</span>
+                  <span>{isAr ? 'البيانات الأساسية (إلزامي)' : 'Step 1: Mandatory Info'}</span>
+                </button>
+                <ChevronRight size={14} className="text-gray-300 rtl:rotate-180" />
+                <button
+                  type="button"
+                  onClick={handleProceedToStep2}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    registrationStep === 2
+                      ? 'bg-brand-dark text-white shadow-xs'
+                      : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${registrationStep === 2 ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>2</span>
+                  <span>{isAr ? 'الإعدادات والمهام (اختياري)' : 'Step 2: Optional Setup'}</span>
+                </button>
+              </div>
+
+              <span className="text-[11px] font-black uppercase tracking-wider text-gray-400">
+                {registrationStep === 1
+                  ? (isAr ? 'الخطوة ١ من ٢' : 'Step 1 of 2')
+                  : (isAr ? 'الخطوة ٢ من ٢' : 'Step 2 of 2')}
+              </span>
             </div>
 
             {/* Modal Body */}
@@ -1157,205 +1456,243 @@ const ClientManager = () => {
               {formMsg && (
                 <div className={`p-3 text-sm rounded-xl flex items-center gap-2 border ${formMsg.type === 'ok' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
                   {formMsg.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-                  {formMsg.text}
+                  <span className="font-semibold text-xs">{formMsg.text}</span>
                 </div>
               )}
 
               <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
-                <FormField
-                  label={t('employee.companyName')}
-                  name="company_name"
-                  value={formData.company_name}
-                  onChange={handleInputChange}
-                  required
-                  autoComplete="off"
-                  placeholder={isAr ? 'شركة الموالح للإنشاء' : 'Al Mawaleh Construction LLC'}
-                />
+                {/* STEP 1: Mandatory Information */}
+                {registrationStep === 1 && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <FormField
+                      label={t('employee.companyName')}
+                      name="company_name"
+                      value={formData.company_name}
+                      onChange={handleInputChange}
+                      required
+                      autoComplete="off"
+                      placeholder={isAr ? 'شركة الموالح للإنشاء' : 'Al Mawaleh Construction LLC'}
+                      status={nameValidation.status}
+                      statusMessage={nameValidation.message}
+                    />
 
-                {/* Company Contact Details (Email & Phone are purely contact info, never autofilled with staff user credentials) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    label={isAr ? 'البريد الإلكتروني للعميل (اختياري)' : 'Client Email (Optional)'}
-                    name="client_contact_email"
-                    type="email"
-                    autoComplete="off"
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    required={false}
-                    placeholder="info@company.com"
-                  />
-                  <FormField
-                    label={isAr ? 'رقم الواتساب / الهاتف (اختياري)' : 'WhatsApp / Phone Number (Optional)'}
-                    name="client_contact_phone"
-                    autoComplete="off"
-                    value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+968 0000 0000"
-                  />
-                </div>
+                    <FormField
+                      label={isAr ? 'رقم السجل التجاري (7 أرقام بالضبط)' : 'CR Number (Strictly 7 digits)'}
+                      name="cr_number"
+                      value={formData.cr_number}
+                      onChange={handleInputChange}
+                      required
+                      placeholder="1234567"
+                      maxLength={7}
+                      inputMode="numeric"
+                      isMono={true}
+                      hint={formData.cr_number ? `${formData.cr_number.length}/7` : '7 digits required'}
+                      status={crValidation.status}
+                      statusMessage={crValidation.message}
+                    />
 
-                {!editingClient && (
-                  <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200/80 space-y-3">
-                    <label className="flex items-start gap-3 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={createPortalAccount}
-                        onChange={e => {
-                          setCreatePortalAccount(e.target.checked);
-                          if (!e.target.checked) {
-                            setFormData(prev => ({ ...prev, password: '' }));
-                          }
-                        }}
-                        className="mt-0.5 w-4 h-4 rounded text-brand-dark focus:ring-brand-dark/20 border-gray-300 cursor-pointer"
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        label={isAr ? 'رقم الهاتف / الواتساب' : 'Contact Phone / WhatsApp'}
+                        name="phone"
+                        required
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        placeholder="+968 9000 0000"
+                        hint={isAr ? 'للتواصل السريع' : 'Primary contact'}
                       />
-                      <div>
-                        <p className="text-xs font-black text-gray-800">
-                          {isAr ? 'تفعيل حساب دخول لبوابة العملاء (اختياري)' : 'Enable Client Portal Login Account (Optional)'}
-                        </p>
-                        <p className="text-[11px] text-gray-500 font-medium">
-                          {isAr ? 'اتركه معطلاً لتسجيل عميل مباشر/أوفلاين بدون حساب دخول الآن. يمكن إرسال بيانات الدخول لاحقاً بضغطة زر.' : 'Leave unchecked for offline/direct clients. You can issue access credentials anytime later.'}
-                        </p>
-                      </div>
-                    </label>
 
-                    {createPortalAccount && (
-                      <div className="pt-2 border-t border-gray-200/70 space-y-3">
-                        <div className="relative">
-                          <FormField
-                            label={isAr ? 'كلمة المرور لحساب البوابة (6 خانات على الأقل)' : 'Portal Password (Min 6 chars)'}
-                            name="portal_secret_password"
-                            type={showPassword ? 'text' : 'password'}
-                            autoComplete="new-password"
-                            required={createPortalAccount}
-                            value={formData.password}
-                            onChange={e => setFormData({ ...formData, password: e.target.value })}
-                            placeholder={isAr ? 'أدخل كلمة مرور قوية للعميل...' : 'Enter client portal password...'}
+                      <FormField
+                        label={t('employee.activity')}
+                        name="activity"
+                        required
+                        value={formData.activity}
+                        onChange={handleInputChange}
+                        placeholder={isAr ? 'الإنشاء والمقاولات' : 'Construction & Contracting'}
+                        hint={isAr ? 'نشاط السجل' : 'Business sector'}
+                      />
+                    </div>
+
+                    <div className="pt-3 border-t border-gray-150 flex items-center justify-between gap-3">
+                      <button
+                        type="submit"
+                        disabled={isSubmitting || crValidation.status === 'duplicate'}
+                        className="py-3 px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <CheckCircle2 size={16} />
+                        <span>{editingClient ? (isAr ? 'حفظ التعديلات مباشرة' : 'Save Changes Directly') : (isAr ? 'تسجيل مباشر (البيانات الإلزامية فقط)' : 'Register Directly (Step 1 Only)')}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleProceedToStep2}
+                        className="py-3 px-6 bg-brand-dark hover:bg-red-800 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-2 shadow-xs cursor-pointer ms-auto"
+                      >
+                        <span>{isAr ? 'متابعة إلى الخطوة ٢ (اختياري)' : 'Continue to Step 2 (Optional)'}</span>
+                        <ArrowRight size={15} className="rtl:rotate-180" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* STEP 2: Optional Setup & Deliverables */}
+                {registrationStep === 2 && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        label={t('employee.vatNumber')}
+                        name="vat_number"
+                        value={formData.vat_number}
+                        onChange={handleInputChange}
+                        placeholder="OM123456789"
+                        hint={isAr ? 'الرقم الضريبي (اختياري)' : 'Tax ID (Optional)'}
+                      />
+
+                      <FormField
+                        label={isAr ? 'البريد الإلكتروني للعميل' : 'Client Email'}
+                        name="email"
+                        type="email"
+                        autoComplete="off"
+                        value={formData.email}
+                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                        required={false}
+                        placeholder="info@company.com"
+                        hint={isAr ? 'للفواتير والمراسلات' : 'For billing & reports'}
+                      />
+                    </div>
+
+                    {/* Compliance Status */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-sm font-semibold text-gray-700">
+                          {isAr ? 'حالة الامتثال القانوني والضريبي' : 'Compliance Status'}
+                        </label>
+                        <span className="text-[11px] text-gray-400">
+                          {isAr ? 'الوضع النظامي للعميل' : 'Regulatory Standing'}
+                        </span>
+                      </div>
+                      <select
+                        value={formData.compliance_status}
+                        onChange={e => setFormData({ ...formData, compliance_status: e.target.value })}
+                        className="w-full p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-700 focus:ring-2 focus:ring-red-700/10 bg-white transition font-medium"
+                      >
+                        <option value="Active">{isAr ? 'نشط (Active) - مستوفٍ للشروط والوثائق' : 'Active (Fully Compliant)'}</option>
+                        <option value="Pending">{isAr ? 'قيد المراجعة (Pending) - متطلبات أو تجديد معلق' : 'Pending (Under Review / Renewal Required)'}</option>
+                        <option value="Suspended">{isAr ? 'موقوف (Suspended) - غير ممتثل أو مجمد' : 'Suspended (Non-compliant / Frozen)'}</option>
+                      </select>
+                    </div>
+
+                    {/* Client Portal Account Access */}
+                    {!editingClient && (
+                      <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200/80 space-y-3">
+                        <label className="flex items-start gap-3 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={createPortalAccount}
+                            onChange={e => {
+                              setCreatePortalAccount(e.target.checked);
+                              if (!e.target.checked) {
+                                setFormData(prev => ({ ...prev, password: '' }));
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 rounded text-brand-dark focus:ring-brand-dark/20 border-gray-300 cursor-pointer"
                           />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className={`absolute ${isAr ? 'left-3' : 'right-3'} top-9 text-gray-400 hover:text-brand-dark transition-colors cursor-pointer`}
-                          >
-                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                          </button>
-                        </div>
+                          <div>
+                            <p className="text-xs font-black text-gray-800">
+                              {isAr ? 'تفعيل حساب دخول لبوابة العملاء' : 'Enable Client Portal Login Account'}
+                            </p>
+                            <p className="text-[11px] text-gray-500 font-medium">
+                              {isAr ? 'اتركه معطلاً لتسجيل عميل مباشر/أوفلاين بدون حساب دخول الآن. يمكن إرسال بيانات الدخول لاحقاً بضغطة زر.' : 'Leave unchecked for offline/direct clients. You can issue access credentials anytime later.'}
+                            </p>
+                          </div>
+                        </label>
+
+                        {createPortalAccount && (
+                          <div className="pt-2 border-t border-gray-200/70 space-y-3">
+                            <div className="relative">
+                              <FormField
+                                label={isAr ? 'كلمة المرور لحساب البوابة (6 خانات على الأقل)' : 'Portal Password (Min 6 chars)'}
+                                name="portal_secret_password"
+                                type={showPassword ? 'text' : 'password'}
+                                autoComplete="new-password"
+                                required={createPortalAccount}
+                                value={formData.password}
+                                onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                placeholder={isAr ? 'أدخل كلمة مرور قوية للعميل...' : 'Enter client portal password...'}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className={`absolute ${isAr ? 'left-3' : 'right-3'} top-9 text-gray-400 hover:text-brand-dark transition-colors cursor-pointer`}
+                              >
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    label={isAr ? 'رقم السجل التجاري (7 أرقام)' : 'CR Number (7 digits)'}
-                    name="cr_number"
-                    value={formData.cr_number}
-                    onChange={handleInputChange}
-                    placeholder="1234567"
-                    maxLength={7}
-                    inputMode="numeric"
-                    isMono={true}
-                    hint={formData.cr_number ? `${formData.cr_number.length}/7` : '7 digits'}
-                  />
-                  <FormField
-                    label={t('employee.vatNumber')}
-                    name="vat_number"
-                    value={formData.vat_number}
-                    onChange={handleInputChange}
-                    placeholder="OM123456789"
-                  />
-                </div>
-
-                <FormField
-                  label={t('employee.activity')}
-                  name="activity"
-                  value={formData.activity}
-                  onChange={handleInputChange}
-                  placeholder={isAr ? 'الإنشاء والمقاولات' : 'Construction & Contracting'}
-                />
-
-                {/* Compliance Status */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-sm font-semibold text-gray-700">
-                      {isAr ? 'حالة الامتثال القانوني والضريبي' : 'Compliance Status'}
-                    </label>
-                    <span className="text-[11px] text-gray-400">
-                      {isAr ? 'الوضع النظامي للعميل' : 'Regulatory Standing'}
-                    </span>
-                  </div>
-                  <select
-                    value={formData.compliance_status}
-                    onChange={e => setFormData({ ...formData, compliance_status: e.target.value })}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm outline-none
-                      focus:border-red-700 focus:ring-2 focus:ring-red-700/10 bg-white transition font-medium"
-                  >
-                    <option value="Active">{isAr ? 'نشط (Active) - مستوفٍ للشروط والوثائق' : 'Active (Fully Compliant)'}</option>
-                    <option value="Pending">{isAr ? 'قيد المراجعة (Pending) - متطلبات أو تجديد معلق' : 'Pending (Under Review / Renewal Required)'}</option>
-                    <option value="Suspended">{isAr ? 'موقوف (Suspended) - غير ممتثل أو مجمد' : 'Suspended (Non-compliant / Frozen)'}</option>
-                  </select>
-                  <p className="text-[10px] text-gray-500 mt-1">
-                    {isAr
-                      ? 'يوضح التزام العميل بالتراخيص، السجل التجاري، والإقرارات الضريبية لدى الجهات الرسمية.'
-                      : 'Reflects the company\'s legal, commercial registration, and tax filing standing with official authorities.'}
-                  </p>
-                </div>
-
-                {/* Direct Deliverable Assignment */}
-                {!editingClient && (
-                  <div className="p-4 bg-red-50/60 rounded-xl border border-red-100 space-y-2">
-                    <label className="flex items-center gap-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={createInitialTask}
-                        onChange={e => setCreateInitialTask(e.target.checked)}
-                        className="rounded text-brand-dark focus:ring-brand-dark h-4 w-4"
-                      />
-                      <span className="text-xs font-bold text-gray-800">
-                        {isAr ? 'تعيين مهمة عمل أولى للعميل في قسمك فوراً' : 'Assign initial service deliverable immediately in your department'}
-                      </span>
-                    </label>
-                    {createInitialTask && (
-                      <div className="pt-1.5 space-y-1">
-                        <input
-                          type="text"
-                          value={initialTaskTitle}
-                          onChange={e => setInitialTaskTitle(e.target.value)}
-                          placeholder={isAr ? `مثال: ${currentDeptConfig?.name_ar || 'التدقيق والامتثال'} 2026` : `e.g. ${currentDeptConfig?.name || 'Audit & Compliance'} Deliverable`}
-                          className="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:border-brand-dark outline-none font-medium"
-                        />
-                        <p className="text-[10px] text-gray-500">
-                          {isAr
-                            ? 'سيتم إدراج المهمة تلقائياً في جدول خدماتك وسجل DSR لربط التحصيل والفوترة.'
-                            : 'This deliverable will be linked automatically to your services and DSR register for payment & billing.'}
-                        </p>
+                    {/* Direct Deliverable Assignment */}
+                    {!editingClient && (
+                      <div className="p-4 bg-red-50/60 rounded-xl border border-red-100 space-y-2">
+                        <label className="flex items-center gap-2.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={createInitialTask}
+                            onChange={e => setCreateInitialTask(e.target.checked)}
+                            className="rounded text-brand-dark focus:ring-brand-dark h-4 w-4 cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-gray-800">
+                            {isAr ? 'تعيين مهمة عمل أولى للعميل في قسمك فوراً' : 'Assign initial service deliverable immediately in your department'}
+                          </span>
+                        </label>
+                        {createInitialTask && (
+                          <div className="pt-1.5 space-y-1">
+                            <input
+                              type="text"
+                              value={initialTaskTitle}
+                              onChange={e => setInitialTaskTitle(e.target.value)}
+                              placeholder={isAr ? `مثال: ${currentDeptConfig?.name_ar || 'التدقيق والامتثال'} 2026` : `e.g. ${currentDeptConfig?.name || 'Audit & Compliance'} Deliverable`}
+                              className="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:border-brand-dark outline-none font-medium"
+                            />
+                            <p className="text-[10px] text-gray-500">
+                              {isAr
+                                ? 'سيتم إدراج المهمة تلقائياً في جدول خدماتك وسجل DSR لربط التحصيل والفوترة.'
+                                : 'This deliverable will be linked automatically to your services and DSR register for payment & billing.'}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
+
+                    <div className="pt-3 border-t border-gray-150 flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setRegistrationStep(1)}
+                        className="py-3 px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <ArrowLeft size={15} className="rtl:rotate-180" />
+                        <span>{isAr ? 'الرجوع إلى الخطوة ١' : 'Back to Step 1'}</span>
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmitting || crValidation.status === 'duplicate'}
+                        className="py-3 px-6 bg-brand-dark hover:bg-red-800 disabled:opacity-60 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 text-xs shadow-xs cursor-pointer ms-auto"
+                      >
+                        {isSubmitting ? (
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            {editingClient ? <CheckCircle2 size={16} /> : <Plus size={16} />}
+                            <span>{editingClient ? (isAr ? 'حفظ كافة التعديلات' : 'Save All Changes') : (isAr ? 'إتمام تسجيل العميل' : 'Complete Registration')}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
-
-
-                {formMsg && (
-                  <div className={`p-3 text-sm rounded-xl flex items-center gap-2 border ${formMsg.type === 'ok' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                    {formMsg.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-                    <span className="font-semibold text-xs">{formMsg.text}</span>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-brand-dark hover:bg-red-800 disabled:opacity-60 text-white
-                    font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm mt-2"
-                >
-                  {isSubmitting ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      {editingClient ? <CheckCircle2 size={16} /> : <Plus size={16} />}
-                      {editingClient ? (isAr ? 'حفظ التعديلات' : 'Save Changes') : t('employee.registerButton')}
-                    </>
-                  )}
-                </button>
               </form>
             </div>
           </div>
