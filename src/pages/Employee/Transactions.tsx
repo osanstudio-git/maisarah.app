@@ -43,6 +43,11 @@ export interface ServiceTask {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   description: string | null;
   budget: number;
+  charge_amount?: number | null;
+  duration_type?: string | null;
+  quarterly_status?: { q1: string; q2: string; q3: string; q4: string } | null;
+  payment_status?: string | null;
+  activities?: { id: string; title: string; completed: boolean }[] | null;
   due_date: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -158,16 +163,7 @@ export default function Transactions() {
         supabase
           .from('services')
           .select(`
-            id,
-            title,
-            status,
-            priority,
-            description,
-            due_date,
-            created_at,
-            client_id,
-            employee_id,
-            department_id,
+            *,
             clients (
               id,
               company_name,
@@ -209,10 +205,11 @@ export default function Transactions() {
         })
         .map((task: any) => {
           const budgetMatch = task.description?.match(/Contract Fee: OMR\s*(\d+(\.\d+)?)/i) || task.description?.match(/Fee: OMR\s*(\d+(\.\d+)?)/i);
-          const parsedBudget = budgetMatch ? Number(budgetMatch[1]) : 750;
+          const parsedBudget = Number(task.charge_amount) || Number(task.budget) || (budgetMatch ? Number(budgetMatch[1]) : 0);
           return {
             ...task,
             budget: parsedBudget,
+            charge_amount: Number(task.charge_amount) || parsedBudget,
             status: task.status === 'ongoing' ? 'started' : task.status,
             clients: Array.isArray(task.clients)
               ? (task.clients[0] || null)
@@ -286,7 +283,9 @@ export default function Transactions() {
       if (!existingInvoices || existingInvoices.length === 0) {
         const generatedInvNumber = `INV-${Date.now().toString().slice(-6)}`;
         invoiceNumber = generatedInvNumber;
-        const invoiceBudget = Number(task.budget || 750);
+        const invoiceBudget = Number(task.charge_amount) || Number(task.budget) || 0;
+        const realVat = invoiceBudget > 0 ? Math.round(invoiceBudget * 0.05 * 1000) / 1000 : 0;
+        const totalInvoice = invoiceBudget + realVat;
 
         const { error: invErr } = await supabase
           .from('invoices')
@@ -296,8 +295,8 @@ export default function Transactions() {
             client_id: task.client_id,
             created_by: user?.id || null,
             amount: invoiceBudget,
-            tax_amount: 0,
-            total_amount: invoiceBudget,
+            tax_amount: realVat,
+            total_amount: totalInvoice,
             status: 'unpaid',
             due_date: task.due_date || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
             notes: `Auto-generated draft invoice upon work start for task: "${task.title}"`
@@ -887,10 +886,19 @@ export default function Transactions() {
                           )}
 
                           {/* Budget & Due Date */}
-                          <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-gray-50">
-                            <span className="font-bold text-gray-700">
-                              OMR {(task.budget || 0).toFixed(3)}
-                            </span>
+                          <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-gray-50 flex-wrap gap-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                OMR {(task.budget || 0).toFixed(3)}
+                              </span>
+                              {task.duration_type && (
+                                <span className="font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded text-[10px] border border-purple-200">
+                                  {task.duration_type === 'quarterly' ? (isAr ? 'ربع سنوي' : 'Quarterly') :
+                                   task.duration_type === 'annual' ? (isAr ? 'سنوي' : 'Annual') :
+                                   task.duration_type === 'one_time' ? (isAr ? 'مرة واحدة' : '1-Time') : (isAr ? 'شهري' : 'Monthly')}
+                                </span>
+                              )}
+                            </div>
                             {task.due_date && (
                               <span className={`flex items-center gap-1 font-bold ${isOverdue ? 'text-red-600 font-black' : ''}`}>
                                 <Calendar size={12} />

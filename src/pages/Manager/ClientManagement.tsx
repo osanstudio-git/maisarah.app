@@ -37,19 +37,34 @@ import {
   User,
   BadgeCheck,
   IdCard,
-  KeyRound
+  KeyRound,
+  CheckSquare,
+  Square,
+  FileSpreadsheet,
+  FolderCheck,
+  Check,
+  DollarSign,
+  Trash2,
+  Edit3,
+  Upload,
+  HardDrive
 } from 'lucide-react';
 import TaxInvoiceModal from '../../components/crm/TaxInvoiceModal';
 import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
 import { autoCreateDSREntryFromTask } from '../../utils/dsrSync';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
+import { getAllDepartments } from '../../config/departments';
 
-interface Client {
+export interface Client {
   id: string;
   full_name: string;
   company_name: string;
   email: string;
   phone: string;
+  contact_person?: string;
+  representative_name?: string;
+  representative_phone?: string;
+  representative_email?: string;
   cr_number?: string;
   tax_number?: string;
   civil_id?: string;
@@ -61,10 +76,60 @@ interface Client {
   created_at: string;
   address?: string;
   notes?: string;
+  common_documents?: Array<{
+    id: string;
+    key: string;
+    name: string;
+    file_url?: string;
+    status: 'uploaded' | 'verified' | 'pending';
+    updated_at?: string;
+  }>;
   portal_access_sent?: boolean;
   portal_sent_at?: string;
   portal_user_id?: string;
   assigned_employee?: {
+    id?: string;
+    full_name: string;
+    role?: string;
+  };
+}
+
+export interface ServiceJob {
+  id: string;
+  client_id: string;
+  title: string;
+  description: string | null;
+  status: 'pending' | 'ongoing' | 'under_review' | 'completed' | 'delayed' | 'cancelled';
+  priority?: string;
+  employee_id: string | null;
+  department_id?: string | null;
+  charge_amount?: number;
+  budget?: number;
+  due_date: string | null;
+  created_at: string;
+  duration_type?: 'one_time' | 'quarterly' | 'annual' | 'monthly';
+  quarterly_status?: {
+    q1?: string;
+    q2?: string;
+    q3?: string;
+    q4?: string;
+  };
+  invoice_status?: 'unbilled' | 'invoiced' | 'paid';
+  invoice_number?: string;
+  payment_status?: 'unpaid' | 'partially_paid' | 'paid';
+  amount_paid?: number;
+  activities?: Array<{
+    id: string;
+    title: string;
+    completed: boolean;
+  }>;
+  job_documents?: Array<{
+    id: string;
+    name: string;
+    url?: string;
+    uploaded_at?: string;
+  }>;
+  profiles?: {
     id?: string;
     full_name: string;
     role?: string;
@@ -78,15 +143,18 @@ interface ClientFinance {
 }
 
 const INDUSTRY_OPTIONS = [
-  'General Trading & Contracting',
-  'Logistics & Supply Chain',
-  'Oil, Gas & Energy',
-  'Retail & Supermarkets',
-  'Healthcare & Medical',
+  'Construction & Contracting',
+  'Real Estate & Property Development',
+  'General Trading & Retail',
+  'Oil, Gas & Energy Services',
+  'Logistics, Transport & Supply Chain',
   'Information Technology & Telecom',
-  'Hospitality & Tourism',
-  'Real Estate & Property',
-  'Financial & Professional Services'
+  'Healthcare & Medical Services',
+  'Hospitality, Tourism & Restaurants',
+  'Manufacturing & Industrial',
+  'Financial, Legal & Consulting',
+  'Automotive & Heavy Equipment',
+  'Agriculture & Fisheries'
 ];
 
 const INDIVIDUAL_SERVICE_OPTIONS = [
@@ -115,26 +183,32 @@ const ClientManagement = () => {
   // Secondary Status Filter
   const [statusFilter, setStatusFilter] = useState<'all' | 'active_ops' | 'overdue' | 'retainer'>('all');
   
-  // Drawer & Tab States
+  // Drawer & Tab States: default to 'operations' so Manager immediately sees company works
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [drawerTab, setDrawerTab] = useState<'overview' | 'operations' | 'finance'>('overview');
-  const [clientServices, setClientServices] = useState<any[]>([]);
+  const [drawerTab, setDrawerTab] = useState<'operations' | 'documents' | 'overview' | 'finance'>('operations');
+  const [clientServices, setClientServices] = useState<ServiceJob[]>([]);
   const [clientInvoices, setClientInvoices] = useState<any[]>([]);
   const [clientFinance, setClientFinance] = useState<ClientFinance>({ total_billed: 0, paid: 0, outstanding: 0 });
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [newJobActivityInput, setNewJobActivityInput] = useState<{ [jobId: string]: string }>({});
 
-  // New Client Modal
+  // New Client Modal State
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [newClientType, setNewClientType] = useState<'b2b' | 'individual'>('b2b');
   const [newClientForm, setNewClientForm] = useState({
     company_name: '',
     full_name: '',
+    representative_name: '',
+    representative_phone: '',
+    representative_email: '',
     cr_number: '',
     tax_number: '',
     civil_id: '',
     email: '',
     phone: '',
-    industry: 'General Trading & Contracting',
+    industry: 'Construction & Contracting',
+    custom_industry: '',
+    use_custom_industry: false,
     service_type: 'Personal Tax Filing & Clearance',
     tier: 'Tier-A Corporate',
     assigned_employee_id: '',
@@ -150,11 +224,21 @@ const ClientManagement = () => {
   // Direct Operation Quick Modal from Dossier
   const [showQuickOpModal, setShowQuickOpModal] = useState(false);
   const [quickOpForm, setQuickOpForm] = useState({
-    title: '',
+    title: 'VAT Return Filing',
+    custom_title: '',
+    use_custom_title: false,
+    department_id: 'tax_vat',
     employee_id: '',
-    due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+    charge_amount: '350',
+    duration_type: 'quarterly' as 'one_time' | 'quarterly' | 'annual' | 'monthly',
+    due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
     description: '',
-    status: 'ongoing' as 'ongoing' | 'completed' | 'delayed' | 'under_review'
+    status: 'ongoing' as 'ongoing' | 'completed' | 'delayed' | 'under_review',
+    activities: [
+      { id: 'act-1', title: 'Collect sales & purchase vouchers', completed: false },
+      { id: 'act-2', title: 'Reconcile VAT ledger & calculate net tax', completed: false }
+    ] as Array<{ id: string; title: string; completed: boolean }>,
+    new_activity_text: ''
   });
   const [isSavingOp, setIsSavingOp] = useState(false);
 
@@ -167,7 +251,6 @@ const ClientManagement = () => {
   const isB2BClient = (client: Client) => {
     if (client.client_type === 'individual') return false;
     if (client.client_type === 'b2b') return true;
-    // Heuristic: If CR number exists or company_name differs from full_name and contains corporate terms
     if (client.cr_number && client.cr_number.trim().length > 0) return true;
     const comp = (client.company_name || '').toLowerCase();
     if (comp.includes('llc') || comp.includes('l.l.c') || comp.includes('ش.م.م') || comp.includes('co.') || comp.includes('trading') || comp.includes('group') || comp.includes('osbic')) return true;
@@ -195,7 +278,8 @@ const ClientManagement = () => {
           .select('id, client_id, amount, total, status, due_date, created_at'),
         supabase
           .from('services')
-          .select('id, client_id, employee_id, title, status, created_at, due_date, profiles:profiles!employee_id(full_name, role)'),
+          .select('*, profiles:profiles!employee_id(full_name, role)')
+          .order('created_at', { ascending: false }),
         supabase
           .from('profiles')
           .select('id, full_name, role, department_id')
@@ -206,39 +290,10 @@ const ClientManagement = () => {
 
       let fetchedClients: Client[] = (clientData as any[]) || [];
       
-      // If clients list is empty or single default, enhance with structured demo individual & corporate entries
-      if (fetchedClients.length === 1 && fetchedClients[0].company_name === 'OSBIC') {
-        const enrichedOSBIC: Client = {
-          ...fetchedClients[0],
-          client_type: 'b2b',
-          cr_number: fetchedClients[0].cr_number || '1527047',
-          tax_number: 'OM1100298341',
-          industry: 'Financial & Professional Services',
-          tier: 'Strategic Corporate Account'
-        };
-
-        const sampleIndividual: Client = {
-          id: 'ind-sample-1',
-          company_name: 'Dr. Salim Al Harthy (Private Practice)',
-          full_name: 'Dr. Salim Al Harthy',
-          civil_id: '91823746',
-          email: 'salim.alharthy@gmail.com',
-          phone: '+968 9988 7766',
-          status: 'active',
-          client_type: 'individual',
-          industry: 'Healthcare & Medical',
-          tier: 'Private VIP Client',
-          assigned_employee_id: profileData?.[0]?.id || '',
-          created_at: new Date().toISOString(),
-          assigned_employee: profileData?.[0] ? { id: profileData[0].id, full_name: profileData[0].full_name, role: profileData[0].role } : undefined
-        };
-
-        fetchedClients = [enrichedOSBIC, sampleIndividual];
-      }
-
+      // Clean display without dummy fallback strings
       setClients(fetchedClients);
       setAllInvoices(invoiceData || []);
-      setAllServices(serviceData || []);
+      setAllServices((serviceData as any[]) || []);
       setEmployees(profileData || []);
     } catch (err) {
       console.error('Fetch clients error:', err);
@@ -266,7 +321,7 @@ const ClientManagement = () => {
   // ── Fetch Single Client 360° Dossier ───────────────────────────────────────
   const fetchClientDetails = async (client: Client) => {
     setSelectedClient(client);
-    setDrawerTab('overview');
+    setDrawerTab('operations');
     setDetailsLoading(true);
     
     try {
@@ -283,22 +338,26 @@ const ClientManagement = () => {
           .order('created_at', { ascending: false })
       ]);
 
-      const svcs = servicesRes.data || [];
+      const svcs: ServiceJob[] = (servicesRes.data as any[]) || [];
       const invs = invoicesRes.data || [];
 
       setClientServices(svcs);
       setClientInvoices(invs);
 
-      const total = invs.reduce((sum, inv) => sum + (Number(inv.amount) || Number(inv.total) || 0), 0);
-      const paid = invs.filter(inv => (inv.status || '').toLowerCase() === 'paid').reduce((sum, inv) => sum + (Number(inv.amount) || Number(inv.total) || 0), 0);
-      
-      const billedVal = total > 0 ? total : (isB2BClient(client) ? 3200 : 750);
-      const paidVal = total > 0 ? paid : billedVal;
+      // Real calculation: from invoices if existing, or from real job charges
+      const totalInvBilled = invs.reduce((sum, inv) => sum + (Number(inv.amount) || Number(inv.total) || 0), 0);
+      const totalInvPaid = invs.filter(inv => (inv.status || '').toLowerCase() === 'paid').reduce((sum, inv) => sum + (Number(inv.amount) || Number(inv.total) || 0), 0);
+
+      const totalSvcsBilled = svcs.reduce((sum, s) => sum + (Number(s.charge_amount) || Number(s.budget) || 0), 0);
+      const totalSvcsPaid = svcs.reduce((sum, s) => sum + (Number(s.amount_paid) || (s.payment_status === 'paid' ? (Number(s.charge_amount) || Number(s.budget) || 0) : 0)), 0);
+
+      const finalBilled = totalInvBilled > 0 ? totalInvBilled : totalSvcsBilled;
+      const finalPaid = totalInvBilled > 0 ? totalInvPaid : totalSvcsPaid;
 
       setClientFinance({
-        total_billed: billedVal,
-        paid: paidVal,
-        outstanding: billedVal - paidVal
+        total_billed: finalBilled,
+        paid: finalPaid,
+        outstanding: Math.max(0, finalBilled - finalPaid)
       });
 
     } catch (err) {
@@ -316,41 +375,63 @@ const ClientManagement = () => {
       : (newClientForm.company_name.trim() || newClientForm.full_name.trim());
 
     if (!finalCompanyName && !newClientForm.full_name.trim()) {
-      alert(isAr ? 'يرجى إدخال اسم العميل أو الشركة' : 'Please enter client or company name');
+      alert(isAr ? 'يرجى إدخال اسم الشركة أو العميل' : 'Please enter company or client name');
       return;
     }
 
     setIsSavingClient(true);
     try {
-      const { data, error } = await supabase
-        .from('clients')
-        .insert([{
-          company_name: finalCompanyName || newClientForm.full_name.trim(),
-          full_name: newClientForm.full_name.trim() || finalCompanyName,
-          cr_number: newClientType === 'b2b' ? (newClientForm.cr_number.trim() || null) : null,
-          tax_number: newClientType === 'b2b' ? (newClientForm.tax_number.trim() || null) : null,
-          email: newClientForm.email.trim() || null,
-          phone: newClientForm.phone.trim() || null,
-          industry: newClientType === 'b2b' ? newClientForm.industry : newClientForm.service_type,
-          tier: newClientType === 'b2b' ? newClientForm.tier : 'Individual VIP',
-          assigned_employee_id: newClientForm.assigned_employee_id || employees[0]?.id || null,
-          address: newClientForm.address,
-          status: 'active',
-          is_archived: false
-        }])
-        .select();
+      const selectedIndustry = newClientType === 'b2b' 
+        ? (newClientForm.use_custom_industry && newClientForm.custom_industry.trim() ? newClientForm.custom_industry.trim() : newClientForm.industry)
+        : newClientForm.service_type;
+
+      const representativeName = newClientForm.representative_name?.trim() || newClientForm.full_name?.trim() || finalCompanyName;
+      const repPhone = newClientForm.representative_phone?.trim() || newClientForm.phone?.trim() || null;
+      const repEmail = newClientForm.representative_email?.trim() || newClientForm.email?.trim() || null;
+
+      const payload: any = {
+        company_name: finalCompanyName || representativeName,
+        full_name: representativeName,
+        contact_person: representativeName,
+        representative_name: representativeName,
+        representative_phone: repPhone,
+        representative_email: repEmail,
+        cr_number: newClientType === 'b2b' ? (newClientForm.cr_number.trim() || null) : null,
+        tax_number: newClientType === 'b2b' ? (newClientForm.tax_number.trim() || null) : null,
+        email: repEmail,
+        phone: repPhone,
+        industry: selectedIndustry || 'Construction & Contracting',
+        tier: newClientType === 'b2b' ? newClientForm.tier : 'Individual VIP',
+        assigned_employee_id: newClientForm.assigned_employee_id || employees[0]?.id || null,
+        address: newClientForm.address,
+        status: 'active',
+        is_archived: false
+      };
+
+      let { data, error } = await supabase.from('clients').insert([payload]).select();
+      
+      // Fallback if specific representative columns not yet added to clients schema
+      if (error && error.message?.includes('column')) {
+        delete payload.representative_name;
+        delete payload.representative_phone;
+        delete payload.representative_email;
+        delete payload.contact_person;
+        const retry = await supabase.from('clients').insert([payload]).select();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) throw error;
 
       const createdRow = data?.[0];
-      if (newClientForm.send_portal_access && newClientForm.email.trim()) {
+      if (newClientForm.send_portal_access && (repEmail || newClientForm.email.trim())) {
         setPortalTarget({
           id: createdRow?.id || 'new-client',
           type: 'client',
-          name: newClientForm.full_name.trim() || finalCompanyName,
+          name: representativeName,
           companyName: finalCompanyName,
-          email: newClientForm.email.trim(),
-          phone: newClientForm.phone.trim(),
+          email: repEmail || newClientForm.email.trim(),
+          phone: repPhone || newClientForm.phone.trim(),
           portalAccessSent: false
         });
         setIsPortalModalOpen(true);
@@ -360,12 +441,17 @@ const ClientManagement = () => {
       setNewClientForm({
         company_name: '',
         full_name: '',
+        representative_name: '',
+        representative_phone: '',
+        representative_email: '',
         cr_number: '',
         tax_number: '',
         civil_id: '',
         email: '',
         phone: '',
-        industry: 'General Trading & Contracting',
+        industry: 'Construction & Contracting',
+        custom_industry: '',
+        use_custom_industry: false,
         service_type: 'Personal Tax Filing & Clearance',
         tier: 'Tier-A Corporate',
         assigned_employee_id: '',
@@ -381,56 +467,192 @@ const ClientManagement = () => {
     }
   };
 
-  // ── Create Quick Operation from Dossier ────────────────────────────────────
+  // ── Create Separate Job/Task from Dossier ────────────────────────────────────
   const handleQuickOpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClient || !quickOpForm.title.trim()) return;
+    if (!selectedClient) return;
+
+    const finalTitle = quickOpForm.use_custom_title 
+      ? quickOpForm.custom_title.trim() 
+      : (quickOpForm.title.trim() || 'Custom Engagement');
+
+    if (!finalTitle) {
+      alert(isAr ? 'يرجى إدخال اسم العمل أو الخدمة' : 'Please provide a work or service title');
+      return;
+    }
 
     setIsSavingOp(true);
     try {
-      const { error } = await supabase
-        .from('services')
-        .insert([{
+      const charge = Number(quickOpForm.charge_amount) || 0;
+      const initialQuarterly = quickOpForm.duration_type === 'quarterly'
+        ? { q1: 'ongoing', q2: 'pending', q3: 'pending', q4: 'pending' }
+        : null;
+
+      const payload: any = {
+        client_id: selectedClient.id,
+        title: finalTitle,
+        department_id: quickOpForm.department_id || 'tax_vat',
+        employee_id: quickOpForm.employee_id || employees[0]?.id || null,
+        due_date: quickOpForm.due_date || null,
+        description: quickOpForm.description || null,
+        status: quickOpForm.status,
+        charge_amount: charge,
+        budget: charge,
+        duration_type: quickOpForm.duration_type,
+        quarterly_status: initialQuarterly,
+        invoice_status: 'unbilled',
+        payment_status: 'unpaid',
+        amount_paid: 0,
+        activities: quickOpForm.activities
+      };
+
+      let { data, error } = await supabase.from('services').insert([payload]).select();
+
+      // Safe retry if newly added schema columns are pending
+      if (error && error.message?.includes('column')) {
+        const safePayload = {
           client_id: selectedClient.id,
-          title: quickOpForm.title.trim(),
+          title: finalTitle,
           employee_id: quickOpForm.employee_id || employees[0]?.id || null,
           due_date: quickOpForm.due_date || null,
           description: quickOpForm.description || null,
-          status: quickOpForm.status
-        }]);
+          status: quickOpForm.status,
+          budget: charge,
+          department_id: quickOpForm.department_id || 'tax_vat'
+        };
+        const retry = await supabase.from('services').insert([safePayload]).select();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) throw error;
 
       // Auto-create DSR draft for assigned employee
       const assignedEmp = employees.find(e => e.id === (quickOpForm.employee_id || employees[0]?.id));
       autoCreateDSREntryFromTask({
-        serviceTitle: quickOpForm.title.trim(),
+        serviceTitle: finalTitle,
         companyName: selectedClient.company_name || selectedClient.full_name || 'Valued Client',
         crNumber: selectedClient.cr_number || selectedClient.civil_id || '',
         clientId: selectedClient.id,
         employeeName: assignedEmp?.full_name || 'Staff Member',
         employeeId: quickOpForm.employee_id || employees[0]?.id || undefined,
-        amount: 0,
+        departmentId: quickOpForm.department_id,
+        amount: charge,
         date: new Date().toISOString().split('T')[0]
       });
 
       setShowQuickOpModal(false);
       setQuickOpForm({
-        title: '',
+        title: 'VAT Return Filing',
+        custom_title: '',
+        use_custom_title: false,
+        department_id: 'tax_vat',
         employee_id: employees[0]?.id || '',
-        due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+        charge_amount: '350',
+        duration_type: 'quarterly',
+        due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
         description: '',
-        status: 'ongoing'
+        status: 'ongoing',
+        activities: [
+          { id: 'act-1', title: 'Collect sales & purchase vouchers', completed: false },
+          { id: 'act-2', title: 'Reconcile VAT ledger & calculate net tax', completed: false }
+        ],
+        new_activity_text: ''
       });
       fetchClientDetails(selectedClient);
       fetchClientsAndStats(true);
     } catch (err: any) {
-      console.error('Error creating deliverable:', err);
+      console.error('Error creating job deliverable:', err);
       alert(err.message || 'Failed to assign deliverable');
     } finally {
       setIsSavingOp(false);
     }
   };
+
+  // ── Quarter-wise Status Toggle ─────────────────────────────────────────────
+  const handleUpdateQuarterStatus = async (jobId: string, currentQuarterly: any, quarterKey: 'q1' | 'q2' | 'q3' | 'q4') => {
+    const cycleMap: Record<string, string> = {
+      'pending': 'ongoing',
+      'ongoing': 'completed',
+      'completed': 'pending'
+    };
+    const currentVal = (currentQuarterly && currentQuarterly[quarterKey]) || 'pending';
+    const nextVal = cycleMap[currentVal] || 'ongoing';
+    const updated = {
+      ...(currentQuarterly || { q1: 'pending', q2: 'pending', q3: 'pending', q4: 'pending' }),
+      [quarterKey]: nextVal
+    };
+
+    setClientServices(prev => prev.map(s => s.id === jobId ? { ...s, quarterly_status: updated } : s));
+    setAllServices(prev => prev.map(s => s.id === jobId ? { ...s, quarterly_status: updated } : s));
+
+    try {
+      await supabase.from('services').update({ quarterly_status: updated }).eq('id', jobId);
+    } catch (err) {
+      console.warn('Update quarter status notice:', err);
+    }
+  };
+
+  // ── Payment Status Toggle for Job ──────────────────────────────────────────
+  const handleToggleJobPaymentStatus = async (jobId: string, currentStatus?: string) => {
+    const cycleMap: Record<string, 'unpaid' | 'partially_paid' | 'paid'> = {
+      'unpaid': 'partially_paid',
+      'partially_paid': 'paid',
+      'paid': 'unpaid'
+    };
+    const nextStatus = cycleMap[currentStatus || 'unpaid'] || 'paid';
+
+    setClientServices(prev => prev.map(s => s.id === jobId ? { ...s, payment_status: nextStatus } : s));
+    setAllServices(prev => prev.map(s => s.id === jobId ? { ...s, payment_status: nextStatus } : s));
+
+    try {
+      await supabase.from('services').update({ payment_status: nextStatus }).eq('id', jobId);
+      if (selectedClient) fetchClientDetails(selectedClient);
+    } catch (err) {
+      console.warn('Toggle payment status notice:', err);
+    }
+  };
+
+  // ── Activity Checklist Toggle ──────────────────────────────────────────────
+  const handleToggleActivity = async (jobId: string, currentActivities: any[], activityId: string) => {
+    const updated = (currentActivities || []).map(act => 
+      act.id === activityId ? { ...act, completed: !act.completed } : act
+    );
+
+    setClientServices(prev => prev.map(s => s.id === jobId ? { ...s, activities: updated } : s));
+    setAllServices(prev => prev.map(s => s.id === jobId ? { ...s, activities: updated } : s));
+
+    try {
+      await supabase.from('services').update({ activities: updated }).eq('id', jobId);
+    } catch (err) {
+      console.warn('Toggle activity notice:', err);
+    }
+  };
+
+  // ── Add Activity to Existing Job ───────────────────────────────────────────
+  const handleAddActivityToJob = async (jobId: string, currentActivities: any[]) => {
+    const title = newJobActivityInput[jobId]?.trim();
+    if (!title) return;
+
+    const newAct = {
+      id: `act-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      title,
+      completed: false
+    };
+    const updated = [...(currentActivities || []), newAct];
+
+    setClientServices(prev => prev.map(s => s.id === jobId ? { ...s, activities: updated } : s));
+    setAllServices(prev => prev.map(s => s.id === jobId ? { ...s, activities: updated } : s));
+    setNewJobActivityInput(prev => ({ ...prev, [jobId]: '' }));
+
+    try {
+      await supabase.from('services').update({ activities: updated }).eq('id', jobId);
+    } catch (err) {
+      console.warn('Add activity notice:', err);
+    }
+  };
+
+
 
   // ── Archive Client ────────────────────────────────────────────────────────
   const handleArchive = async (id: string, e: React.MouseEvent) => {
@@ -838,24 +1060,43 @@ const ClientManagement = () => {
               <thead className="bg-gray-50/70 border-b border-gray-100">
                 <tr>
                   <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">
-                    {clientCategoryTab === 'individual' ? (isAr ? 'العميل والرقم المدني' : 'Client & Civil ID') : (isAr ? 'الشركة والسجل التجاري' : 'Company & CR')}
+                    {clientCategoryTab === 'individual' ? (isAr ? 'العميل والرقم المدني' : 'Client & Civil ID') : (isAr ? 'الشركة ومجال النشاط' : 'Company & Field')}
                   </th>
-                  <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'مسؤول الحساب' : 'Account Mgr'}</th>
-                  <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'العمليات والإنتاج' : 'Work Status'}</th>
-                  <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الوضع المالي' : 'Financial Standing'}</th>
-                  <th className="px-6 py-4 text-end text-[9px] font-black uppercase text-gray-400 tracking-widest">{isAr ? 'الإجراءات والتواصل' : 'Actions & 360°'}</th>
+                  <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">
+                    {isAr ? 'المفوض / الممثل' : 'Client Representative'}
+                  </th>
+                  <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">
+                    {isAr ? 'الأعمال والمهام' : 'Works & Tasks'}
+                  </th>
+                  <th className="px-6 py-4 text-start text-[9px] font-black uppercase text-gray-400 tracking-widest">
+                    {isAr ? 'الوضع المالي الفعلي' : 'Financial Standing'}
+                  </th>
+                  <th className="px-6 py-4 text-end text-[9px] font-black uppercase text-gray-400 tracking-widest">
+                    {isAr ? 'التواصل والملف' : 'Actions & 360°'}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map(client => {
                   const isB2B = isB2BClient(client);
                   const clientInvs = allInvoices.filter(i => i.client_id === client.id);
-                  const totalClientBilled = clientInvs.reduce((sum, i) => sum + (Number(i.amount) || Number(i.total) || 0), 0) || (isB2B ? 3200 : 750);
-                  const totalClientPaid = clientInvs.filter(i => (i.status || '').toLowerCase() === 'paid').reduce((sum, i) => sum + (Number(i.amount) || Number(i.total) || 0), 0) || (isB2B ? 3200 : 750);
-                  const healthPercent = totalClientBilled > 0 ? Math.round((totalClientPaid / totalClientBilled) * 100) : 100;
+                  const clientSvcs = allServices.filter(s => s.client_id === client.id);
+                  const clientActiveServices = clientSvcs.filter(s => s.status !== 'completed' && s.status !== 'cancelled');
+                  const clientCompletedServices = clientSvcs.filter(s => s.status === 'completed');
 
-                  const clientActiveServices = allServices.filter(s => s.client_id === client.id && s.status !== 'completed');
-                  const assignedStaff = client.assigned_employee?.full_name || employees[0]?.full_name || 'Budoor Al Hasani';
+                  const totalInvBilled = clientInvs.reduce((sum, i) => sum + (Number(i.amount) || Number(i.total) || 0), 0);
+                  const totalInvPaid = clientInvs.filter(i => (i.status || '').toLowerCase() === 'paid').reduce((sum, i) => sum + (Number(i.amount) || Number(i.total) || 0), 0);
+
+                  const totalSvcBilled = clientSvcs.reduce((sum, s) => sum + (Number(s.charge_amount) || Number(s.budget) || 0), 0);
+                  const totalSvcPaid = clientSvcs.reduce((sum, s) => sum + (Number(s.amount_paid) || (s.payment_status === 'paid' ? (Number(s.charge_amount) || Number(s.budget) || 0) : 0)), 0);
+
+                  const totalClientBilled = totalInvBilled > 0 ? totalInvBilled : totalSvcBilled;
+                  const totalClientPaid = totalInvBilled > 0 ? totalInvPaid : totalSvcPaid;
+                  const healthPercent = totalClientBilled > 0 ? Math.min(100, Math.round((totalClientPaid / totalClientBilled) * 100)) : 0;
+
+                  const repName = client.representative_name || client.contact_person || (client.full_name !== client.company_name ? client.full_name : '');
+                  const repPhone = client.representative_phone || client.phone || '';
+                  const repEmail = client.representative_email || client.email || '';
 
                   return (
                     <tr 
@@ -863,7 +1104,7 @@ const ClientManagement = () => {
                       onClick={() => fetchClientDetails(client)}
                       className="group hover:bg-gray-50/80 transition-colors cursor-pointer"
                     >
-                      {/* Name, CR / Civil ID, and Industry */}
+                      {/* Name, CR / Civil ID, and Industry Field */}
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3.5">
                           <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm transition-all shadow-xs ${
@@ -877,71 +1118,92 @@ const ClientManagement = () => {
                             <div className="flex items-center gap-2">
                               <span className="font-black text-gray-900 text-sm">{client.company_name || client.full_name}</span>
                               {isB2B ? (
-                                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-[9px] font-black uppercase font-mono">
-                                  CR: {client.cr_number || '1527047'}
+                                <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md text-[9px] font-black uppercase font-mono border border-gray-200">
+                                  {client.cr_number ? `CR: ${client.cr_number}` : (isAr ? 'بدون سجل' : 'No CR')}
                                 </span>
                               ) : (
-                                <span className="px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-100 rounded-md text-[9px] font-black uppercase font-mono flex items-center gap-1">
-                                  <IdCard size={10} /> ID: {client.civil_id || '91823746'}
-                                </span>
+                                client.civil_id ? (
+                                  <span className="px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-100 rounded-md text-[9px] font-black uppercase font-mono flex items-center gap-1">
+                                    <IdCard size={10} /> ID: {client.civil_id}
+                                  </span>
+                                ) : null
                               )}
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1 font-medium">
-                              <span className="flex items-center gap-1"><UserCircle2 size={11} /> {client.full_name}</span>
-                              <span>•</span>
-                              <span className="text-gray-500">{client.industry || (isB2B ? 'General Trading' : 'Personal Tax Advisory')}</span>
+                            <div className="flex items-center gap-2 text-[10px] mt-1 font-medium">
+                              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md font-bold text-[9px]">
+                                {client.industry || (isAr ? 'نشاط عام' : 'General')}
+                              </span>
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* Account Manager */}
+                      {/* Client Representative & Direct Contact */}
                       <td className="px-6 py-5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-xl bg-brand-dark/10 text-brand-dark flex items-center justify-center text-[10px] font-black">
-                            {assignedStaff.charAt(0)}
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-gray-900">
+                            <UserCircle2 size={13} className="text-gray-400 shrink-0" />
+                            <span>{repName || (isAr ? 'غير مسجل' : 'Not specified')}</span>
                           </div>
-                          <div>
-                            <span className="text-xs font-bold text-gray-800 block leading-tight">{assignedStaff}</span>
-                            <span className="text-[9px] text-gray-400 font-medium">{isAr ? 'إشراف مباشر' : 'Operations Lead'}</span>
-                          </div>
+                          {repPhone && (
+                            <div className="text-[10px] font-mono text-emerald-700 flex items-center gap-1 font-bold">
+                              <Phone size={10} className="shrink-0" />
+                              <span>{repPhone}</span>
+                            </div>
+                          )}
+                          {repEmail && (
+                            <div className="text-[10px] text-gray-400 flex items-center gap-1 truncate max-w-[170px]">
+                              <Mail size={10} className="shrink-0" />
+                              <span>{repEmail}</span>
+                            </div>
+                          )}
                         </div>
                       </td>
 
-                      {/* Work Status & Operations */}
+                      {/* Works & Tasks Count */}
                       <td className="px-6 py-5">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-700 border border-gray-200">
+                              {clientSvcs.length} {isAr ? 'أعمال' : 'Works'}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
                               clientActiveServices.length > 0 
                                 ? 'bg-blue-50 text-blue-700 border border-blue-100' 
                                 : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                             }`}>
-                              {clientActiveServices.length > 0 
-                                ? `${clientActiveServices.length} ${isAr ? 'عمليات نشطة' : 'Active Tasks'}`
-                                : (isAr ? 'مكتمل SLA' : 'Deliverables Up to date')}
+                              {clientActiveServices.length} {isAr ? 'نشطة' : 'Active'}
                             </span>
+                            {clientCompletedServices.length > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                {clientCompletedServices.length} {isAr ? 'مكتمل' : 'Done'}
+                              </span>
+                            )}
                           </div>
                           {clientActiveServices.length > 0 && (
-                            <p className="text-[10px] font-bold text-gray-500 truncate max-w-[180px]">
+                            <p className="text-[10px] font-bold text-gray-500 truncate max-w-[200px]">
                               {clientActiveServices[0]?.title}
                             </p>
                           )}
                         </div>
                       </td>
 
-                      {/* Financial Health */}
+                      {/* Real Financial Standing */}
                       <td className="px-6 py-5">
                         <div className="space-y-1.5 min-w-[140px]">
                           <div className="flex justify-between items-center text-[10px]">
-                            <span className="font-black text-brand-dark">{totalClientBilled.toLocaleString()} OMR</span>
-                            <span className="font-bold text-gray-400">{healthPercent}% {isAr ? 'مسدد' : 'Paid'}</span>
+                            <span className="font-black text-brand-dark">
+                              {totalClientBilled > 0 ? `${totalClientBilled.toLocaleString()} OMR` : '0.000 OMR'}
+                            </span>
+                            <span className="font-bold text-gray-500">
+                              {totalClientBilled > 0 ? `${healthPercent}% ${isAr ? 'مسدد' : 'Paid'}` : (isAr ? 'لا توجد رسوم' : 'No charges')}
+                            </span>
                           </div>
                           <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                             <div 
                               className="h-full rounded-full transition-all duration-700"
                               style={{ 
-                                width: `${healthPercent}%`, 
+                                width: totalClientBilled > 0 ? `${healthPercent}%` : '0%', 
                                 backgroundColor: healthPercent >= 80 ? '#10B981' : healthPercent >= 50 ? '#F59E0B' : '#EF4444' 
                               }} 
                             />
@@ -949,10 +1211,10 @@ const ClientManagement = () => {
                         </div>
                       </td>
 
-                      {/* Actions & Dossier */}
+                      {/* Actions & 360° Dossier */}
                       <td className="px-6 py-5 text-end" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Portal Access Status / Trigger */}
+                        <div className="flex items-center justify-end gap-2">
+                          {/* Portal Access Status */}
                           {client.portal_access_sent ? (
                             <button
                               onClick={(e) => {
@@ -960,19 +1222,19 @@ const ClientManagement = () => {
                                 setPortalTarget({
                                   id: client.id,
                                   type: 'client',
-                                  name: client.full_name || client.company_name,
+                                  name: repName || client.company_name,
                                   companyName: client.company_name,
-                                  email: client.email,
-                                  phone: client.phone,
+                                  email: repEmail,
+                                  phone: repPhone,
                                   portalAccessSent: true
                                 });
                                 setIsPortalModalOpen(true);
                               }}
                               className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[10px] font-black border border-emerald-200"
-                              title={isAr ? 'بيانات البوابة مفعلة ومُرسلة (انقر للعرض أو إعادة الإرسال)' : 'Portal Access Active & Sent (Click to view/resend)'}
+                              title={isAr ? 'بيانات البوابة مفعلة ومُرسلة' : 'Portal Access Active'}
                             >
                               <CheckCircle2 size={13} className="text-emerald-600" />
-                              <span className="hidden xl:inline">{isAr ? 'مفعل' : 'Portal Sent'}</span>
+                              <span className="hidden xl:inline">{isAr ? 'مفعل' : 'Portal'}</span>
                             </button>
                           ) : (
                             <button
@@ -981,47 +1243,29 @@ const ClientManagement = () => {
                                 setPortalTarget({
                                   id: client.id,
                                   type: 'client',
-                                  name: client.full_name || client.company_name,
+                                  name: repName || client.company_name,
                                   companyName: client.company_name,
-                                  email: client.email,
-                                  phone: client.phone,
+                                  email: repEmail,
+                                  phone: repPhone,
                                   portalAccessSent: false
                                 });
                                 setIsPortalModalOpen(true);
                               }}
-                              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-600 hover:text-white text-amber-800 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[10px] font-black border border-amber-200 active:scale-95"
-                              title={isAr ? 'تفعيل وإرسال بيانات دخول البوابة' : 'Send Portal Access'}
+                              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-600 hover:text-white text-amber-800 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[10px] font-black border border-amber-200"
+                              title={isAr ? 'إرسال بيانات الدخول للبوابة' : 'Send Portal Access'}
                             >
                               <KeyRound size={13} className="text-amber-600" />
-                              <span className="hidden xl:inline">{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
+                              <span className="hidden xl:inline">{isAr ? 'دخول' : 'Access'}</span>
                             </button>
                           )}
 
-                          {/* 1-Tap WhatsApp */}
+                          {/* 1-Tap WhatsApp to Representative */}
                           <button
                             onClick={(e) => handleOpenWhatsApp(client, e)}
                             className="p-2 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-xl transition-all cursor-pointer"
-                            title={isAr ? 'مراسلة واتساب' : 'WhatsApp'}
+                            title={isAr ? 'مراسلة الممثل عبر واتساب' : 'WhatsApp Representative'}
                           >
                             <MessageCircle size={14} />
-                          </button>
-
-                          {/* Quick Tax Invoice */}
-                          <button
-                            onClick={(e) => handleOpenInvoiceDoc(client, e)}
-                            className="p-2 bg-gray-100 hover:bg-brand-dark hover:text-white text-gray-700 rounded-xl transition-all cursor-pointer"
-                            title={isAr ? 'إصدار فاتورة' : 'Invoice'}
-                          >
-                            <FileText size={14} />
-                          </button>
-
-                          {/* Quick Receipt */}
-                          <button
-                            onClick={(e) => handleOpenReceiptDoc(client, e)}
-                            className="p-2 bg-gray-100 hover:bg-emerald-700 hover:text-white text-gray-700 rounded-xl transition-all cursor-pointer"
-                            title={isAr ? 'إصدار سند قبض' : 'Receipt'}
-                          >
-                            <Receipt size={14} />
                           </button>
 
                           {/* Open Dossier */}
@@ -1029,70 +1273,8 @@ const ClientManagement = () => {
                             onClick={() => fetchClientDetails(client)}
                             className="p-2 bg-brand-dark/5 hover:bg-brand-dark text-brand-dark hover:text-white rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[10px] font-black uppercase tracking-wider"
                           >
-                            <span>{isAr ? 'الملف' : '360°'}</span>
-                            <ChevronRight size={14} className={isAr ? 'rotate-180' : ''} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ── Executive 360° Dossier Slide-out Drawer ───────────────────────── */}
-      {selectedClient && (
-        <>
-          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-40 animate-fade-in" onClick={() => setSelectedClient(null)} />
-          <div 
-            className={`fixed top-0 ${isAr ? 'left-0' : 'right-0'} h-full w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-all duration-300 flex flex-col`}
-            dir={isAr ? 'rtl' : 'ltr'}
-          >
-            {/* Drawer Top Header */}
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/80">
-              <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black shadow-md ${
-                  isB2BClient(selectedClient) ? 'bg-brand-dark text-white' : 'bg-purple-700 text-white'
-                }`}>
-                  {isB2BClient(selectedClient) ? <Building2 size={24} /> : <User size={24} />}
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-gray-900 leading-tight">{selectedClient.company_name || selectedClient.full_name}</h2>
-                  <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold mt-0.5">
-                    {isB2BClient(selectedClient) ? (
-                      <span className="font-mono bg-gray-200 px-2 py-0.5 rounded">CR: {selectedClient.cr_number || '1527047'}</span>
-                    ) : (
-                      <span className="font-mono bg-purple-100 text-purple-800 px-2 py-0.5 rounded">Civil ID: {selectedClient.civil_id || '91823746'}</span>
-                    )}
-                    <span>•</span>
-                    <span className="text-brand-dark">{selectedClient.tier || (isB2BClient(selectedClient) ? 'Tier-A Corporate Account' : 'Private VIP Client')}</span>
-                  </div>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setSelectedClient(null)} 
-                className="p-2.5 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors cursor-pointer"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Dossier Tabs */}
+                            <span>{isAr ? 'الملف            {/* Dossier Tabs */}
             <div className="flex border-b border-gray-100 bg-white px-6 gap-2 text-xs font-black uppercase tracking-wider overflow-x-auto">
-              <button
-                onClick={() => setDrawerTab('overview')}
-                className={`py-3.5 border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                  drawerTab === 'overview' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-700'
-                }`}
-              >
-                <ShieldCheck size={15} />
-                <span>{isB2BClient(selectedClient) ? (isAr ? 'ملف B2B والبيانات' : 'B2B Profile') : (isAr ? 'البيانات الشخصية' : 'Personal Profile')}</span>
-              </button>
-
               <button
                 onClick={() => setDrawerTab('operations')}
                 className={`py-3.5 border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
@@ -1100,10 +1282,30 @@ const ClientManagement = () => {
                 }`}
               >
                 <Activity size={15} />
-                <span>{isAr ? 'العمليات والمهام' : 'Deliverables & SLA'}</span>
+                <span>{isAr ? 'الأعمال والمهام' : 'Works & Tasks'}</span>
                 <span className="px-1.5 py-0.2 bg-blue-100 text-blue-700 rounded-full text-[9px]">
                   {clientServices.length}
                 </span>
+              </button>
+
+              <button
+                onClick={() => setDrawerTab('documents')}
+                className={`py-3.5 border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                  drawerTab === 'documents' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-700'
+                }`}
+              >
+                <FolderCheck size={15} />
+                <span>{isAr ? 'المستندات العامة للشركة' : 'Company Documents'}</span>
+              </button>
+
+              <button
+                onClick={() => setDrawerTab('overview')}
+                className={`py-3.5 border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                  drawerTab === 'overview' ? 'border-brand-dark text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-700'
+                }`}
+              >
+                <ShieldCheck size={15} />
+                <span>{isB2BClient(selectedClient) ? (isAr ? 'بيانات الشركة والممثل' : 'Company & Rep') : (isAr ? 'البيانات الشخصية' : 'Personal Profile')}</span>
               </button>
 
               <button
@@ -1113,7 +1315,7 @@ const ClientManagement = () => {
                 }`}
               >
                 <Banknote size={15} />
-                <span>{isAr ? 'المالية والفواتير' : 'Invoices & Billing'}</span>
+                <span>{isAr ? 'المالية والفواتير' : 'Billing & Invoices'}</span>
               </button>
             </div>
 
@@ -1125,76 +1327,321 @@ const ClientManagement = () => {
                 </div>
               ) : (
                 <>
-                  {/* ── TAB 1: Profile Overview ────────────────────────────── */}
+                  {/* ── TAB 1: Live Works & Tasks ──────────────────────────── */}
+                  {drawerTab === 'operations' && (
+                    <div className="space-y-4 animate-fade-in">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+                            <Activity size={15} className="text-brand-dark" />
+                            {isAr ? 'قائمة الأعمال والخدمات المسندة للشركة' : 'Company Jobs & Active Services'}
+                          </h4>
+                          <p className="text-[10px] text-gray-400 font-medium">
+                            {isAr ? 'كل عمل له رسومه الخاصة، مدته، حالته الربعية، وقائمة الأنشطة' : 'Each job has custom charges, duration type, quarterly progress & activities'}
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setQuickOpForm({
+                              title: 'VAT Return Filing',
+                              custom_title: '',
+                              use_custom_title: false,
+                              department_id: 'tax_vat',
+                              employee_id: employees[0]?.id || '',
+                              charge_amount: '350',
+                              duration_type: 'quarterly',
+                              due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+                              description: '',
+                              status: 'ongoing',
+                              activities: [
+                                { id: 'act-1', title: 'Collect sales & purchase invoices', completed: false },
+                                { id: 'act-2', title: 'Reconcile VAT ledger & calculate tax', completed: false }
+                              ],
+                              new_activity_text: ''
+                            });
+                            setShowQuickOpModal(true);
+                          }}
+                          className="px-3.5 py-2 bg-brand-dark hover:bg-brand text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                        >
+                          <Plus size={14} />
+                          <span>{isAr ? '+ إنشاء عمل / مهمة جديدة' : '+ Create New Job'}</span>
+                        </button>
+                      </div>
+
+                      {clientServices.length === 0 ? (
+                        <div className="p-10 text-center bg-gray-50 rounded-3xl border border-dashed border-gray-200">
+                          <Activity size={36} className="mx-auto mb-2 text-gray-300" />
+                          <p className="text-xs font-black text-gray-700">{isAr ? 'لا توجد أعمال مسجلة لهذه الشركة حالياً' : 'No jobs currently assigned to this company'}</p>
+                          <p className="text-[10px] text-gray-400 mt-1">{isAr ? 'انقر على الزر أعلاه لإضافة أول عمل برسوم مخصصة' : 'Click the button above to create a new job with separate charges'}</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {clientServices.map(svc => {
+                            const svcDuration = svc.duration_type || 'one_time';
+                            const svcCharge = Number(svc.charge_amount) || Number(svc.budget) || 0;
+                            const qStatus = svc.quarterly_status || { q1: 'pending', q2: 'pending', q3: 'pending', q4: 'pending' };
+                            const svcActivities = svc.activities || [];
+
+                            return (
+                              <div key={svc.id} className="bg-white border border-gray-200 rounded-3xl p-5 shadow-xs hover:border-brand-dark/30 transition-all space-y-3.5">
+                                {/* Job Header */}
+                                <div className="flex flex-wrap justify-between items-start gap-2">
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase bg-brand-dark/10 text-brand-dark">
+                                        {svc.department_id ? svc.department_id.replace('_', ' ') : 'General'}
+                                      </span>
+                                      <span className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                                        svc.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                                        svc.status === 'delayed' ? 'bg-red-100 text-red-800' :
+                                        svc.status === 'under_review' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                                      }`}>
+                                        {svc.status.replace('_', ' ')}
+                                      </span>
+                                    </div>
+                                    <h3 className="text-sm font-black text-gray-900 mt-1">{svc.title}</h3>
+                                  </div>
+
+                                  {/* Separate Charges & Payment Pill */}
+                                  <div className="text-end">
+                                    <div className="text-sm font-black text-brand-dark">
+                                      {svcCharge > 0 ? `${svcCharge.toLocaleString()} OMR` : (isAr ? 'بدون رسوم' : 'No Fee')}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleJobPaymentStatus(svc.id, svc.payment_status)}
+                                      className={`mt-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md border cursor-pointer transition-all ${
+                                        svc.payment_status === 'paid' 
+                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                          : svc.payment_status === 'partially_paid'
+                                          ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                          : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                                      }`}
+                                      title={isAr ? 'انقر لتغيير حالة السداد' : 'Click to cycle payment status'}
+                                    >
+                                      {svc.payment_status === 'paid' ? (isAr ? '✓ مسدد بالكامل' : '✓ 100% Paid') :
+                                       svc.payment_status === 'partially_paid' ? (isAr ? 'دفعة جزئية' : 'Partial') :
+                                       (isAr ? 'غير مسدد' : 'Unpaid')}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Duration & Quarter-wise Tracking */}
+                                <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100">
+                                  <div className="flex justify-between items-center mb-2">
+                                    <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider flex items-center gap-1">
+                                      <Clock size={11} />
+                                      {isAr ? 'مدة ونوع العمل:' : 'Duration & Period:'}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-gray-700">
+                                      {svcDuration === 'quarterly' ? (isAr ? 'عمل ربعي دوري (٤ فترات)' : 'Quarterly Cycles (Q1 - Q4)') :
+                                       svcDuration === 'annual' ? (isAr ? 'عقد سنوي (سنة كاملة)' : 'Annual (1-Year)') :
+                                       svcDuration === 'monthly' ? (isAr ? 'اشتراك شهري' : 'Monthly Retainer') :
+                                       (isAr ? 'مشروع لمرة واحدة' : 'One-Time Project')}
+                                    </span>
+                                  </div>
+
+                                  {/* If Quarterly, show interactive Q1 - Q4 status buttons */}
+                                  {svcDuration === 'quarterly' && (
+                                    <div className="grid grid-cols-4 gap-2 pt-1">
+                                      {(['q1', 'q2', 'q3', 'q4'] as const).map(q => {
+                                        const qVal = (qStatus as any)[q] || 'pending';
+                                        return (
+                                          <button
+                                            key={q}
+                                            type="button"
+                                            onClick={() => handleUpdateQuarterStatus(svc.id, qStatus, q)}
+                                            className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase flex flex-col items-center justify-center transition-all cursor-pointer border ${
+                                              qVal === 'completed'
+                                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                                : qVal === 'ongoing'
+                                                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                                : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                                            }`}
+                                            title={isAr ? `انقر لتغيير حالة ${q.toUpperCase()}` : `Click to cycle ${q.toUpperCase()} status`}
+                                          >
+                                            <span>{q.toUpperCase()}</span>
+                                            <span className="text-[8px] font-bold opacity-90">
+                                              {qVal === 'completed' ? (isAr ? 'مكتمل' : 'Done') :
+                                               qVal === 'ongoing' ? (isAr ? 'جاري' : 'In Progress') :
+                                               (isAr ? 'معلق' : 'Pending')}
+                                            </span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Activities / Checklist */}
+                                <div className="space-y-2 pt-1">
+                                  <div className="flex justify-between items-center text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                                    <span>{isAr ? 'الأنشطة والمهام الفرعية:' : 'Job Activities & Checklist:'}</span>
+                                    <span>{svcActivities.filter(a => a.completed).length} / {svcActivities.length}</span>
+                                  </div>
+
+                                  {svcActivities.length > 0 && (
+                                    <div className="space-y-1.5">
+                                      {svcActivities.map(act => (
+                                        <div
+                                          key={act.id}
+                                          onClick={() => handleToggleActivity(svc.id, svcActivities, act.id)}
+                                          className={`flex items-center gap-2 p-2 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
+                                            act.completed ? 'bg-emerald-50/60 border-emerald-100 text-emerald-900 line-through opacity-75' : 'bg-white border-gray-100 text-gray-800 hover:border-gray-200'
+                                          }`}
+                                        >
+                                          {act.completed ? (
+                                            <CheckSquare size={14} className="text-emerald-600 shrink-0" />
+                                          ) : (
+                                            <Square size={14} className="text-gray-400 shrink-0" />
+                                          )}
+                                          <span>{act.title}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Add Activity inline input */}
+                                  <div className="flex gap-2 pt-1">
+                                    <input
+                                      type="text"
+                                      placeholder={isAr ? '+ أضف نشاط فرعي جديد...' : '+ Add sub-activity...'}
+                                      value={newJobActivityInput[svc.id] || ''}
+                                      onChange={(e) => setNewJobActivityInput({ ...newJobActivityInput, [svc.id]: e.target.value })}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddActivityToJob(svc.id, svcActivities); } }}
+                                      className="flex-1 p-2 bg-gray-50 border border-gray-200 rounded-xl text-[11px] font-bold outline-none focus:border-brand-dark"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddActivityToJob(svc.id, svcActivities)}
+                                      className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-[10px] font-black cursor-pointer"
+                                    >
+                                      {isAr ? 'إضافة' : 'Add'}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Footer: Assignee & Creation info */}
+                                <div className="flex justify-between items-center pt-2 border-t border-gray-100 text-[10px] text-gray-500">
+                                  <span>
+                                    {isAr ? 'المسؤول:' : 'Managing:'} <strong className="text-gray-800">{svc.profiles?.full_name || 'Staff Member'}</strong>
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Calendar size={11} />
+                                    <span>{svc.created_at ? new Date(svc.created_at).toLocaleDateString(isAr ? 'ar-OM' : 'en-GB') : ''}</span>
+                                    {svc.due_date && <span>• SLA: {new Date(svc.due_date).toLocaleDateString(isAr ? 'ar-OM' : 'en-GB')}</span>}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── TAB 2: Common Company Documents ────────────────────── */}
+                  {drawerTab === 'documents' && (
+                    <div className="space-y-4 animate-fade-in">
+                      <div>
+                        <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+                          <FolderCheck size={15} className="text-brand-dark" />
+                          {isAr ? 'المستندات القانونية والرسمية العامة للشركة' : 'Common Corporate Documents'}
+                        </h4>
+                        <p className="text-[10px] text-gray-400 font-medium">
+                          {isAr ? 'المستندات الرسمية الثابتة للشركة (السجل التجاري، غرفة التجارة، شهادة القيمة المضافة وغيرها)' : 'Permanent company legal documents (Commercial Reg, Chamber, VAT Cert, Articles of Assoc)'}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3">
+                        {[
+                          { key: 'cr_doc', title: isAr ? 'شهادة السجل التجاري (CR Certificate)' : 'Commercial Registration (CR) Certificate', sub: isAr ? 'وزارة التجارة والصناعة وترويج الاستثمار' : 'MoCIIP Oman Official Certificate', tag: 'CR: ' + (selectedClient.cr_number || '---') },
+                          { key: 'chamber_doc', title: isAr ? 'شهادة انتساب غرفة التجارة والصناعة (OCCI)' : 'Chamber of Commerce Certificate (OCCI)', sub: isAr ? 'شهادة الانتساب السنوية للغرفة' : 'Annual Chamber Membership Certificate', tag: isAr ? 'غرفة تجارة عمان' : 'OCCI' },
+                          { key: 'vat_cert', title: isAr ? 'شهادة التسجيل في ضريبة القيمة المضافة (VAT)' : 'VAT Registration Certificate', sub: isAr ? 'جهاز الضرائب العُماني (OTA)' : 'Oman Tax Authority', tag: selectedClient.tax_number ? `TIN: ${selectedClient.tax_number}` : 'VAT' },
+                          { key: 'tax_card', title: isAr ? 'البطاقة الضريبية / شهادة الخضوع للضريبة' : 'Tax Card / Corporate Income Tax ID', sub: isAr ? 'إثبات التسجيل في ضريبة الدخل' : 'Direct Tax Compliance Certificate', tag: isAr ? 'ضريبة الدخل' : 'CIT' },
+                          { key: 'articles_assoc', title: isAr ? 'عقد التأسيس وملاحق التعديل' : 'Articles of Association (Constitutive Contract)', sub: isAr ? 'العقد التأسيسي وتحديد الشركاء والمفوضين' : 'Company Formation & Shareholding Structure', tag: isAr ? 'عقد تأسيس' : 'Legal' },
+                        ].map((doc, idx) => (
+                          <div key={doc.key} className="bg-white border border-gray-200 rounded-2xl p-4 flex justify-between items-center shadow-xs">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-brand-dark">
+                                <FileText size={18} />
+                              </div>
+                              <div>
+                                <h5 className="text-xs font-black text-gray-900">{doc.title}</h5>
+                                <p className="text-[10px] text-gray-400 mt-0.5">{doc.sub}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md text-[9px] font-mono font-bold">
+                                {doc.tag}
+                              </span>
+                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-md text-[9px] font-bold flex items-center gap-1">
+                                <Check size={10} />
+                                {isAr ? 'معتمد' : 'Verified'}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── TAB 3: Profile Overview ────────────────────────────── */}
                   {drawerTab === 'overview' && (
                     <div className="space-y-6 animate-fade-in">
                       {/* Identity & Legal Numbers */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {isB2BClient(selectedClient) ? (
-                          <>
-                            <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl">
-                              <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1 flex items-center gap-1">
-                                <Building2 size={12} /> {isAr ? 'رقم السجل التجاري (CR)' : 'Commercial Reg (CR)'}
-                              </p>
-                              <p className="text-base font-black text-gray-900 font-mono">{selectedClient.cr_number || '1527047'}</p>
-                              <span className="text-[10px] font-bold text-emerald-600 mt-1 inline-block">✓ وزارة التجارة والصناعة (MoCIIP)</span>
-                            </div>
+                        <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl">
+                          <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1 flex items-center gap-1">
+                            <Building2 size={12} /> {isAr ? 'رقم السجل التجاري (CR)' : 'Commercial Reg (CR)'}
+                          </p>
+                          <p className="text-base font-black text-gray-900 font-mono">{selectedClient.cr_number || (isAr ? 'بدون سجل' : 'No CR')}</p>
+                          <span className="text-[10px] font-bold text-emerald-600 mt-1 inline-block">✓ وزارة التجارة والصناعة (MoCIIP)</span>
+                        </div>
 
-                            <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl">
-                              <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1 flex items-center gap-1">
-                                <Tag size={12} /> {isAr ? 'الرقم الضريبي (TIN / VAT)' : 'Tax ID (TIN / VAT)'}
-                              </p>
-                              <p className="text-base font-black text-gray-900 font-mono">{selectedClient.tax_number || 'OM1100298341'}</p>
-                              <span className="text-[10px] font-bold text-blue-600 mt-1 inline-block">✓ جهاز الضرائب العُماني (OTA)</span>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="bg-purple-50 border border-purple-100 p-4 rounded-2xl">
-                              <p className="text-[10px] font-black uppercase text-purple-700 tracking-wider mb-1 flex items-center gap-1">
-                                <IdCard size={12} /> {isAr ? 'الرقم المدني / بطاقة الهوية' : 'Civil ID / National ID'}
-                              </p>
-                              <p className="text-base font-black text-purple-950 font-mono">{selectedClient.civil_id || '91823746'}</p>
-                              <span className="text-[10px] font-bold text-purple-700 mt-1 inline-block">✓ هوية وطنية معتمدة</span>
-                            </div>
-
-                            <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl">
-                              <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1 flex items-center gap-1">
-                                <Tag size={12} /> {isAr ? 'نوع الاستشارة / الخدمة' : 'Advisory / Service Category'}
-                              </p>
-                              <p className="text-sm font-black text-gray-900">{selectedClient.industry || 'Personal Tax Filing & Advisory'}</p>
-                              <span className="text-[10px] font-bold text-emerald-600 mt-1 inline-block">✓ استشارة فردية</span>
-                            </div>
-                          </>
-                        )}
+                        <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl">
+                          <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1 flex items-center gap-1">
+                            <Tag size={12} /> {isAr ? 'مجال النشاط / القطاع' : 'Industry Field'}
+                          </p>
+                          <p className="text-sm font-black text-gray-900">{selectedClient.industry || (isAr ? 'نشاط عام' : 'General')}</p>
+                          <span className="text-[10px] font-bold text-blue-600 mt-1 inline-block">✓ قطاع معتمد</span>
+                        </div>
                       </div>
 
-                      {/* Contact Info Card */}
+                      {/* Representative / Contact Person Info */}
                       <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-xs space-y-4">
                         <h4 className="text-xs font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
                           <UserCircle2 size={14} className="text-brand-dark" />
-                          {isB2BClient(selectedClient) ? (isAr ? 'بيانات المفوض بالتوقيع والتواصل' : 'Authorized Representative') : (isAr ? 'بيانات التواصل المباشر' : 'Direct Contact Information')}
+                          {isAr ? 'بيانات المفوض / ممثل الشركة' : 'Company Representative Details'}
                         </h4>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
-                            <span className="text-[10px] text-gray-400 font-bold block">{isAr ? 'الاسم الكامل' : 'Contact Person'}</span>
-                            <span className="text-xs font-black text-gray-900">{selectedClient.full_name}</span>
+                            <span className="text-[10px] text-gray-400 font-bold block">{isAr ? 'اسم المفوض / الممثل' : 'Representative Name'}</span>
+                            <span className="text-xs font-black text-gray-900">
+                              {selectedClient.representative_name || selectedClient.contact_person || selectedClient.full_name || (isAr ? 'غير محدد' : 'Not specified')}
+                            </span>
                           </div>
 
                           <div>
-                            <span className="text-[10px] text-gray-400 font-bold block">{isAr ? 'النشاط / المهنة' : 'Sector / Profession'}</span>
-                            <span className="text-xs font-black text-gray-900">{selectedClient.industry || 'Private Consultation'}</span>
+                            <span className="text-[10px] text-gray-400 font-bold block">{isAr ? 'الرقم الضريبي (TIN)' : 'Tax Number (TIN)'}</span>
+                            <span className="text-xs font-black text-gray-900 font-mono">{selectedClient.tax_number || '---'}</span>
                           </div>
 
                           <div>
                             <span className="text-[10px] text-gray-400 font-bold block">{isAr ? 'رقم الهاتف / واتساب' : 'Phone / WhatsApp'}</span>
-                            <span className="text-xs font-black text-gray-900 font-mono">{selectedClient.phone || '+968 91234567'}</span>
+                            <span className="text-xs font-black text-gray-900 font-mono">
+                              {selectedClient.representative_phone || selectedClient.phone || '---'}
+                            </span>
                           </div>
 
                           <div>
-                            <span className="text-[10px] text-gray-400 font-bold block">{isAr ? 'البريد الإلكتروني' : 'Official Email'}</span>
-                            <span className="text-xs font-black text-gray-900 font-mono">{selectedClient.email || 'client@maisarah.om'}</span>
+                            <span className="text-[10px] text-gray-400 font-bold block">{isAr ? 'البريد الإلكتروني (اختياري)' : 'Email (Optional)'}</span>
+                            <span className="text-xs font-black text-gray-900 font-mono">
+                              {selectedClient.representative_email || selectedClient.email || '---'}
+                            </span>
                           </div>
                         </div>
 
@@ -1205,12 +1652,12 @@ const ClientManagement = () => {
                             className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm"
                           >
                             <MessageCircle size={15} />
-                            <span>{isAr ? 'واتساب مباشر' : 'WhatsApp Contact'}</span>
+                            <span>{isAr ? 'واتساب مباشر' : 'WhatsApp Representative'}</span>
                           </button>
 
-                          {selectedClient.phone && (
+                          {(selectedClient.representative_phone || selectedClient.phone) && (
                             <a
-                              href={`tel:${selectedClient.phone}`}
+                              href={`tel:${selectedClient.representative_phone || selectedClient.phone}`}
                               className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all"
                             >
                               <Phone size={15} />
@@ -1228,7 +1675,7 @@ const ClientManagement = () => {
                           </div>
                           <div>
                             <span className="text-[10px] font-black uppercase text-brand-dark tracking-wider">{isAr ? 'المسؤول المباشر عن الحساب' : 'Assigned Account Lead'}</span>
-                            <p className="text-sm font-black text-gray-900">{selectedClient.assigned_employee?.full_name || employees[0]?.full_name || 'Budoor Al Hasani'}</p>
+                            <p className="text-sm font-black text-gray-900">{selectedClient.assigned_employee?.full_name || employees[0]?.full_name || (isAr ? 'غير محدد' : 'Unassigned')}</p>
                           </div>
                         </div>
                         <span className="px-3 py-1 bg-white rounded-xl text-[10px] font-black text-gray-700 border border-gray-200">
@@ -1238,83 +1685,22 @@ const ClientManagement = () => {
                     </div>
                   )}
 
-                  {/* ── TAB 2: Live Operations & Deliverables ────────────────── */}
-                  {drawerTab === 'operations' && (
-                    <div className="space-y-4 animate-fade-in">
-                      <div className="flex justify-between items-center">
-                        <h4 className="text-xs font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                          <Activity size={14} className="text-brand-dark" />
-                          {isAr ? 'سجل العمليات والمهام الحالية' : 'Live Work Status & SLA Deliverables'}
-                        </h4>
-
-                        <button
-                          onClick={() => {
-                            setQuickOpForm({
-                              title: '',
-                              employee_id: employees[0]?.id || '',
-                              due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-                              description: '',
-                              status: 'ongoing'
-                            });
-                            setShowQuickOpModal(true);
-                          }}
-                          className="px-3 py-1.5 bg-brand-dark hover:bg-brand text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all shadow-sm"
-                        >
-                          <Plus size={13} />
-                          <span>{isAr ? 'تكليف بمهمة جديدة' : '+ Assign Task'}</span>
-                        </button>
-                      </div>
-
-                      {clientServices.length === 0 ? (
-                        <div className="p-10 text-center bg-gray-50 rounded-3xl border border-dashed border-gray-200">
-                          <Activity size={32} className="mx-auto mb-2 text-gray-300" />
-                          <p className="text-xs font-black text-gray-700">{isAr ? 'لا توجد عمليات نشطة مسجلة' : 'No active tasks found'}</p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">{isAr ? 'يمكنك تكليف الموظف بإنشاء مهمة جديدة بنقرة واحدة أعلاه' : 'Click above to assign a new deliverable'}</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {clientServices.map(svc => (
-                            <div key={svc.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs hover:border-brand-dark/30 transition-all space-y-2">
-                              <div className="flex justify-between items-start gap-2">
-                                <span className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
-                                  svc.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
-                                  svc.status === 'delayed' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
-                                }`}>
-                                  {svc.status.replace('_', ' ')}
-                                </span>
-                                <div className="flex items-center gap-1 text-[10px] text-gray-400 font-bold">
-                                  <Calendar size={11} />
-                                  <span>{svc.due_date ? new Date(svc.due_date).toLocaleDateString(isAr ? 'ar-OM' : 'en-GB') : '---'}</span>
-                                </div>
-                              </div>
-
-                              <p className="text-xs font-black text-gray-900">{svc.title}</p>
-
-                              <div className="flex justify-between items-center pt-2 border-t border-gray-50 text-[10px]">
-                                <span className="text-gray-400 font-medium">
-                                  {isAr ? 'المسؤول:' : 'Assignee:'} <strong className="text-gray-700">{svc.profiles?.full_name || 'Staff Member'}</strong>
-                                </span>
-                                <span className="text-brand-dark font-bold">Maisarah SLA Tracked</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* ── TAB 3: Financials & Invoices ────────────────────────── */}
+                  {/* ── TAB 4: Financials & Invoices ────────────────────────── */}
                   {drawerTab === 'finance' && (
                     <div className="space-y-6 animate-fade-in">
                       {/* Financial KPI Cards */}
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl">
+                          <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest mb-1">{isAr ? 'إجمالي الرسوم' : 'Total Charges'}</p>
+                          <p className="text-xl font-black text-blue-800">{clientFinance.total_billed.toLocaleString()} <span className="text-xs">OMR</span></p>
+                        </div>
                         <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl">
-                          <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1">{isAr ? 'إجمالي المسدد' : 'Paid'}</p>
-                          <p className="text-2xl font-black text-emerald-800">{clientFinance.paid.toLocaleString()} <span className="text-xs">OMR</span></p>
+                          <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1">{isAr ? 'المسدد' : 'Paid'}</p>
+                          <p className="text-xl font-black text-emerald-800">{clientFinance.paid.toLocaleString()} <span className="text-xs">OMR</span></p>
                         </div>
                         <div className="bg-red-50 border border-red-100 p-4 rounded-2xl">
-                          <p className="text-[10px] font-black text-red-700 uppercase tracking-widest mb-1">{isAr ? 'المستحق / المعلق' : 'Outstanding'}</p>
-                          <p className="text-2xl font-black text-red-800">{clientFinance.outstanding.toLocaleString()} <span className="text-xs">OMR</span></p>
+                          <p className="text-[10px] font-black text-red-700 uppercase tracking-widest mb-1">{isAr ? 'المتبقي' : 'Outstanding'}</p>
+                          <p className="text-xl font-black text-red-800">{clientFinance.outstanding.toLocaleString()} <span className="text-xs">OMR</span></p>
                         </div>
                       </div>
 
@@ -1390,11 +1776,11 @@ const ClientManagement = () => {
         </>
       )}
 
-      {/* ── Modal: Register New Client (Adaptive B2B vs Individual) ──────── */}
+      {/* ── Modal: Register New Client (Company & Representative) ─────────── */}
       {showAddClientModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
-          <div className="bg-white rounded-[2.5rem] w-full max-w-xl shadow-2xl overflow-hidden p-6 animate-scale-up border border-gray-100">
-            <div className="flex justify-between items-center mb-5 pb-3 border-b border-gray-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4 overflow-y-auto" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white rounded-[2.5rem] w-full max-w-xl shadow-2xl overflow-hidden p-6 animate-scale-up border border-gray-100 my-8 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${
                   newClientType === 'b2b' ? 'bg-brand-dark/10 text-brand-dark' : 'bg-purple-100 text-purple-700'
@@ -1403,9 +1789,9 @@ const ClientManagement = () => {
                 </div>
                 <div>
                   <h3 className="text-base font-black text-gray-900">
-                    {newClientType === 'b2b' ? (isAr ? 'تسجيل شركة جديدة (B2B)' : 'Register Corporate Entity (B2B)') : (isAr ? 'تسجيل عميل فردي جديد' : 'Register Individual Client')}
+                    {newClientType === 'b2b' ? (isAr ? 'تسجيل شركة جديدة (B2B)' : 'Register Company Entity (B2B)') : (isAr ? 'تسجيل عميل فردي جديد' : 'Register Individual Client')}
                   </h3>
-                  <p className="text-[10px] font-bold text-gray-400">{isAr ? 'اختر نوع الحساب وأدخل البيانات المطلوبة' : 'Select client category and fill details'}</p>
+                  <p className="text-[10px] font-bold text-gray-400">{isAr ? 'بيانات الشركة وممثلها ومجال عملها' : 'Company details, representative & industry field'}</p>
                 </div>
               </div>
               <button onClick={() => setShowAddClientModal(false)} className="p-2 text-gray-400 hover:text-gray-700 rounded-full cursor-pointer">
@@ -1418,7 +1804,7 @@ const ClientManagement = () => {
               <button
                 type="button"
                 onClick={() => setNewClientType('b2b')}
-                className={`flex-1 py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
                   newClientType === 'b2b' ? 'bg-brand-dark text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
@@ -1429,7 +1815,7 @@ const ClientManagement = () => {
               <button
                 type="button"
                 onClick={() => setNewClientType('individual')}
-                className={`flex-1 py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
                   newClientType === 'individual' ? 'bg-purple-700 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
@@ -1438,157 +1824,191 @@ const ClientManagement = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateClientSubmit} className="space-y-4">
-              {/* Name Fields */}
+            <form onSubmit={handleCreateClientSubmit} className="space-y-4 overflow-y-auto pr-1">
+              {/* Company Details */}
               {newClientType === 'b2b' ? (
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'اسم الشركة / المؤسسة *' : 'Company / Entity Name *'}</label>
-                  <input
-                    type="text"
-                    required
-                    value={newClientForm.company_name}
-                    onChange={(e) => setNewClientForm({ ...newClientForm, company_name: e.target.value })}
-                    placeholder={isAr ? 'مثال: شركة المها للمقاولات ش.م.م' : 'e.g., Al Maha Contracting LLC'}
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark"
-                  />
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'اسم العميل الكامل *' : 'Full Name *'}</label>
-                  <input
-                    type="text"
-                    required
-                    value={newClientForm.full_name}
-                    onChange={(e) => setNewClientForm({ ...newClientForm, full_name: e.target.value, company_name: e.target.value })}
-                    placeholder={isAr ? 'مثال: د. سالم الحارثي' : 'e.g., Dr. Salim Al Harthy'}
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark"
-                  />
-                </div>
-              )}
-
-              {/* CR & Tax for B2B vs Civil ID for Individual */}
-              {newClientType === 'b2b' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'رقم السجل التجاري (CR)' : 'CR Number (7 digits)'}</label>
-                    <input
-                      type="text"
-                      maxLength={7}
-                      inputMode="numeric"
-                      value={newClientForm.cr_number}
-                      onChange={(e) => setNewClientForm({ ...newClientForm, cr_number: e.target.value.replace(/\D/g, '').slice(0, 7) })}
-                      placeholder="1527047"
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark"
-                    />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'اسم الشركة / المؤسسة *' : 'Company Name *'}</label>
+                      <input
+                        type="text"
+                        required
+                        value={newClientForm.company_name}
+                        onChange={(e) => setNewClientForm({ ...newClientForm, company_name: e.target.value })}
+                        placeholder={isAr ? 'مثال: شركة النماء للمقاولات ش.م.م' : 'e.g., Al Namaa Contracting LLC'}
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'رقم السجل التجاري (CR)' : 'CR Number (7 digits)'}</label>
+                      <input
+                        type="text"
+                        maxLength={7}
+                        inputMode="numeric"
+                        value={newClientForm.cr_number}
+                        onChange={(e) => setNewClientForm({ ...newClientForm, cr_number: e.target.value.replace(/\D/g, '').slice(0, 7) })}
+                        placeholder="1473555"
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand-dark"
+                      />
+                    </div>
                   </div>
+
+                  {/* Industry Field Selector */}
                   <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'الرقم الضريبي (TIN / VAT)' : 'Tax Number (TIN)'}</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider">{isAr ? 'مجال نشاط الشركة' : 'Company Industry / Field'}</label>
+                      <button
+                        type="button"
+                        onClick={() => setNewClientForm({ ...newClientForm, use_custom_industry: !newClientForm.use_custom_industry })}
+                        className="text-[10px] text-brand-dark font-bold hover:underline"
+                      >
+                        {newClientForm.use_custom_industry ? (isAr ? 'اختر من القائمة' : 'Select from list') : (isAr ? '+ كتابة مجال مخصص' : '+ Type custom field')}
+                      </button>
+                    </div>
+
+                    {newClientForm.use_custom_industry ? (
+                      <input
+                        type="text"
+                        value={newClientForm.custom_industry}
+                        onChange={(e) => setNewClientForm({ ...newClientForm, custom_industry: e.target.value })}
+                        placeholder={isAr ? 'مثال: مقاولات كهربائية، تجارة التجزئة، شحن بحري' : 'e.g., Construction, Logistics, Supermarkets'}
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                      />
+                    ) : (
+                      <select
+                        value={newClientForm.industry}
+                        onChange={(e) => setNewClientForm({ ...newClientForm, industry: e.target.value })}
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
+                      >
+                        {INDUSTRY_OPTIONS.map(ind => (
+                          <option key={ind} value={ind}>{ind}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Tax Number */}
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'الرقم الضريبي (TIN / VAT) - اختياري' : 'Tax ID (TIN / VAT) - Optional'}</label>
                     <input
                       type="text"
                       value={newClientForm.tax_number}
                       onChange={(e) => setNewClientForm({ ...newClientForm, tax_number: e.target.value })}
                       placeholder="OM1100298341"
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark"
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand-dark"
                     />
+                  </div>
+
+                  {/* Representative Section */}
+                  <div className="p-3.5 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-3">
+                    <p className="text-[10px] font-black uppercase text-brand-dark tracking-wider flex items-center gap-1">
+                      <UserCircle2 size={13} />
+                      {isAr ? 'بيانات ممثل الشركة (المفوض بالتواصل)' : 'Company Representative (Authorized Signatory)'}
+                    </p>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 mb-1">{isAr ? 'اسم ممثل الشركة *' : 'Representative Name *'}</label>
+                      <input
+                        type="text"
+                        value={newClientForm.representative_name}
+                        onChange={(e) => setNewClientForm({ ...newClientForm, representative_name: e.target.value, full_name: e.target.value })}
+                        placeholder={isAr ? 'مثال: المهندس محمد الفارسي' : 'e.g., Eng. Mohammed Al Farsi'}
+                        className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">{isAr ? 'رقم هاتف / واتساب الممثل' : 'Mobile / WhatsApp'}</label>
+                        <input
+                          type="tel"
+                          value={newClientForm.representative_phone}
+                          onChange={(e) => setNewClientForm({ ...newClientForm, representative_phone: e.target.value, phone: e.target.value })}
+                          placeholder="+968 9123 4567"
+                          className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand-dark"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">{isAr ? 'البريد الإلكتروني (اختياري)' : 'Email (Optional)'}</label>
+                        <input
+                          type="email"
+                          value={newClientForm.representative_email}
+                          onChange={(e) => setNewClientForm({ ...newClientForm, representative_email: e.target.value, email: e.target.value })}
+                          placeholder="rep@company.om"
+                          className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-3">
                   <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'الرقم المدني (Civil ID)' : 'Civil ID / National ID'}</label>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'اسم العميل الكامل *' : 'Full Name *'}</label>
                     <input
                       type="text"
-                      value={newClientForm.civil_id}
-                      onChange={(e) => setNewClientForm({ ...newClientForm, civil_id: e.target.value })}
-                      placeholder="91823746"
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'نوع الخدمة المطلوبة' : 'Requested Service'}</label>
-                    <select
-                      value={newClientForm.service_type}
-                      onChange={(e) => setNewClientForm({ ...newClientForm, service_type: e.target.value })}
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
-                    >
-                      {INDIVIDUAL_SERVICE_OPTIONS.map(srv => (
-                        <option key={srv} value={srv}>{srv}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* Contact Person & Phone */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {newClientType === 'b2b' && (
-                  <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'المفوض بالتوقيع' : 'Authorized Contact'}</label>
-                    <input
-                      type="text"
+                      required
                       value={newClientForm.full_name}
-                      onChange={(e) => setNewClientForm({ ...newClientForm, full_name: e.target.value })}
-                      placeholder={isAr ? 'المهندس / المدير التنفيذي' : 'Managing Director'}
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark"
+                      onChange={(e) => setNewClientForm({ ...newClientForm, full_name: e.target.value, company_name: e.target.value })}
+                      placeholder={isAr ? 'مثال: د. سالم الحارثي' : 'e.g., Dr. Salim Al Harthy'}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
                     />
                   </div>
-                )}
-                <div className={newClientType === 'individual' ? 'sm:col-span-2' : ''}>
-                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'رقم الهاتف / واتساب' : 'Phone / WhatsApp'}</label>
-                  <input
-                    type="tel"
-                    value={newClientForm.phone}
-                    onChange={(e) => setNewClientForm({ ...newClientForm, phone: e.target.value })}
-                    placeholder="+968 9123 4567"
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark"
-                  />
-                </div>
-              </div>
 
-              {/* Industry & Account Supervisor */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {newClientType === 'b2b' ? (
-                  <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'قطاع النشاط' : 'Industry Sector'}</label>
-                    <select
-                      value={newClientForm.industry}
-                      onChange={(e) => setNewClientForm({ ...newClientForm, industry: e.target.value })}
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
-                    >
-                      {INDUSTRY_OPTIONS.map(ind => (
-                        <option key={ind} value={ind}>{ind}</option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'الرقم المدني (Civil ID)' : 'Civil ID'}</label>
+                      <input
+                        type="text"
+                        value={newClientForm.civil_id}
+                        onChange={(e) => setNewClientForm({ ...newClientForm, civil_id: e.target.value })}
+                        placeholder="91823746"
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand-dark"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'رقم الهاتف' : 'Phone'}</label>
+                      <input
+                        type="tel"
+                        value={newClientForm.phone}
+                        onChange={(e) => setNewClientForm({ ...newClientForm, phone: e.target.value })}
+                        placeholder="+968 9988 7766"
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand-dark"
+                      />
+                    </div>
                   </div>
-                ) : (
+
                   <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'البريد الإلكتروني' : 'Email Address'}</label>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'البريد الإلكتروني' : 'Email'}</label>
                     <input
                       type="email"
                       value={newClientForm.email}
                       onChange={(e) => setNewClientForm({ ...newClientForm, email: e.target.value })}
                       placeholder="client@gmail.com"
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark"
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
                     />
                   </div>
-                )}
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'مسؤول الحساب المشرف' : 'Account Manager'}</label>
-                  <select
-                    value={newClientForm.assigned_employee_id}
-                    onChange={(e) => setNewClientForm({ ...newClientForm, assigned_employee_id: e.target.value })}
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
-                  >
-                    {employees.map(emp => (
-                      <option key={emp.id} value={emp.id}>{emp.full_name} ({emp.role || 'Lead'})</option>
-                    ))}
-                  </select>
                 </div>
+              )}
+
+              {/* Account Manager Supervisor */}
+              <div>
+                <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'المسؤول المشرف عن الحساب' : 'Assigned Account Lead'}</label>
+                <select
+                  value={newClientForm.assigned_employee_id}
+                  onChange={(e) => setNewClientForm({ ...newClientForm, assigned_employee_id: e.target.value })}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
+                >
+                  <option value="">{isAr ? '-- غير محدد --' : '-- Unassigned --'}</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.full_name} ({emp.role || 'Staff'})</option>
+                  ))}
+                </select>
               </div>
 
               {/* Portal Access Toggle */}
-              <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-200">
+              <div className="flex items-center gap-2.5 p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
                 <input
                   type="checkbox"
                   id="managerSendPortalCheck"
@@ -1597,11 +2017,11 @@ const ClientManagement = () => {
                   className="w-4 h-4 text-emerald-600 accent-emerald-600 rounded cursor-pointer"
                 />
                 <label htmlFor="managerSendPortalCheck" className="text-xs font-black text-emerald-950 cursor-pointer select-none">
-                  {isAr ? '🔑 إنشاء حساب بوابة العميل وإرسال بيانات الدخول فوراً' : '🔑 Create Client Portal Access & Send Credentials Immediately'}
+                  {isAr ? '🔑 إنشاء بيانات دخول البوابة وإرسالها للممثل' : '🔑 Enable Client Portal & Send Access to Representative'}
                 </label>
               </div>
 
-              <div className="pt-4 flex gap-3">
+              <div className="pt-2 flex gap-3">
                 <button
                   type="button"
                   onClick={() => setShowAddClientModal(false)}
@@ -1616,7 +2036,7 @@ const ClientManagement = () => {
                     newClientType === 'b2b' ? 'bg-brand-dark hover:bg-brand shadow-brand-dark/20' : 'bg-purple-700 hover:bg-purple-800 shadow-purple-900/20'
                   }`}
                 >
-                  {isSavingClient ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'تسجيل العميل' : 'Register Account')}
+                  {isSavingClient ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'تسجيل الشركة' : 'Register Entity')}
                 </button>
               </div>
             </form>
@@ -1624,23 +2044,261 @@ const ClientManagement = () => {
         </div>
       )}
 
-      {/* ── Modal: Quick Assign Deliverable to Client ─────────────────────── */}
+      {/* ── Modal: Create New Job/Work with Separate Charges & Activities ─── */}
       {showQuickOpModal && selectedClient && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4" dir={isAr ? 'rtl' : 'ltr'}>
-          <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl p-6 animate-scale-up border border-gray-100">
-            <div className="flex justify-between items-center mb-5 pb-3 border-b border-gray-100">
-              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
-                <Activity size={18} className="text-brand-dark" />
-                {isAr ? `تكليف بمهمة جديدة لـ (${selectedClient.company_name || selectedClient.full_name})` : `Assign Deliverable to ${selectedClient.company_name || selectedClient.full_name}`}
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4 overflow-y-auto" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl p-6 animate-scale-up border border-gray-100 my-8 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                  <Activity size={18} className="text-brand-dark" />
+                  {isAr ? `إسناد عمل جديد لـ (${selectedClient.company_name || selectedClient.full_name})` : `Create New Job for ${selectedClient.company_name || selectedClient.full_name}`}
+                </h3>
+                <p className="text-[10px] text-gray-400 font-bold">{isAr ? 'رسوم مستقلة، مدة مخصصة، وأنشطة فرعية' : 'Custom fee, duration type, and sub-activities'}</p>
+              </div>
               <button onClick={() => setShowQuickOpModal(false)} className="p-2 text-gray-400 hover:text-gray-700 rounded-full cursor-pointer">
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleQuickOpSubmit} className="space-y-4">
+            <form onSubmit={handleQuickOpSubmit} className="space-y-4 overflow-y-auto pr-1">
+              {/* Department Selector */}
               <div>
-                <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'عنوان المهمة / الخدمة *' : 'Service Deliverable Title *'}</label>
+                <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'القسم المسؤول عن العمل *' : 'Department *'}</label>
+                <select
+                  value={quickOpForm.department_id}
+                  onChange={(e) => setQuickOpForm({ ...quickOpForm, department_id: e.target.value })}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
+                >
+                  {getAllDepartments().map(dept => (
+                    <option key={dept.id} value={dept.id}>
+                      {isAr ? (dept.name_ar || dept.name) : dept.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Service Title: Catalog or Custom */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider">{isAr ? 'اسم الخدمة / العمل *' : 'Work / Service Title *'}</label>
+                  <button
+                    type="button"
+                    onClick={() => setQuickOpForm({ ...quickOpForm, use_custom_title: !quickOpForm.use_custom_title })}
+                    className="text-[10px] text-brand-dark font-bold hover:underline"
+                  >
+                    {quickOpForm.use_custom_title ? (isAr ? 'اختر من القائمة' : 'Select standard') : (isAr ? '+ كتابة خدمة مخصصة' : '+ Type custom service')}
+                  </button>
+                </div>
+
+                {quickOpForm.use_custom_title ? (
+                  <input
+                    type="text"
+                    required
+                    value={quickOpForm.custom_title}
+                    onChange={(e) => setQuickOpForm({ ...quickOpForm, custom_title: e.target.value })}
+                    placeholder={isAr ? 'مثال: إعداد إقرار ضريبة القيمة المضافة Q2 2026، دراسة جدوى اقتصادية' : 'e.g., VAT Return Q2 2026, Feasibility Study'}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    required
+                    value={quickOpForm.title}
+                    onChange={(e) => setQuickOpForm({ ...quickOpForm, title: e.target.value })}
+                    placeholder={isAr ? 'مثال: إعداد الإقرار الضريبي، تدقيق القوائم المالية' : 'e.g., Statutory Audit 2026, VAT Filing'}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                  />
+                )}
+              </div>
+
+              {/* Separate Custom Charges & Duration Type */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                    {isAr ? 'رسوم هذا العمل المتفق عليها (ر.ع) *' : 'Agreed Fee (OMR) *'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      required
+                      value={quickOpForm.charge_amount}
+                      onChange={(e) => setQuickOpForm({ ...quickOpForm, charge_amount: e.target.value })}
+                      placeholder="350"
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark font-mono"
+                    />
+                    <span className="absolute end-3 top-2.5 text-xs font-bold text-gray-400">OMR</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                    {isAr ? 'مدة ونوع العمل' : 'Duration Type'}
+                  </label>
+                  <select
+                    value={quickOpForm.duration_type}
+                    onChange={(e) => setQuickOpForm({ ...quickOpForm, duration_type: e.target.value as any })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
+                  >
+                    <option value="quarterly">{isAr ? 'عمل ربع سنوي (Q1-Q4)' : 'Quarterly Cycles (Q1-Q4)'}</option>
+                    <option value="annual">{isAr ? 'سنة واحدة (عقد سنوي)' : 'Annual (1-Year)'}</option>
+                    <option value="one_time">{isAr ? 'مشروع لمرة واحدة' : 'One-Time Project'}</option>
+                    <option value="monthly">{isAr ? 'اشتراك شهري' : 'Monthly Retainer'}</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Assignee & Due Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'الموظف المسؤول المباشر' : 'Assignee'}</label>
+                  <select
+                    value={quickOpForm.employee_id}
+                    onChange={(e) => setQuickOpForm({ ...quickOpForm, employee_id: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
+                  >
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.full_name} ({emp.role || 'Staff'})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'الموعد النهائي (SLA)' : 'Due Date (SLA)'}</label>
+                  <input
+                    type="date"
+                    value={quickOpForm.due_date}
+                    onChange={(e) => setQuickOpForm({ ...quickOpForm, due_date: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                  />
+                </div>
+              </div>
+
+              {/* Dynamic Activities / Checklist */}
+              <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-2">
+                <label className="block text-[10px] font-black uppercase text-gray-500 tracking-wider">
+                  {isAr ? 'قائمة الأنشطة والخطوات الفرعية (Checklist)' : 'Job Sub-Activities & Steps'}
+                </label>
+
+                {quickOpForm.activities.length > 0 && (
+                  <div className="space-y-1.5">
+                    {quickOpForm.activities.map((act, index) => (
+                      <div key={act.id} className="flex items-center justify-between p-2 bg-white rounded-xl border border-gray-200 text-xs font-bold">
+                        <span>{index + 1}. {act.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => setQuickOpForm({
+                            ...quickOpForm,
+                            activities: quickOpForm.activities.filter(a => a.id !== act.id)
+                          })}
+                          className="text-red-500 hover:text-red-700 p-1 cursor-pointer"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={quickOpForm.new_activity_text}
+                    onChange={(e) => setQuickOpForm({ ...quickOpForm, new_activity_text: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (quickOpForm.new_activity_text.trim()) {
+                          setQuickOpForm({
+                            ...quickOpForm,
+                            activities: [
+                              ...quickOpForm.activities,
+                              { id: `act-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, title: quickOpForm.new_activity_text.trim(), completed: false }
+                            ],
+                            new_activity_text: ''
+                          });
+                        }
+                      }
+                    }}
+                    placeholder={isAr ? 'أضف نشاط فرعي...' : 'Add step (e.g., Collect bank statements)...'}
+                    className="flex-1 p-2 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (quickOpForm.new_activity_text.trim()) {
+                        setQuickOpForm({
+                          ...quickOpForm,
+                          activities: [
+                            ...quickOpForm.activities,
+                            { id: `act-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, title: quickOpForm.new_activity_text.trim(), completed: false }
+                          ],
+                          new_activity_text: ''
+                        });
+                      }
+                    }}
+                    className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    {isAr ? 'إضافة' : 'Add'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickOpModal(false)}
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold text-xs cursor-pointer"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingOp}
+                  className="flex-1 py-3 bg-brand-dark hover:bg-brand text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingOp ? (isAr ? 'جاري الإسناد...' : 'Creating...') : (isAr ? 'تأكيد إسناد العمل' : 'Confirm Assignment')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tax Invoice Modal ─────────────────────────────────────────────── */}
+      <TaxInvoiceModal
+        isOpen={showTaxInvoiceModal}
+        onClose={() => setShowTaxInvoiceModal(false)}
+        clientData={docClientData}
+      />
+
+      {/* ── Payment Receipt Modal ─────────────────────────────────────────── */}
+      <PaymentReceiptModal
+        isOpen={showReceiptModal}
+        onClose={() => setShowReceiptModal(false)}
+        clientData={docClientData}
+      />
+
+      {/* ── Portal Access & Credential Handover Modal ──────────────────────── */}
+      <PortalAccessCredentialModal
+        isOpen={isPortalModalOpen}
+        onClose={() => {
+          setIsPortalModalOpen(false);
+          setPortalTarget(null);
+        }}
+        target={portalTarget}
+        onSuccess={({ targetId }) => {
+          setClients(prev => prev.map(c => c.id === targetId ? { ...c, portal_access_sent: true } : c));
+          fetchClientsAndStats(true);
+        }}
+      />
+    </div>
+  );
+};
+
+export default ClientManagement;verable Title *'}</label>
                 <input
                   type="text"
                   required

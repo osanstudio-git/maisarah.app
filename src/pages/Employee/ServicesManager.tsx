@@ -33,6 +33,13 @@ interface ServiceRecord {
   client_id: string | null;
   employee_id?: string | null;
   department_id?: string | null;
+  charge_amount?: number | null;
+  budget?: number | null;
+  duration_type?: string | null;
+  quarterly_status?: { q1: string; q2: string; q3: string; q4: string } | null;
+  payment_status?: string | null;
+  amount_paid?: number | null;
+  activities?: { id: string; title: string; completed: boolean }[] | null;
   clients?: { company_name: string } | null;
 }
 
@@ -164,6 +171,8 @@ const ServicesManager = () => {
     due_date: '',
     description: '',
     status: 'ongoing',
+    charge_amount: '300',
+    duration_type: 'quarterly',
   });
   const [selectedDeptId, setSelectedDeptId] = useState(effectiveDeptId);
   const [useCustomName, setUseCustomName] = useState(false);
@@ -211,7 +220,7 @@ const ServicesManager = () => {
     try {
       let query = supabase
         .from('services')
-        .select('id, title, status, description, due_date, created_at, client_id, employee_id, department_id, clients(company_name)')
+        .select('*, clients(company_name)')
         .order('created_at', { ascending: false });
 
       const [svcRes, clientRes] = await Promise.all([
@@ -293,6 +302,7 @@ const ServicesManager = () => {
     }
 
     try {
+      const taskCharge = parseFloat(formData.charge_amount) || 0;
       const payload: any = {
         title: name,
         status: formData.status,
@@ -301,10 +311,23 @@ const ServicesManager = () => {
         client_id: formData.client_id || null,
         employee_id: user?.id, // Digital Signature: Tag the employee who created it
         department_id: selectedDeptId || effectiveDeptId,
+        charge_amount: taskCharge,
+        budget: taskCharge,
+        duration_type: formData.duration_type || 'quarterly',
+        quarterly_status: { q1: 'ongoing', q2: 'pending', q3: 'pending', q4: 'pending' },
+        payment_status: 'unpaid'
       };
 
       if (editingService) {
-        const { error } = await supabase.from('services').update(payload).eq('id', editingService.id);
+        let { error } = await supabase.from('services').update(payload).eq('id', editingService.id);
+        if (error && (error.message?.includes('charge_amount') || error.message?.includes('duration_type') || error.message?.includes('quarterly_status'))) {
+          delete payload.charge_amount;
+          delete payload.duration_type;
+          delete payload.quarterly_status;
+          delete payload.payment_status;
+          const retry = await supabase.from('services').update(payload).eq('id', editingService.id);
+          error = retry.error;
+        }
         if (error) throw error;
         setFormMsg({ type: 'ok', text: isAr ? 'تم تحديث الخدمة بنجاح' : 'Service updated successfully' });
         setServices(prev => prev.map(s => s.id === editingService.id ? { ...s, ...payload, clients: clients.find(c => c.id === payload.client_id) ? { company_name: clients.find(c => c.id === payload.client_id)!.company_name } : null } : s));
@@ -312,16 +335,20 @@ const ServicesManager = () => {
         let { data, error } = await supabase
           .from('services')
           .insert([payload])
-          .select('id, title, status, description, due_date, created_at, client_id, clients(company_name)')
+          .select('*, clients(company_name)')
           .maybeSingle();
 
-        // Safe retry if employee_id foreign key constraint fails
-        if (error && (error.message?.includes('foreign key') || (error as any).code === '23503')) {
+        // Safe retry if employee_id foreign key constraint or new schema columns fail
+        if (error && (error.message?.includes('charge_amount') || error.message?.includes('duration_type') || error.message?.includes('quarterly_status') || error.message?.includes('foreign key') || (error as any).code === '23503')) {
+          delete payload.charge_amount;
+          delete payload.duration_type;
+          delete payload.quarterly_status;
+          delete payload.payment_status;
           delete payload.employee_id;
           const retry = await supabase
             .from('services')
             .insert([payload])
-            .select('id, title, status, description, due_date, created_at, client_id, clients(company_name)')
+            .select('*, clients(company_name)')
             .maybeSingle();
           data = retry.data;
           error = retry.error;
@@ -349,7 +376,7 @@ const ServicesManager = () => {
         }
       }
 
-      setFormData({ title: '', custom_name: '', client_id: '', due_date: '', description: '', status: 'ongoing' });
+      setFormData({ title: '', custom_name: '', client_id: '', due_date: '', description: '', status: 'ongoing', charge_amount: '300', duration_type: 'quarterly' });
       setTimeout(() => { setIsModalOpen(false); setEditingService(null); setFormMsg(null); }, 1600);
     } catch (err: any) {
       setFormMsg({ type: 'err', text: err.message || 'Error saving service' });
@@ -372,6 +399,8 @@ const ServicesManager = () => {
       due_date: svc.due_date || '',
       description: svc.description || '',
       status: svc.status,
+      charge_amount: String(svc.charge_amount ?? svc.budget ?? '300'),
+      duration_type: svc.duration_type || 'quarterly',
     });
     setUseCustomName(!isMaster);
     setIsModalOpen(true);
@@ -410,13 +439,15 @@ const ServicesManager = () => {
           ref_table: 'client_jobs',
         }]);
 
-        // 3. Auto-draft Invoice in Supabase
+        // 3. Auto-draft Invoice in Supabase with REAL task charge amount (No dummy fallback!)
         const autoInvNum = `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+        const realCharge = Number(svc.charge_amount) || Number(svc.budget) || 0;
+        const realVat = realCharge > 0 ? Math.round(realCharge * 0.05 * 1000) / 1000 : 0;
         await supabase.from('invoices').insert([{
           invoice_number: autoInvNum,
           client_id: svc.client_id || null,
-          amount: 150, // Default estimated base amount for service
-          vat_amount: 7.500, // 5% VAT
+          amount: realCharge,
+          vat_amount: realVat,
           status: 'draft',
           notes: `Auto-draft for completed service: ${svc.title}`,
           due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
@@ -686,7 +717,19 @@ const ServicesManager = () => {
                       <tr key={svc.id} className="hover:bg-gray-50/70 transition-colors">
                         <td className="px-5 py-4">
                           <p className="font-semibold text-gray-800">{svc.title}</p>
-                          {svc.description && <p className="text-xs text-gray-400 truncate max-w-[200px]">{svc.description}</p>}
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {(Number(svc.charge_amount) || Number(svc.budget) || 0).toLocaleString()} OMR
+                            </span>
+                            {svc.duration_type && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                                {svc.duration_type === 'quarterly' ? (isAr ? 'ربع سنوي' : 'Quarterly') :
+                                 svc.duration_type === 'annual' ? (isAr ? 'سنوي' : 'Annual') :
+                                 svc.duration_type === 'one_time' ? (isAr ? 'مرة واحدة' : '1-Time') : (isAr ? 'شهري' : 'Monthly')}
+                              </span>
+                            )}
+                          </div>
+                          {svc.description && <p className="text-xs text-gray-400 truncate max-w-[200px] mt-0.5">{svc.description}</p>}
                         </td>
                         <td className="px-5 py-4 text-gray-600 font-medium">
                           {svc.clients?.company_name || <span className="text-gray-300">—</span>}
@@ -789,7 +832,19 @@ const ServicesManager = () => {
                   <div className="flex justify-between items-start gap-2">
                     <div>
                       <p className="font-semibold text-sm text-gray-800">{svc.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{svc.clients?.company_name || '—'}</p>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {(Number(svc.charge_amount) || Number(svc.budget) || 0).toLocaleString()} OMR
+                        </span>
+                        {svc.duration_type && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                            {svc.duration_type === 'quarterly' ? (isAr ? 'ربع سنوي' : 'Quarterly') :
+                             svc.duration_type === 'annual' ? (isAr ? 'سنوي' : 'Annual') :
+                             svc.duration_type === 'one_time' ? (isAr ? 'مرة واحدة' : '1-Time') : (isAr ? 'شهري' : 'Monthly')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">{svc.clients?.company_name || '—'}</p>
                     </div>
                     <StatusBadge status={svc.status} isAr={isAr} />
                   </div>
@@ -1025,6 +1080,47 @@ const ServicesManager = () => {
                       className="w-full p-2.5 border border-gray-200 rounded-xl text-sm outline-none
                         focus:border-red-700 focus:ring-2 focus:ring-red-700/10 transition"
                     />
+                  </div>
+                </div>
+
+                {/* Charge Amount & Duration Frequency */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      {isAr ? 'أتعاب الخدمة (ريال عماني)' : 'Service Charge (OMR)'}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        value={formData.charge_amount}
+                        onChange={e => setFormData({ ...formData, charge_amount: e.target.value })}
+                        placeholder="300"
+                        className="w-full p-2.5 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 outline-none focus:border-red-700"
+                      />
+                      <span className={`absolute ${isAr ? 'left-3' : 'right-3'} top-2.5 text-xs font-bold text-gray-400`}>
+                        OMR
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      {isAr ? 'المدة / التكرار' : 'Duration / Frequency'}
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={formData.duration_type}
+                        onChange={e => setFormData({ ...formData, duration_type: e.target.value })}
+                        className="w-full appearance-none p-2.5 pe-8 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-700 bg-white font-medium text-gray-800"
+                      >
+                        <option value="quarterly">{isAr ? 'ربع سنوي (Quarterly)' : 'Quarterly'}</option>
+                        <option value="annual">{isAr ? 'سنوي (Annual / 1 Year)' : 'Annual (1 Year)'}</option>
+                        <option value="one_time">{isAr ? 'مرة واحدة (1-Time)' : 'One-Time'}</option>
+                        <option value="monthly">{isAr ? 'شهري (Monthly)' : 'Monthly'}</option>
+                      </select>
+                      <ChevronDown size={14} className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
                   </div>
                 </div>
 

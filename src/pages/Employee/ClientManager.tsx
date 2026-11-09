@@ -36,7 +36,14 @@ import {
   Users,
   TrendingUp,
   Filter,
-  Check
+  Check,
+  FolderCheck,
+  CheckSquare,
+  Square,
+  Tag,
+  Banknote,
+  Activity,
+  Phone
 } from 'lucide-react';
 import {
   normalizeDepartmentId,
@@ -44,7 +51,7 @@ import {
   getDepartmentClientIdsFromDSR,
   isServiceMatchingDepartment
 } from '../../utils/departmentScoping';
-import { DEPARTMENT_CONFIGS } from '../../config/departments';
+import { DEPARTMENT_CONFIGS, getAllDepartments } from '../../config/departments';
 import { autoCreateDSREntryFromTask, deleteDSRsByClientId } from '../../utils/dsrSync';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 import ClientDepartmentChecklist from '../../components/employee/ClientDepartmentChecklist';
@@ -83,6 +90,11 @@ interface Client {
   b2b_partner_id?: string | null;
   b2b_partner_name?: string | null;
   source?: string | null;
+  representative_name?: string | null;
+  representative_phone?: string | null;
+  representative_email?: string | null;
+  industry?: string | null;
+  contact_person?: string | null;
 }
 
 interface Invoice {
@@ -101,6 +113,15 @@ interface Service {
   description: string | null;
   created_at: string;
   due_date: string | null;
+  employee_id?: string | null;
+  department_id?: string | null;
+  charge_amount?: number | null;
+  budget?: number | null;
+  duration_type?: 'one_time' | 'quarterly' | 'annual' | 'monthly' | string | null;
+  quarterly_status?: { q1: string; q2: string; q3: string; q4: string } | null;
+  payment_status?: 'unpaid' | 'partially_paid' | 'paid' | string | null;
+  activities?: Array<{ id: string; title: string; completed: boolean }> | null;
+  profiles?: { full_name: string } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,94 +167,248 @@ const ClientDetail = ({
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'checklist' | 'services' | 'invoices' | 'profile'>('checklist');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'documents' | 'checklist' | 'invoices' | 'profile'>('tasks');
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [invRes, svcRes] = await Promise.all([
-          supabase.from('invoices').select('id, invoice_number, amount, status, due_date, created_at').eq('client_id', client.id).order('created_at', { ascending: false }),
-          supabase.from('services').select('id, title, status, description, created_at, due_date, employee_id, department_id').eq('client_id', client.id).order('created_at', { ascending: false }),
-        ]);
-        setInvoices((invRes.data as Invoice[]) || []);
-        let allServices = (svcRes.data as any[]) || [];
-        if (!isManager && effectiveDeptId) {
-          allServices = allServices.filter(s =>
-            (s.department_id && normalizeDepartmentId(s.department_id) === effectiveDeptId) ||
-            isServiceMatchingDepartment(s.title, effectiveDeptId)
-          );
-        }
-        setServices(allServices);
-      } catch { /* silent */ }
-      setLoading(false);
-    };
-    load();
+  // Inline activity inputs per service
+  const [newJobActivityInput, setNewJobActivityInput] = useState<Record<string, string>>({});
+
+  // Quick New Job for this company modal
+  const [showAddJobModal, setShowAddJobModal] = useState(false);
+  const [isSubmittingJob, setIsSubmittingJob] = useState(false);
+  const [newJobForm, setNewJobForm] = useState({
+    title: '',
+    custom_title: '',
+    use_custom_title: true,
+    department_id: effectiveDeptId || 'audit',
+    charge_amount: '300',
+    duration_type: 'quarterly' as 'one_time' | 'quarterly' | 'annual' | 'monthly',
+    due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+    description: '',
+    status: 'ongoing',
+    activities: [
+      { id: 'act-1', title: isAr ? 'جمع وتدقيق الفواتير والمستندات' : 'Collect & verify documents', completed: false },
+      { id: 'act-2', title: isAr ? 'المراجعة المحاسبية والامتثال' : 'Reconciliation & compliance review', completed: false }
+    ],
+    new_act_text: ''
+  });
+
+  const loadClientData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [invRes, svcRes] = await Promise.all([
+        supabase.from('invoices').select('id, invoice_number, amount, status, due_date, created_at').eq('client_id', client.id).order('created_at', { ascending: false }),
+        supabase.from('services').select('id, title, status, description, created_at, due_date, employee_id, department_id, charge_amount, budget, duration_type, quarterly_status, payment_status, activities, profiles:employee_id(full_name)').eq('client_id', client.id).order('created_at', { ascending: false }),
+      ]);
+      setInvoices((invRes.data as Invoice[]) || []);
+      let allServices = (svcRes.data as any[]) || [];
+      if (!isManager && effectiveDeptId) {
+        allServices = allServices.filter(s =>
+          (s.department_id && normalizeDepartmentId(s.department_id) === effectiveDeptId) ||
+          isServiceMatchingDepartment(s.title, effectiveDeptId)
+        );
+      }
+      setServices(allServices);
+    } catch { /* silent */ }
+    setLoading(false);
   }, [client.id, effectiveDeptId, isManager]);
 
-  const totalPaid = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0);
-  const totalUnpaid = invoices.filter(i => i.status !== 'paid').reduce((s, i) => s + i.amount, 0);
-  const activeServices = services.filter(s => s.status === 'ongoing').length;
+  useEffect(() => {
+    loadClientData();
+  }, [loadClientData]);
+
+  // Handle toggling sub-activity completion
+  const handleToggleActivity = async (serviceId: string, currentActivities: any[], actId: string) => {
+    const updated = currentActivities.map(a => a.id === actId ? { ...a, completed: !a.completed } : a);
+    setServices(prev => prev.map(s => s.id === serviceId ? { ...s, activities: updated } : s));
+    try {
+      await supabase.from('services').update({ activities: updated }).eq('id', serviceId);
+    } catch (err) {
+      console.warn('Activity update error:', err);
+    }
+  };
+
+  // Handle adding new sub-activity inline
+  const handleAddActivity = async (serviceId: string, currentActivities: any[]) => {
+    const text = (newJobActivityInput[serviceId] || '').trim();
+    if (!text) return;
+    const newAct = { id: `act-${Date.now()}`, title: text, completed: false };
+    const updated = [...(currentActivities || []), newAct];
+    setServices(prev => prev.map(s => s.id === serviceId ? { ...s, activities: updated } : s));
+    setNewJobActivityInput(prev => ({ ...prev, [serviceId]: '' }));
+    try {
+      await supabase.from('services').update({ activities: updated }).eq('id', serviceId);
+    } catch (err) {
+      console.warn('Activity add error:', err);
+    }
+  };
+
+  // Cycle Quarterly status (Pending -> Ongoing -> Completed)
+  const handleCycleQuarter = async (serviceId: string, currentQStatus: any, quarter: 'q1' | 'q2' | 'q3' | 'q4') => {
+    const base = currentQStatus || { q1: 'pending', q2: 'pending', q3: 'pending', q4: 'pending' };
+    const curVal = base[quarter] || 'pending';
+    const nextVal = curVal === 'pending' ? 'ongoing' : curVal === 'ongoing' ? 'completed' : 'pending';
+    const updated = { ...base, [quarter]: nextVal };
+
+    setServices(prev => prev.map(s => s.id === serviceId ? { ...s, quarterly_status: updated } : s));
+    try {
+      await supabase.from('services').update({ quarterly_status: updated }).eq('id', serviceId);
+    } catch (err) {
+      console.warn('Quarterly status update error:', err);
+    }
+  };
+
+  // Toggle Job Payment Status (Unpaid -> Partially Paid -> Paid)
+  const handleTogglePayment = async (serviceId: string, currentStatus?: string | null) => {
+    const nextStatus = currentStatus === 'paid' ? 'unpaid' : currentStatus === 'partially_paid' ? 'paid' : 'partially_paid';
+    setServices(prev => prev.map(s => s.id === serviceId ? { ...s, payment_status: nextStatus } : s));
+    try {
+      await supabase.from('services').update({ payment_status: nextStatus }).eq('id', serviceId);
+    } catch (err) {
+      console.warn('Payment status update error:', err);
+    }
+  };
+
+  // Handle Create New Job Submission for this company
+  const handleCreateNewJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalTitle = newJobForm.use_custom_title ? newJobForm.custom_title.trim() : newJobForm.title.trim();
+    if (!finalTitle || isSubmittingJob) return;
+
+    setIsSubmittingJob(true);
+    const chargeVal = parseFloat(newJobForm.charge_amount) || 0;
+
+    const payload: any = {
+      client_id: client.id,
+      title: finalTitle,
+      department_id: newJobForm.department_id || effectiveDeptId,
+      charge_amount: chargeVal,
+      budget: chargeVal,
+      duration_type: newJobForm.duration_type,
+      quarterly_status: { q1: 'ongoing', q2: 'pending', q3: 'pending', q4: 'pending' },
+      payment_status: 'unpaid',
+      status: newJobForm.status,
+      due_date: newJobForm.due_date || null,
+      description: newJobForm.description || null,
+      activities: newJobForm.activities,
+      is_approved: true
+    };
+
+    try {
+      let { error } = await supabase.from('services').insert([payload]);
+      if (error && (error.message?.includes('charge_amount') || error.message?.includes('duration_type') || error.message?.includes('activities'))) {
+        delete payload.charge_amount;
+        delete payload.duration_type;
+        delete payload.quarterly_status;
+        delete payload.payment_status;
+        delete payload.activities;
+        const retry = await supabase.from('services').insert([payload]);
+        error = retry.error;
+      }
+      if (error) throw error;
+
+      setShowAddJobModal(false);
+      loadClientData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to create job');
+    } finally {
+      setIsSubmittingJob(false);
+    }
+  };
+
+  // Real financial calculations
+  const totalBilled = services.reduce((sum, s) => sum + (Number(s.charge_amount) || Number(s.budget) || 0), 0) +
+                      invoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+  const paidInvoices = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const paidJobs = services.filter(s => s.payment_status === 'paid').reduce((s, j) => s + (Number(j.charge_amount) || Number(j.budget) || 0), 0);
+  const totalPaid = paidInvoices + paidJobs;
+  const totalUnpaid = Math.max(0, totalBilled - totalPaid);
+  const activeServices = services.filter(s => s.status === 'ongoing' || s.status === 'started').length;
 
   return (
     <div className="space-y-6 pb-10" dir={isAr ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={onBack}
-          className="p-2 bg-white border border-gray-200 rounded-xl text-gray-600 hover:text-brand-dark hover:border-brand-dark/30 transition-colors"
-        >
-          <ArrowLeft size={20} className={isAr ? 'rotate-180' : ''} />
-        </button>
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">{client.company_name}</h2>
-          <p className="text-sm text-gray-400 mt-0.5">
-            {client.cr_number ? `CR: ${client.cr_number}` : (isAr ? 'بدون رقم سجل' : 'No CR Number')}
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-600 hover:text-brand-dark hover:border-brand-dark/30 transition-colors shadow-xs cursor-pointer"
+          >
+            <ArrowLeft size={20} className={isAr ? 'rotate-180' : ''} />
+          </button>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xl font-black text-gray-900">{client.company_name}</h2>
+              {client.industry && (
+                <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-brand-dark/10 text-brand-dark border border-brand-dark/20">
+                  {client.industry}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
+              <span className="font-mono font-bold text-gray-700">{client.cr_number ? `CR: ${client.cr_number}` : (isAr ? 'بدون سجل تجاري' : 'No CR Number')}</span>
+              {client.representative_name && (
+                <span className="text-gray-500 font-semibold">• {isAr ? 'الممثل:' : 'Rep:'} {client.representative_name}</span>
+              )}
+            </p>
+          </div>
         </div>
-        <span className={`ms-auto px-3 py-1.5 text-xs font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
-          {client.compliance_status}
-        </span>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowAddJobModal(true)}
+            className="px-4 py-2.5 bg-brand-dark hover:bg-brand text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+          >
+            <Plus size={15} />
+            <span>{isAr ? '+ إنشاء عمل / مهمة جديدة' : '+ Create New Job'}</span>
+          </button>
+
+          <span className={`px-3 py-1.5 text-xs font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
+            {client.compliance_status}
+          </span>
+        </div>
       </div>
 
-      {/* KPI Strip */}
+      {/* KPI Strip (Real Data) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: isAr ? 'مدفوع' : 'Total Paid', value: `${totalPaid.toLocaleString()} ر.ع`, icon: <CheckCircle2 size={18} />, cls: 'bg-green-50 text-green-600' },
-          { label: isAr ? 'مستحق' : 'Outstanding', value: `${totalUnpaid.toLocaleString()} ر.ع`, icon: <Clock size={18} />, cls: 'bg-amber-50 text-amber-600' },
-          { label: isAr ? 'فواتير' : 'Invoices', value: invoices.length, icon: <Receipt size={18} />, cls: 'bg-blue-50 text-blue-600' },
-          { label: isAr ? 'خدمات نشطة' : 'Active Svcs', value: activeServices, icon: <Briefcase size={18} />, cls: 'bg-red-50 text-brand-dark' },
+          { label: isAr ? 'إجمالي المحصّل (سداد حقيقي)' : 'Total Collected (Paid)', value: `${totalPaid.toLocaleString()} OMR`, icon: <CheckCircle2 size={18} />, cls: 'bg-green-50 text-green-600' },
+          { label: isAr ? 'المتبقي المستحق' : 'Outstanding Balance', value: `${totalUnpaid.toLocaleString()} OMR`, icon: <Clock size={18} />, cls: 'bg-amber-50 text-amber-600' },
+          { label: isAr ? 'الأعمال والمهام المفتوحة' : 'Open Works & Jobs', value: `${activeServices} / ${services.length}`, icon: <Activity size={18} />, cls: 'bg-brand-dark/10 text-brand-dark' },
+          { label: isAr ? 'الفواتير الصادرة' : 'Issued Invoices', value: invoices.length, icon: <Receipt size={18} />, cls: 'bg-blue-50 text-blue-600' },
         ].map(kpi => (
-          <div key={kpi.label} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-2">
+          <div key={kpi.label} className="bg-white rounded-2xl p-4 shadow-xs border border-gray-100 flex flex-col gap-2">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${kpi.cls}`}>{kpi.icon}</div>
-            <div className="font-bold text-lg text-gray-800">{kpi.value}</div>
+            <div className="font-black text-lg text-gray-800">{kpi.value}</div>
             <p className="text-xs text-gray-500 font-medium">{kpi.label}</p>
           </div>
         ))}
       </div>
 
       {/* Tabs & Content Container */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 overflow-hidden">
         <div className="flex border-b border-gray-100 overflow-x-auto whitespace-nowrap">
-          {(['checklist', 'services', 'invoices', 'profile'] as const).map(tab => (
+          {[
+            { id: 'tasks', label: isAr ? 'الأعمال والمهام (Jobs)' : 'Company Works & Jobs', icon: <Activity size={15} />, count: services.length },
+            { id: 'documents', label: isAr ? 'المستندات القانونية العامة' : 'Corporate Legal Docs', icon: <FolderCheck size={15} /> },
+            { id: 'checklist', label: isAr ? 'قائمة الفحص والمستندات' : 'Department Checklist', icon: <ClipboardCheck size={15} /> },
+            { id: 'invoices', label: isAr ? 'الفواتير والمالية' : 'Billing & Invoices', icon: <Receipt size={15} />, count: invoices.length },
+            { id: 'profile', label: isAr ? 'بيانات الشركة والممثل' : 'Company & Rep Profile', icon: <UserCircle2 size={15} /> },
+          ].map(tab => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 min-w-[120px] py-4 text-sm font-bold transition-colors flex items-center justify-center gap-2 ${activeTab === tab
-                ? 'text-brand-dark border-b-2 border-brand-dark bg-red-50/40'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex-1 min-w-[140px] py-4 text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                activeTab === tab.id
+                  ? 'text-brand-dark border-b-2 border-brand-dark bg-brand-dark/5'
+                  : 'text-gray-400 hover:text-gray-700'
+              }`}
             >
-              {tab === 'checklist' ? <ClipboardCheck size={16} /> : tab === 'services' ? <Briefcase size={15} /> : tab === 'invoices' ? <Receipt size={15} /> : <UserCircle2 size={15} />}
-              {tab === 'checklist' ? (isAr ? 'قائمة الفحص والمستندات' : 'Checklists & Docs') : tab === 'services' ? (isAr ? 'الخدمات' : 'Services') : tab === 'invoices' ? (isAr ? 'الفواتير' : 'Invoices') : (isAr ? 'الملف الشخصي' : 'Profile')}
-              {tab === 'services' && (
-                <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
-                  {services.length}
-                </span>
-              )}
-              {tab === 'invoices' && (
-                <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
-                  {invoices.length}
+              {tab.icon}
+              <span>{tab.label}</span>
+              {typeof tab.count === 'number' && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === tab.id ? 'bg-brand-dark text-white' : 'bg-gray-100 text-gray-500'}`}>
+                  {tab.count}
                 </span>
               )}
             </button>
@@ -241,61 +416,273 @@ const ClientDetail = ({
         </div>
 
         {loading ? (
-          <div className="flex justify-center p-12">
-            <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-brand-dark" />
+          <div className="flex justify-center p-14">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-dark" />
           </div>
         ) : (
-          <>
-            {/* Checklist Tab */}
-            {activeTab === 'checklist' && (
-              <div className="p-6">
-                <ClientDepartmentChecklist
-                  clientId={client.id}
-                  clientName={client.company_name}
-                  crNumber={client.cr_number}
-                  defaultDeptId={effectiveDeptId}
-                  isAr={isAr}
-                  isManager={isManager}
-                />
+          <div className="p-6">
+            {/* ── TAB 1: Company Works & Jobs ──────────────────────────────── */}
+            {activeTab === 'tasks' && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center pb-2">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+                      <Briefcase size={15} className="text-brand-dark" />
+                      {isAr ? 'قائمة الأعمال والخدمات المسندة لهذه الشركة' : 'Jobs & Works Assigned to this Company'}
+                    </h4>
+                    <p className="text-[10px] text-gray-400 font-medium">
+                      {isAr ? 'كل عمل له رسومه الخاصة، مدته، حالته الربعية، وقائمة الأنشطة' : 'Each job has custom charges, duration type, quarterly cycles & sub-activities'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddJobModal(true)}
+                    className="px-3 py-1.5 bg-gray-900 hover:bg-black text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all"
+                  >
+                    <Plus size={13} />
+                    <span>{isAr ? '+ إضافة عمل' : '+ Add Job'}</span>
+                  </button>
+                </div>
+
+                {services.length === 0 ? (
+                  <div className="p-12 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                    <Activity size={36} className="mx-auto mb-2 text-gray-300" />
+                    <p className="text-xs font-black text-gray-700">{isAr ? 'لا توجد أعمال مسجلة لهذه الشركة حالياً' : 'No jobs currently assigned to this company'}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{isAr ? 'انقر على الزر أعلاه لإضافة أول عمل برسوم مخصصة' : 'Click the button above to assign a job with custom charges'}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3.5">
+                    {services.map(svc => {
+                      const svcDuration = svc.duration_type || 'one_time';
+                      const svcCharge = Number(svc.charge_amount) || Number(svc.budget) || 0;
+                      const qStatus = svc.quarterly_status || { q1: 'pending', q2: 'pending', q3: 'pending', q4: 'pending' };
+                      const svcActivities = svc.activities || [];
+
+                      return (
+                        <div key={svc.id} className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs hover:border-brand-dark/30 transition-all space-y-3">
+                          {/* Top: Department, Title, Charge & Payment */}
+                          <div className="flex flex-wrap justify-between items-start gap-2">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase bg-brand-dark/10 text-brand-dark">
+                                  {svc.department_id ? svc.department_id.replace('_', ' ') : 'General'}
+                                </span>
+                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                  svc.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                                  svc.status === 'delayed' ? 'bg-red-100 text-red-800' :
+                                  svc.status === 'under_review' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {svc.status.replace('_', ' ')}
+                                </span>
+                              </div>
+                              <h3 className="text-sm font-black text-gray-900 mt-1">{svc.title}</h3>
+                              {svc.description && <p className="text-xs text-gray-400 mt-0.5">{svc.description}</p>}
+                            </div>
+
+                            {/* Separate Custom Fee & Payment Toggle */}
+                            <div className="text-end">
+                              <div className="text-sm font-black text-brand-dark">
+                                {svcCharge > 0 ? `${svcCharge.toLocaleString()} OMR` : (isAr ? 'بدون رسوم' : 'No Fee')}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePayment(svc.id, svc.payment_status)}
+                                className={`mt-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md border cursor-pointer transition-all ${
+                                  svc.payment_status === 'paid' 
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                    : svc.payment_status === 'partially_paid'
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                    : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                                }`}
+                                title={isAr ? 'انقر لتغيير حالة السداد' : 'Click to cycle payment status'}
+                              >
+                                {svc.payment_status === 'paid' ? (isAr ? '✓ مسدد بالكامل' : '✓ 100% Paid') :
+                                 svc.payment_status === 'partially_paid' ? (isAr ? 'دفعة جزئية' : 'Partial') :
+                                 (isAr ? 'غير مسدد' : 'Unpaid')}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Duration & Period Pills */}
+                          <div className="p-3 bg-gray-50/80 rounded-xl border border-gray-100">
+                            <div className="flex justify-between items-center mb-1.5">
+                              <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider flex items-center gap-1">
+                                <Clock size={11} />
+                                {isAr ? 'مدة ونوع العمل:' : 'Duration & Period:'}
+                              </span>
+                              <span className="text-[10px] font-bold text-gray-700">
+                                {svcDuration === 'quarterly' ? (isAr ? 'عمل ربعي دوري (٤ فترات)' : 'Quarterly Cycles (Q1 - Q4)') :
+                                 svcDuration === 'annual' ? (isAr ? 'عقد سنوي (سنة كاملة)' : 'Annual (1-Year)') :
+                                 svcDuration === 'monthly' ? (isAr ? 'اشتراك شهري' : 'Monthly Retainer') :
+                                 (isAr ? 'مشروع لمرة واحدة' : 'One-Time Project')}
+                              </span>
+                            </div>
+
+                            {/* Interactive Q1-Q4 if Quarterly */}
+                            {svcDuration === 'quarterly' && (
+                              <div className="grid grid-cols-4 gap-2 pt-1">
+                                {(['q1', 'q2', 'q3', 'q4'] as const).map(q => {
+                                  const qVal = (qStatus as any)[q] || 'pending';
+                                  return (
+                                    <button
+                                      key={q}
+                                      type="button"
+                                      onClick={() => handleCycleQuarter(svc.id, qStatus, q)}
+                                      className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase flex flex-col items-center justify-center transition-all cursor-pointer border ${
+                                        qVal === 'completed'
+                                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                          : qVal === 'ongoing'
+                                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                          : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                                      }`}
+                                      title={isAr ? `انقر لتغيير حالة ${q.toUpperCase()}` : `Click to cycle ${q.toUpperCase()} status`}
+                                    >
+                                      <span>{q.toUpperCase()}</span>
+                                      <span className="text-[8px] font-bold opacity-90">
+                                        {qVal === 'completed' ? (isAr ? 'مكتمل' : 'Done') :
+                                         qVal === 'ongoing' ? (isAr ? 'جاري' : 'In Progress') :
+                                         (isAr ? 'معلق' : 'Pending')}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Sub-activities Checklist */}
+                          <div className="space-y-2 pt-1">
+                            <div className="flex justify-between items-center text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                              <span>{isAr ? 'الأنشطة والمهام الفرعية:' : 'Sub-activities & Checklist:'}</span>
+                              <span>{svcActivities.filter(a => a.completed).length} / {svcActivities.length}</span>
+                            </div>
+
+                            {svcActivities.length > 0 && (
+                              <div className="space-y-1.5">
+                                {svcActivities.map(act => (
+                                  <div
+                                    key={act.id}
+                                    onClick={() => handleToggleActivity(svc.id, svcActivities, act.id)}
+                                    className={`flex items-center gap-2 p-2 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
+                                      act.completed ? 'bg-emerald-50/60 border-emerald-100 text-emerald-900 line-through opacity-75' : 'bg-white border-gray-100 text-gray-800 hover:border-gray-200'
+                                    }`}
+                                  >
+                                    {act.completed ? (
+                                      <CheckSquare size={14} className="text-emerald-600 shrink-0" />
+                                    ) : (
+                                      <Square size={14} className="text-gray-400 shrink-0" />
+                                    )}
+                                    <span>{act.title}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Add inline sub-activity */}
+                            <div className="flex gap-2 pt-1">
+                              <input
+                                type="text"
+                                placeholder={isAr ? '+ أضف نشاط فرعي...' : '+ Add sub-activity...'}
+                                value={newJobActivityInput[svc.id] || ''}
+                                onChange={(e) => setNewJobActivityInput({ ...newJobActivityInput, [svc.id]: e.target.value })}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddActivity(svc.id, svcActivities); } }}
+                                className="flex-1 p-2 bg-gray-50 border border-gray-200 rounded-xl text-[11px] font-bold outline-none focus:border-brand-dark"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleAddActivity(svc.id, svcActivities)}
+                                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-[10px] font-black cursor-pointer"
+                              >
+                                {isAr ? 'إضافة' : 'Add'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Footer Info */}
+                          <div className="flex justify-between items-center pt-2 border-t border-gray-100 text-[10px] text-gray-500">
+                            <span>
+                              {isAr ? 'المسؤول:' : 'Managing:'} <strong className="text-gray-800">{svc.profiles?.full_name || 'Staff Member'}</strong>
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Calendar size={11} />
+                              <span>{svc.created_at ? new Date(svc.created_at).toLocaleDateString(isAr ? 'ar-OM' : 'en-GB') : ''}</span>
+                              {svc.due_date && <span>• SLA: {new Date(svc.due_date).toLocaleDateString(isAr ? 'ar-OM' : 'en-GB')}</span>}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Services Tab */}
-            {activeTab === 'services' && (
-              <div className="divide-y divide-gray-50">
-                {services.length === 0 ? (
-                  <div className="text-center p-10 text-gray-400">
-                    <Briefcase size={32} className="mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">{isAr ? 'لا توجد خدمات لهذا العميل' : 'No services for this client'}</p>
-                  </div>
-                ) : services.map(svc => {
-                  const s = SERVICE_STYLES[svc.status] || SERVICE_STYLES.ongoing;
-                  return (
-                    <div key={svc.id} className="flex items-center justify-between p-4 hover:bg-gray-50/50 transition-colors">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`p-2 rounded-lg ${s.cls} flex-shrink-0`}>{s.icon}</div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-sm text-gray-800 truncate">{svc.title}</p>
-                          {svc.description && <p className="text-xs text-gray-400 truncate">{svc.description}</p>}
+            {/* ── TAB 2: Common Legal Documents ────────────────────────────── */}
+            {activeTab === 'documents' && (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+                    <FolderCheck size={15} className="text-brand-dark" />
+                    {isAr ? 'المستندات القانونية والرسمية العامة للشركة' : 'Common Corporate Documents'}
+                  </h4>
+                  <p className="text-[10px] text-gray-400 font-medium">
+                    {isAr ? 'المستندات الرسمية الثابتة للشركة (السجل التجاري، غرفة التجارة، شهادة القيمة المضافة وغيرها)' : 'Permanent company legal documents (Commercial Reg, Chamber, VAT Cert, Articles of Assoc)'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {[
+                    { key: 'cr_doc', title: isAr ? 'شهادة السجل التجاري (CR Certificate)' : 'Commercial Registration (CR) Certificate', sub: isAr ? 'وزارة التجارة والصناعة وترويج الاستثمار' : 'MoCIIP Oman Official Certificate', tag: 'CR: ' + (client.cr_number || '---') },
+                    { key: 'chamber_doc', title: isAr ? 'شهادة انتساب غرفة التجارة والصناعة (OCCI)' : 'Chamber of Commerce Certificate (OCCI)', sub: isAr ? 'شهادة الانتساب السنوية للغرفة' : 'Annual Chamber Membership Certificate', tag: isAr ? 'غرفة تجارة عمان' : 'OCCI' },
+                    { key: 'vat_cert', title: isAr ? 'شهادة التسجيل في ضريبة القيمة المضافة (VAT)' : 'VAT Registration Certificate', sub: isAr ? 'جهاز الضرائب العُماني (OTA)' : 'Oman Tax Authority', tag: client.tax_number ? `TIN: ${client.tax_number}` : (client.vat_number ? `VAT: ${client.vat_number}` : 'VAT') },
+                    { key: 'tax_card', title: isAr ? 'البطاقة الضريبية / شهادة الخضوع للضريبة' : 'Tax Card / Corporate Income Tax ID', sub: isAr ? 'إثبات التسجيل في ضريبة الدخل' : 'Direct Tax Compliance Certificate', tag: isAr ? 'ضريبة الدخل' : 'CIT' },
+                    { key: 'articles_assoc', title: isAr ? 'عقد التأسيس وملاحق التعديل' : 'Articles of Association (Constitutive Contract)', sub: isAr ? 'العقد التأسيسي وتحديد الشركاء والمفوضين' : 'Company Formation & Shareholding Structure', tag: isAr ? 'عقد تأسيس' : 'Legal' },
+                  ].map((doc) => (
+                    <div key={doc.key} className="bg-white border border-gray-200 rounded-2xl p-4 flex justify-between items-center shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-brand-dark">
+                          <FileText size={18} />
+                        </div>
+                        <div>
+                          <h5 className="text-xs font-black text-gray-900">{doc.title}</h5>
+                          <p className="text-[10px] text-gray-400 mt-0.5">{doc.sub}</p>
                         </div>
                       </div>
-                      <span className={`ms-3 px-2.5 py-1 text-[10px] font-bold rounded-full flex items-center gap-1 flex-shrink-0 ${s.cls}`}>
-                        {s.icon}
-                        {svc.status}
-                      </span>
+
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md text-[9px] font-mono font-bold">
+                          {doc.tag}
+                        </span>
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-md text-[9px] font-bold flex items-center gap-1">
+                          <Check size={10} />
+                          {isAr ? 'معتمد' : 'Verified'}
+                        </span>
+                      </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Invoices Tab */}
+            {/* ── TAB 3: Department Checklist ──────────────────────────────── */}
+            {activeTab === 'checklist' && (
+              <ClientDepartmentChecklist
+                clientId={client.id}
+                clientName={client.company_name}
+                crNumber={client.cr_number}
+                defaultDeptId={effectiveDeptId}
+                isAr={isAr}
+                isManager={isManager}
+              />
+            )}
+
+            {/* ── TAB 4: Invoices ──────────────────────────────────────────── */}
             {activeTab === 'invoices' && (
               <div className="divide-y divide-gray-50">
                 {invoices.length === 0 ? (
                   <div className="text-center p-10 text-gray-400">
                     <Receipt size={32} className="mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">{isAr ? 'لا توجد فواتير' : 'No invoices found'}</p>
+                    <p className="text-sm">{isAr ? 'لا توجد فواتير صادرة' : 'No invoices issued'}</p>
                   </div>
                 ) : invoices.map(inv => (
                   <div key={inv.id} className="flex items-center justify-between p-4 hover:bg-gray-50/50 transition-colors">
@@ -315,45 +702,255 @@ const ClientDetail = ({
                 ))}
               </div>
             )}
-            {/* Profile Tab */}
+
+            {/* ── TAB 5: Profile & Representative Details ─────────────────── */}
             {activeTab === 'profile' && (
-              <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'البريد الإلكتروني' : 'Email Address'}</p>
-                    <p className="font-bold text-gray-800">{client.email || '—'}</p>
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1 flex items-center gap-1">
+                      <Building2 size={12} /> {isAr ? 'اسم الشركة' : 'Company Name'}
+                    </p>
+                    <p className="text-base font-black text-gray-900">{client.company_name}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'اسم الشركة' : 'Company Name'}</p>
-                    <p className="font-bold text-gray-800">{client.company_name}</p>
+
+                  <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1 flex items-center gap-1">
+                      <Tag size={12} /> {isAr ? 'مجال النشاط / القطاع' : 'Industry Field'}
+                    </p>
+                    <p className="text-base font-black text-gray-900">{client.industry || client.activity || (isAr ? 'نشاط عام' : 'General')}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'رقم السجل التجاري' : 'CR Number'}</p>
-                    <p className="font-bold text-gray-800">{client.cr_number || '—'}</p>
+
+                  <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1 flex items-center gap-1">
+                      <Hash size={12} /> {isAr ? 'رقم السجل التجاري' : 'CR Number'}
+                    </p>
+                    <p className="text-base font-black text-gray-900 font-mono">{client.cr_number || '—'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'رقم الضريبة' : 'VAT Number'}</p>
-                    <p className="font-bold text-gray-800">{client.vat_number || '—'}</p>
-                  </div>
-                  <div className="space-y-1 md:col-span-2">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{isAr ? 'النشاط' : 'Activity'}</p>
-                    <p className="font-bold text-gray-800">{client.activity || '—'}</p>
+
+                  <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1 flex items-center gap-1">
+                      <Percent size={12} /> {isAr ? 'الرقم الضريبي (VAT/TIN)' : 'Tax Number'}
+                    </p>
+                    <p className="text-base font-black text-gray-900 font-mono">{client.vat_number || '—'}</p>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-gray-50">
-                  <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-xl border border-amber-100 flex items-center gap-2">
-                    <AlertTriangle size={14} />
-                    {isAr
-                      ? 'لأسباب أمنية، لا يمكن عرض كلمة المرور. إذا نسي العميل كلمة المرور، يرجى استخدام خاصية "استعادة كلمة المرور" من صفحة الدخول.'
-                      : 'For security reasons, passwords cannot be displayed. If the client forgets their password, please use the "Forgot Password" feature on the login page.'}
-                  </p>
+                {/* Company Representative Section */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+                    <UserCircle2 size={15} className="text-brand-dark" />
+                    {isAr ? 'بيانات ممثل الشركة / المفوض بالتوقيع' : 'Company Representative Details'}
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <span className="text-[10px] text-gray-400 font-bold block">{isAr ? 'اسم المفوض / الممثل' : 'Representative Name'}</span>
+                      <span className="text-xs font-black text-gray-900">
+                        {client.representative_name || client.contact_person || (isAr ? 'غير محدد' : 'Not specified')}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-gray-400 font-bold block">{isAr ? 'رقم الهاتف / واتساب' : 'Phone / WhatsApp'}</span>
+                      <span className="text-xs font-black text-gray-900 font-mono">
+                        {client.representative_phone || client.phone || '—'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-gray-400 font-bold block">{isAr ? 'البريد الإلكتروني (اختياري)' : 'Email (Optional)'}</span>
+                      <span className="text-xs font-black text-gray-900 font-mono">
+                        {client.representative_email || client.email || '—'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
+
+      {/* Modal: Create New Job for this company */}
+      {showAddJobModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-4 border-b border-gray-100">
+              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                <Briefcase size={18} className="text-brand-dark" />
+                {isAr ? `إسناد عمل جديد: ${client.company_name}` : `Create New Job for ${client.company_name}`}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddJobModal(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNewJob} className="space-y-4 pt-4">
+              {/* Job Title */}
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">
+                  {isAr ? 'اسم العمل / الخدمة' : 'Job Title / Service'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={isAr ? 'مثال: إقرار ضريبة القيمة المضافة Q1' : 'e.g., VAT Return Filing Q1'}
+                  value={newJobForm.custom_title}
+                  onChange={(e) => setNewJobForm({ ...newJobForm, custom_title: e.target.value })}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                />
+              </div>
+
+              {/* Department & Custom Fee */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">
+                    {isAr ? 'القسم المختص' : 'Department'}
+                  </label>
+                  <select
+                    value={newJobForm.department_id}
+                    onChange={(e) => setNewJobForm({ ...newJobForm, department_id: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                  >
+                    {getAllDepartments().map(d => (
+                      <option key={d.id} value={d.id}>{isAr ? d.name_ar : d.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">
+                    {isAr ? 'رسوم العمل المستقلة (ر.ع)' : 'Separate Job Charge (OMR)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    required
+                    value={newJobForm.charge_amount}
+                    onChange={(e) => setNewJobForm({ ...newJobForm, charge_amount: e.target.value })}
+                    placeholder="300"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                  />
+                </div>
+              </div>
+
+              {/* Duration Type & SLA Due Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">
+                    {isAr ? 'مدة ونوع العمل' : 'Duration & Period'}
+                  </label>
+                  <select
+                    value={newJobForm.duration_type}
+                    onChange={(e) => setNewJobForm({ ...newJobForm, duration_type: e.target.value as any })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                  >
+                    <option value="quarterly">{isAr ? 'عمل ربعي دوري (Q1 - Q4)' : 'Quarterly Cycles (Q1 - Q4)'}</option>
+                    <option value="annual">{isAr ? 'عقد سنوي (1 سنة كاملة)' : 'Annual (1-Year Contract)'}</option>
+                    <option value="one_time">{isAr ? 'مشروع لمرة واحدة' : 'One-Time Project'}</option>
+                    <option value="monthly">{isAr ? 'اشتراك شهري' : 'Monthly Retainer'}</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">
+                    {isAr ? 'تاريخ الاستحقاق (SLA)' : 'Due Date (SLA)'}
+                  </label>
+                  <input
+                    type="date"
+                    value={newJobForm.due_date}
+                    onChange={(e) => setNewJobForm({ ...newJobForm, due_date: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                  />
+                </div>
+              </div>
+
+              {/* Initial Checklist / Activities */}
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">
+                  {isAr ? 'قائمة الأنشطة والمهام الفرعية الأولية' : 'Initial Sub-activities / Checklist'}
+                </label>
+                <div className="space-y-1.5 mb-2">
+                  {newJobForm.activities.map((act, idx) => (
+                    <div key={act.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-xl text-xs font-semibold">
+                      <span>• {act.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => setNewJobForm({ ...newJobForm, activities: newJobForm.activities.filter((_, i) => i !== idx) })}
+                        className="text-red-500 hover:text-red-700 cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder={isAr ? 'اكتب نشاط فرعي واضغط إضافة...' : 'Type sub-activity and click add...'}
+                    value={newJobForm.new_act_text}
+                    onChange={(e) => setNewJobForm({ ...newJobForm, new_act_text: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (newJobForm.new_act_text.trim()) {
+                          setNewJobForm({
+                            ...newJobForm,
+                            activities: [...newJobForm.activities, { id: `act-${Date.now()}`, title: newJobForm.new_act_text.trim(), completed: false }],
+                            new_act_text: ''
+                          });
+                        }
+                      }
+                    }}
+                    className="flex-1 p-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-brand-dark"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newJobForm.new_act_text.trim()) {
+                        setNewJobForm({
+                          ...newJobForm,
+                          activities: [...newJobForm.activities, { id: `act-${Date.now()}`, title: newJobForm.new_act_text.trim(), completed: false }],
+                          new_act_text: ''
+                        });
+                      }
+                    }}
+                    className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    {isAr ? 'إضافة' : 'Add'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-3 border-t border-gray-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddJobModal(false)}
+                  className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingJob}
+                  className="px-5 py-2.5 bg-brand-dark hover:bg-brand text-white rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer transition-all shadow-sm flex items-center gap-1.5"
+                >
+                  <Check size={14} />
+                  <span>{isSubmittingJob ? (isAr ? 'جارِ الحفظ...' : 'Saving...') : (isAr ? 'إسناد العمل فوراً' : 'Assign Job Now')}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -550,12 +1147,22 @@ const ClientManager = () => {
     phone: '',
     b2b_partner_id: '',
     b2b_partner_name: '',
+    industry: '',
+    representative_name: '',
+    representative_phone: '',
+    representative_email: '',
   });
 
   const [createInitialTask, setCreateInitialTask] = useState(true);
   const [initialTaskTitle, setInitialTaskTitle] = useState('');
+  const [initialTaskCharge, setInitialTaskCharge] = useState('300');
+  const [initialTaskDuration, setInitialTaskDuration] = useState<'one_time' | 'quarterly' | 'annual' | 'monthly'>('quarterly');
+  const [initialTaskDept, setInitialTaskDept] = useState(effectiveDeptId || 'audit');
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Client work counts map
+  const [clientWorkCounts, setClientWorkCounts] = useState<Record<string, { total: number; active: number; completed: number }>>({});
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (name === 'cr_number') {
       // Oman Commercial Registration (CR) is strictly 7 digits
@@ -783,19 +1390,35 @@ const ClientManager = () => {
       const [clientsRes, servicesRes] = await Promise.all([
         supabase
           .from('clients')
-          .select('id, company_name, cr_number, vat_number, activity, compliance_status, email, phone, created_at, assigned_employee_id, portal_access_sent, portal_sent_at, portal_user_id, b2b_partner_id, b2b_partner_name, source')
+          .select('id, company_name, cr_number, vat_number, activity, compliance_status, email, phone, created_at, assigned_employee_id, portal_access_sent, portal_sent_at, portal_user_id, b2b_partner_id, b2b_partner_name, source, representative_name, representative_phone, representative_email, industry, contact_person')
           .eq('is_archived', false)
           .order('created_at', { ascending: false }),
         supabase
           .from('services')
-          .select('client_id, title, employee_id, department_id')
+          .select('id, client_id, title, status, employee_id, department_id, charge_amount, budget, duration_type, payment_status')
       ]);
 
       const allClients = (clientsRes.data as Client[]) || [];
+      const svcList = (servicesRes.data as any[]) || [];
+
+      // Calculate work counts per client
+      const countsMap: Record<string, { total: number; active: number; completed: number }> = {};
+      svcList.forEach(s => {
+        if (!s.client_id) return;
+        if (!countsMap[s.client_id]) {
+          countsMap[s.client_id] = { total: 0, active: 0, completed: 0 };
+        }
+        countsMap[s.client_id].total += 1;
+        if (s.status === 'completed') {
+          countsMap[s.client_id].completed += 1;
+        } else {
+          countsMap[s.client_id].active += 1;
+        }
+      });
+      setClientWorkCounts(countsMap);
 
       if (!isManager && user?.id) {
         const clientDsrSet = getDepartmentClientIdsFromDSR(user.id, effectiveDeptId);
-        const svcList = (servicesRes.data as any[]) || [];
         const clientServicesMap = new Map<string, Array<{ title: string; employee_id?: string | null; department_id?: string | null }>>();
 
         for (const s of svcList) {
@@ -858,6 +1481,9 @@ const ClientManager = () => {
     setFormMsg(null);
     setCreateInitialTask(true);
     setInitialTaskTitle('');
+    setInitialTaskCharge('300');
+    setInitialTaskDuration('quarterly');
+    setInitialTaskDept(effectiveDeptId || 'audit');
     setFormData({
       company_name: '',
       cr_number: '',
@@ -868,7 +1494,11 @@ const ClientManager = () => {
       password: '',
       phone: '',
       b2b_partner_id: '',
-      b2b_partner_name: ''
+      b2b_partner_name: '',
+      industry: '',
+      representative_name: '',
+      representative_phone: '',
+      representative_email: '',
     });
     setIsModalOpen(true);
   };
@@ -902,6 +1532,10 @@ const ClientManager = () => {
       phone: client.phone || '',
       b2b_partner_id: client.b2b_partner_id || '',
       b2b_partner_name: client.b2b_partner_name || '',
+      industry: client.industry || client.activity || '',
+      representative_name: client.representative_name || client.contact_person || '',
+      representative_phone: client.representative_phone || client.phone || '',
+      representative_email: client.representative_email || client.email || '',
     });
     setIsModalOpen(true);
   };
@@ -917,6 +1551,8 @@ const ClientManager = () => {
     setFormMsg(null);
     setCreateInitialTask(true);
     setInitialTaskTitle('');
+    setInitialTaskCharge('300');
+    setInitialTaskDuration('quarterly');
     setFormData({
       company_name: '',
       cr_number: '',
@@ -927,7 +1563,11 @@ const ClientManager = () => {
       password: '',
       phone: '',
       b2b_partner_id: '',
-      b2b_partner_name: ''
+      b2b_partner_name: '',
+      industry: '',
+      representative_name: '',
+      representative_phone: '',
+      representative_email: '',
     });
   };
 
@@ -954,17 +1594,10 @@ const ClientManager = () => {
       });
       return;
     }
-    if (!formData.phone?.trim()) {
+    if (!formData.phone?.trim() && !formData.representative_phone?.trim()) {
       setFormMsg({
         type: 'err',
-        text: isAr ? 'يرجى إدخال رقم هاتف أو واتساب العميل' : 'Contact phone or WhatsApp is required'
-      });
-      return;
-    }
-    if (!formData.activity?.trim()) {
-      setFormMsg({
-        type: 'err',
-        text: isAr ? 'يرجى تحديد النشاط التجاري للعميل' : 'Primary business activity is required'
+        text: isAr ? 'يرجى إدخال رقم هاتف أو واتساب للتواصل' : 'Contact phone or WhatsApp is required'
       });
       return;
     }
@@ -1004,42 +1637,42 @@ const ClientManager = () => {
       return;
     }
 
-    if (!formData.phone?.trim()) {
-      setFormMsg({
-        type: 'err',
-        text: isAr ? 'يرجى إدخال رقم هاتف أو واتساب العميل' : 'Contact phone or WhatsApp is required'
-      });
-      setRegistrationStep(1);
-      return;
-    }
-
-    if (!formData.activity?.trim()) {
-      setFormMsg({
-        type: 'err',
-        text: isAr ? 'يرجى تحديد النشاط التجاري للعميل' : 'Primary business activity is required'
-      });
-      setRegistrationStep(1);
-      return;
-    }
-
     setIsSubmitting(true);
     let createdTicket = null;
 
     try {
+      const primaryPhone = formData.representative_phone?.trim() || formData.phone?.trim() || null;
+      const primaryEmail = formData.representative_email?.trim() || formData.email?.trim() || null;
+      const indVal = formData.industry?.trim() || formData.activity?.trim() || 'General Business';
+
       if (editingClient) {
         const payload: any = {
           company_name: formData.company_name.trim(),
           cr_number: formData.cr_number?.trim() || null,
           vat_number: formData.vat_number?.trim() || null,
-          activity: formData.activity?.trim() || null,
+          activity: formData.activity?.trim() || indVal,
           compliance_status: formData.compliance_status || 'Active',
-          email: formData.email?.trim() || null,
-          phone: formData.phone?.trim() || null,
+          email: primaryEmail,
+          phone: primaryPhone,
           b2b_partner_id: formData.b2b_partner_id || null,
           b2b_partner_name: formData.b2b_partner_name || null,
           source: formData.b2b_partner_id ? 'b2b' : 'direct',
+          industry: indVal,
+          representative_name: formData.representative_name?.trim() || null,
+          representative_phone: formData.representative_phone?.trim() || primaryPhone,
+          representative_email: formData.representative_email?.trim() || primaryEmail,
+          contact_person: formData.representative_name?.trim() || null,
         };
-        const { error } = await supabase.from('clients').update(payload).eq('id', editingClient.id);
+
+        let { error } = await supabase.from('clients').update(payload).eq('id', editingClient.id);
+        if (error && (error.message?.includes('representative_') || error.message?.includes('industry'))) {
+          delete payload.representative_name;
+          delete payload.representative_phone;
+          delete payload.representative_email;
+          delete payload.industry;
+          const retry = await supabase.from('clients').update(payload).eq('id', editingClient.id);
+          error = retry.error;
+        }
         if (error) throw error;
         setFormMsg({ type: 'ok', text: isAr ? 'تم تحديث بيانات العميل بنجاح' : 'Client updated successfully' });
         setTimeout(() => closeFormModal(), 800);
@@ -1048,8 +1681,8 @@ const ClientManager = () => {
         let portalCreated = false;
 
         // Only create portal login account if employee explicitly checked the portal option AND provided valid credentials
-        if (createPortalAccount && formData.email?.trim() && formData.password?.trim() && formData.password.trim().length >= 6) {
-          const clientEmail = formData.email.trim();
+        if (createPortalAccount && primaryEmail && formData.password?.trim() && formData.password.trim().length >= 6) {
+          const clientEmail = primaryEmail;
           if (user?.email && clientEmail.toLowerCase() === user.email.toLowerCase()) {
             throw new Error(isAr ? 'لا يمكن استخدام البريد الإلكتروني للموظف كحساب دخول للعميل' : 'Cannot use employee staff email as client portal login email');
           }
@@ -1086,7 +1719,7 @@ const ClientManager = () => {
             email: clientEmail,
             pass: formData.password.trim(),
             company: formData.company_name.trim(),
-            phone: formData.phone?.trim() || '',
+            phone: primaryPhone || '',
           };
         } else {
           // Direct client registration without instant portal auth account
@@ -1098,17 +1731,22 @@ const ClientManager = () => {
           company_name: formData.company_name.trim(),
           cr_number: formData.cr_number?.trim() || null,
           vat_number: formData.vat_number?.trim() || null,
-          activity: formData.activity?.trim() || null,
+          activity: formData.activity?.trim() || indVal,
           compliance_status: formData.compliance_status || 'Active',
-          email: formData.email?.trim() || null,
-          phone: formData.phone?.trim() || null,
-          assigned_employee_id: user?.id || null, // Capture the employee who registered the client
+          email: primaryEmail,
+          phone: primaryPhone,
+          assigned_employee_id: user?.id || null,
           portal_access_sent: portalCreated,
           portal_sent_at: portalCreated ? new Date().toISOString() : null,
           portal_user_id: portalCreated ? finalClientId : null,
           b2b_partner_id: formData.b2b_partner_id || null,
           b2b_partner_name: formData.b2b_partner_name || null,
           source: formData.b2b_partner_id ? 'b2b' : 'direct',
+          industry: indVal,
+          representative_name: formData.representative_name?.trim() || null,
+          representative_phone: formData.representative_phone?.trim() || primaryPhone,
+          representative_email: formData.representative_email?.trim() || primaryEmail,
+          contact_person: formData.representative_name?.trim() || null,
         };
 
         let { data: insertedClient, error: clientError } = await supabase
@@ -1117,9 +1755,12 @@ const ClientManager = () => {
           .select()
           .maybeSingle();
 
-        // If assigned_employee_id failed FK constraint, retry safely without it
-        if (clientError && (clientError.message?.includes('foreign key') || (clientError as any).code === '23503')) {
-          console.warn('Retrying client insert without assigned_employee_id FK');
+        // Fallback retry without new schema columns if not migrated yet
+        if (clientError && (clientError.message?.includes('representative_') || clientError.message?.includes('industry') || clientError.message?.includes('foreign key') || (clientError as any).code === '23503')) {
+          delete payload.representative_name;
+          delete payload.representative_phone;
+          delete payload.representative_email;
+          delete payload.industry;
           delete payload.assigned_employee_id;
           const retry = await supabase.from('clients').insert([payload]).select().maybeSingle();
           clientError = retry.error;
@@ -1130,24 +1771,34 @@ const ClientManager = () => {
 
         const finalId = insertedClient?.id || finalClientId;
 
-        // Optionally create initial deliverable task in services table
+        // Optionally create initial deliverable task in services table with separate custom charges & duration
         if (createInitialTask) {
           const taskName = initialTaskTitle.trim() || `${currentDeptConfig?.name || 'Operational'} Engagement`;
+          const taskCharge = parseFloat(initialTaskCharge) || 0;
           try {
             const svcPayload: any = {
               client_id: finalId,
-              department_id: effectiveDeptId || 'audit',
+              department_id: initialTaskDept || effectiveDeptId || 'audit',
               title: taskName,
               description: `Deliverable initiated upon client registration by ${user?.user_metadata?.full_name || 'Staff Member'}`,
               status: 'ongoing',
               priority: 'Medium',
               due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-              is_approved: true
+              is_approved: true,
+              charge_amount: taskCharge,
+              budget: taskCharge,
+              duration_type: initialTaskDuration,
+              quarterly_status: { q1: 'ongoing', q2: 'pending', q3: 'pending', q4: 'pending' },
+              payment_status: 'unpaid'
             };
             if (user?.id) svcPayload.employee_id = user.id;
 
-            const { error: svcErr } = await supabase.from('services').insert([svcPayload]);
-            if (svcErr && (svcErr.message?.includes('foreign key') || (svcErr as any).code === '23503')) {
+            let { error: svcErr } = await supabase.from('services').insert([svcPayload]);
+            if (svcErr && (svcErr.message?.includes('charge_amount') || svcErr.message?.includes('duration_type') || svcErr.message?.includes('quarterly_status') || svcErr.message?.includes('foreign key'))) {
+              delete svcPayload.charge_amount;
+              delete svcPayload.duration_type;
+              delete svcPayload.quarterly_status;
+              delete svcPayload.payment_status;
               delete svcPayload.employee_id;
               await supabase.from('services').insert([svcPayload]);
             }
@@ -1168,8 +1819,8 @@ const ClientManager = () => {
               clientId: finalId,
               employeeName: cleanEmpName,
               employeeId: user?.id,
-              departmentId: effectiveDeptId || 'audit',
-              amount: 0,
+              departmentId: initialTaskDept || effectiveDeptId || 'audit',
+              amount: taskCharge,
               date: new Date().toISOString().split('T')[0]
             });
           } catch (dsrErr) {
@@ -1196,15 +1847,20 @@ const ClientManager = () => {
           company_name: formData.company_name.trim(),
           cr_number: formData.cr_number?.trim() || null,
           vat_number: formData.vat_number?.trim() || null,
-          activity: formData.activity?.trim() || null,
+          activity: formData.activity?.trim() || indVal,
           compliance_status: formData.compliance_status || 'Active',
-          email: formData.email?.trim() || null,
-          phone: formData.phone?.trim() || null,
+          email: primaryEmail,
+          phone: primaryPhone,
           assigned_employee_id: user?.id,
           created_at: new Date().toISOString(),
           portal_access_sent: portalCreated,
           portal_sent_at: portalCreated ? new Date().toISOString() : null,
           portal_user_id: portalCreated ? finalId : null,
+          industry: indVal,
+          representative_name: formData.representative_name?.trim() || null,
+          representative_phone: formData.representative_phone?.trim() || primaryPhone,
+          representative_email: formData.representative_email?.trim() || primaryEmail,
+          contact_person: formData.representative_name?.trim() || null,
         };
         setClients(prev => [newRecord, ...prev.filter(c => c.id !== finalId)]);
 
@@ -1653,10 +2309,10 @@ const ClientManager = () => {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
                     <tr>
-                      <th className="px-5 py-3 text-start">{t('employee.companyName')}</th>
-                      <th className="px-5 py-3 text-start">{t('employee.crNumber')}</th>
-                      <th className="px-5 py-3 text-start">{t('employee.vatNumber')}</th>
-                      <th className="px-5 py-3 text-start">{t('employee.activity')}</th>
+                      <th className="px-5 py-3 text-start">{isAr ? 'الشركة والنشاط' : 'Company & Field'}</th>
+                      <th className="px-5 py-3 text-start">{isAr ? 'رقم السجل (CR)' : 'CR Number'}</th>
+                      <th className="px-5 py-3 text-start">{isAr ? 'المفوض / الممثل' : 'Client Representative'}</th>
+                      <th className="px-5 py-3 text-start">{isAr ? 'الأعمال والمهام' : 'Works & Tasks'}</th>
                       <th className="px-5 py-3 text-start">{t('employee.status')}</th>
                       <th className="px-5 py-3 text-start">{isAr ? 'بوابة العميل' : 'Portal Access'}</th>
                       <th className="px-5 py-3 text-start"></th>
@@ -1670,43 +2326,123 @@ const ClientManager = () => {
                           <p className="text-sm">{t('employee.noClientsFound')}</p>
                         </td>
                       </tr>
-                    ) : filtered.map(client => (
-                      <tr key={client.id} className="hover:bg-gray-50/70 transition-colors">
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-brand-dark/10 text-brand-dark flex items-center justify-center font-bold text-sm flex-shrink-0">
-                              {client.company_name.charAt(0)}
-                            </div>
-                            <div>
-                              <span className="font-semibold text-gray-800">{client.company_name}</span>
-                              {client.b2b_partner_name && (
-                                <div className="flex items-center gap-1 mt-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded-md w-fit">
-                                  <span>🏢</span>
-                                  <span>{client.b2b_partner_name}</span>
+                    ) : filtered.map(client => {
+                      const stats = clientWorkCounts[client.id] || { total: 0, active: 0, completed: 0 };
+                      const repName = client.representative_name || client.contact_person;
+                      const repPhone = client.representative_phone || client.phone;
+                      const repEmail = client.representative_email || client.email;
+
+                      return (
+                        <tr key={client.id} className="hover:bg-gray-50/70 transition-colors">
+                          {/* Column 1: Company & Field */}
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-brand-dark/10 text-brand-dark flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                {client.company_name.charAt(0)}
+                              </div>
+                              <div>
+                                <div className="font-bold text-gray-900">{client.company_name}</div>
+                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                  <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                    {client.industry || client.activity || (isAr ? 'نشاط عام' : 'General')}
+                                  </span>
+                                  {client.b2b_partner_name && (
+                                    <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded">
+                                      🏢 {client.b2b_partner_name}
+                                    </span>
+                                  )}
                                 </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Column 2: CR Number */}
+                          <td className="px-5 py-4 text-gray-600">
+                            <span className="font-mono font-bold text-xs bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                              <Hash size={11} className="text-gray-400" />
+                              {client.cr_number || '—'}
+                            </span>
+                          </td>
+
+                          {/* Column 3: Client Representative */}
+                          <td className="px-5 py-4">
+                            {repName ? (
+                              <div className="text-xs">
+                                <span className="font-bold text-gray-800 flex items-center gap-1">
+                                  <UserCircle2 size={12} className="text-brand-dark" />
+                                  {repName}
+                                </span>
+                                {repPhone && (
+                                  <span className="text-[10px] text-gray-500 font-mono block mt-0.5 flex items-center gap-1">
+                                    <Phone size={10} className="text-gray-400" />
+                                    {repPhone}
+                                  </span>
+                                )}
+                                {repEmail && (
+                                  <span className="text-[10px] text-gray-400 font-mono truncate block max-w-[140px]">
+                                    {repEmail}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">{isAr ? 'غير محدد' : '—'}</span>
+                            )}
+                          </td>
+
+                          {/* Column 4: Works & Tasks count */}
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-1.5 flex-wrap text-[10px] font-bold">
+                              <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                {stats.total} {isAr ? 'عمل' : 'Works'}
+                              </span>
+                              {stats.active > 0 && (
+                                <span className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                  {stats.active} {isAr ? 'نشط' : 'Active'}
+                                </span>
+                              )}
+                              {stats.completed > 0 && (
+                                <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  ✓ {stats.completed}
+                                </span>
                               )}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-gray-500">
-                          <span className="flex items-center gap-1"><Hash size={12} />{client.cr_number || '—'}</span>
-                        </td>
-                        <td className="px-5 py-4 text-gray-500">
-                          <span className="flex items-center gap-1"><Percent size={12} />{client.vat_number || '—'}</span>
-                        </td>
-                        <td className="px-5 py-4 text-gray-500 max-w-[140px] truncate">{client.activity || '—'}</td>
-                        <td className="px-5 py-4">
-                          <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
-                            {client.compliance_status}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4">
-                          {client.portal_access_sent || client.email ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                                <CheckCircle2 size={11} className="text-emerald-600" />
-                                {isAr ? 'مفعل' : 'Active'}
-                              </span>
+                          </td>
+
+                          {/* Column 5: Compliance */}
+                          <td className="px-5 py-4">
+                            <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
+                              {client.compliance_status}
+                            </span>
+                          </td>
+
+                          {/* Column 6: Portal Access */}
+                          <td className="px-5 py-4">
+                            {client.portal_access_sent || client.email ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                  <CheckCircle2 size={11} className="text-emerald-600" />
+                                  {isAr ? 'مفعل' : 'Active'}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setPortalTarget({
+                                      id: client.id,
+                                      type: 'client',
+                                      name: client.company_name,
+                                      companyName: client.company_name,
+                                      email: client.email || '',
+                                      phone: client.phone,
+                                      portalAccessSent: true
+                                    });
+                                    setIsPortalModalOpen(true);
+                                  }}
+                                  title={isAr ? 'عرض أو إعادة إرسال بيانات الدخول' : 'View or Resend Portal Credentials'}
+                                  className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <RefreshCw size={12} />
+                                </button>
+                              </div>
+                            ) : (
                               <button
                                 onClick={() => {
                                   setPortalTarget({
@@ -1716,176 +2452,117 @@ const ClientManager = () => {
                                     companyName: client.company_name,
                                     email: client.email || '',
                                     phone: client.phone,
-                                    portalAccessSent: true
+                                    portalAccessSent: false
                                   });
                                   setIsPortalModalOpen(true);
                                 }}
-                                title={isAr ? 'عرض أو إعادة إرسال بيانات الدخول' : 'View or Resend Portal Credentials'}
-                                className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                className="px-2.5 py-1 text-[10px] font-bold rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer active:scale-95"
                               >
-                                <RefreshCw size={12} />
+                                <KeyRound size={11} className="text-amber-600" />
+                                <span>{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
+                              </button>
+                            )}
+                          </td>
+
+                          {/* Column 7: Actions */}
+                          <td className="px-5 py-4">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => { setSelectedClient(client); }}
+                                title={isAr ? 'فتح ملف الشركة والأعمال والمستندات' : 'Open Company Dossier & Works'}
+                                className="p-2 text-brand-dark bg-brand-dark/10 hover:bg-brand-dark hover:text-white rounded-xl transition-all cursor-pointer font-bold text-xs flex items-center gap-1"
+                              >
+                                <Eye size={15} />
+                                <span className="hidden lg:inline">{isAr ? 'ملف الأعمال' : 'Dossier'}</span>
+                              </button>
+                              <button
+                                onClick={() => openEditModal(client)}
+                                title={isAr ? 'تعديل بيانات الشركة' : 'Edit Company Info'}
+                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
+                              >
+                                <Edit size={15} />
+                              </button>
+                              <button
+                                onClick={() => setClientToDelete(client)}
+                                title={isAr ? 'حذف' : 'Delete'}
+                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                              >
+                                <Trash2 size={15} />
                               </button>
                             </div>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setPortalTarget({
-                                  id: client.id,
-                                  type: 'client',
-                                  name: client.company_name,
-                                  companyName: client.company_name,
-                                  email: client.email || '',
-                                  phone: client.phone,
-                                  portalAccessSent: false
-                                });
-                                setIsPortalModalOpen(true);
-                              }}
-                              className="px-2.5 py-1 text-[10px] font-bold rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer active:scale-95"
-                            >
-                              <KeyRound size={11} className="text-amber-600" />
-                              <span>{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => { setSelectedClient(client); }}
-                              title={isAr ? 'عرض الخدمات والفواتير' : 'View Services & Invoices'}
-                              className="p-2 text-gray-400 hover:text-brand-dark hover:bg-red-50 rounded-xl transition-colors"
-                            >
-                              <Eye size={16} />
-                            </button>
-                            <button
-                              onClick={() => { setSelectedClient(client); }}
-                              title={isAr ? 'الملف الشخصي' : 'Client Profile'}
-                              className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors"
-                            >
-                              <UserCircle2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => openEditModal(client)}
-                              title={isAr ? 'تعديل' : 'Edit'}
-                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
-                            >
-                              <Edit size={16} />
-                            </button>
-                            <button
-                              onClick={() => setClientToDelete(client)}
-                              title={isAr ? 'حذف' : 'Delete'}
-                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               {/* Mobile Card List */}
               <div className="md:hidden divide-y divide-gray-50">
-                {filtered.map(client => (
-                  <div
-                    key={client.id}
-                    className="w-full p-4 hover:bg-gray-50/50 transition-colors text-start flex flex-col gap-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-brand-dark/10 text-brand-dark flex items-center justify-center font-bold flex-shrink-0">
-                        {client.company_name.charAt(0)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-sm text-gray-800 truncate">{client.company_name}</p>
-                        <p className="text-xs text-gray-400">{client.cr_number || '—'}</p>
-                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                          <span className={`inline-block px-2 py-0.5 text-[9px] font-bold rounded-full ${COMPLIANCE_STYLES[client.compliance_status] || 'bg-gray-100 text-gray-600'}`}>
-                            {client.compliance_status}
-                          </span>
-                          {client.b2b_partner_name && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-150">
-                              🏢 {client.b2b_partner_name}
+                {filtered.map(client => {
+                  const stats = clientWorkCounts[client.id] || { total: 0, active: 0, completed: 0 };
+                  const repName = client.representative_name || client.contact_person;
+                  const repPhone = client.representative_phone || client.phone;
+
+                  return (
+                    <div
+                      key={client.id}
+                      className="w-full p-4 hover:bg-gray-50/50 transition-colors text-start flex flex-col gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-brand-dark/10 text-brand-dark flex items-center justify-center font-bold flex-shrink-0">
+                          {client.company_name.charAt(0)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-sm text-gray-900 truncate">{client.company_name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="font-mono text-xs text-gray-500">{client.cr_number || '—'}</span>
+                            <span className="text-[10px] font-bold text-gray-600 bg-gray-100 px-1.5 rounded">
+                              {client.industry || client.activity || 'General'}
                             </span>
-                          )}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Mobile Portal Access Status */}
-                    <div className="flex items-center justify-between text-xs px-1 bg-gray-50/70 p-2 rounded-xl">
-                      <span className="text-gray-500 font-semibold text-[11px]">{isAr ? 'بوابة العميل:' : 'Client Portal:'}</span>
-                      {client.portal_access_sent || client.email ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                            <CheckCircle2 size={11} className="text-emerald-600" />
-                            {isAr ? 'مفعل' : 'Active'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPortalTarget({
-                                id: client.id,
-                                type: 'client',
-                                name: client.company_name,
-                                companyName: client.company_name,
-                                email: client.email || '',
-                                phone: client.phone,
-                                portalAccessSent: true
-                              });
-                              setIsPortalModalOpen(true);
-                            }}
-                            className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <RefreshCw size={12} />
-                          </button>
+                      {/* Rep & Work counts */}
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                        <div>
+                          <span className="text-[10px] text-gray-400 block font-bold">{isAr ? 'الممثل:' : 'Representative:'}</span>
+                          <span className="font-bold text-gray-800 truncate block">{repName || '—'}</span>
+                          {repPhone && <span className="text-[10px] font-mono text-gray-500">{repPhone}</span>}
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPortalTarget({
-                              id: client.id,
-                              type: 'client',
-                              name: client.company_name,
-                              companyName: client.company_name,
-                              email: client.email || '',
-                              phone: client.phone,
-                              portalAccessSent: false
-                            });
-                            setIsPortalModalOpen(true);
-                          }}
-                          className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <KeyRound size={11} className="text-amber-600" />
-                          <span>{isAr ? 'إرسال الدخول' : 'Send Access'}</span>
-                        </button>
-                      )}
-                    </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 block font-bold">{isAr ? 'الأعمال والمهام:' : 'Jobs & Works:'}</span>
+                          <span className="font-black text-brand-dark">{stats.total} {isAr ? 'أعمال' : 'Works'}</span>
+                          <span className="text-[10px] text-gray-500 block">({stats.active} {isAr ? 'نشط' : 'Active'})</span>
+                        </div>
+                      </div>
 
-                    {/* Mobile Actions */}
-                    <div className="flex items-center gap-2 border-t border-gray-100 pt-3 mt-1">
-                      <button
-                        onClick={() => setSelectedClient(client)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 hover:text-brand-dark rounded-xl transition-colors shadow-sm"
-                      >
-                        <Eye size={14} /> {isAr ? 'عرض' : 'View'}
-                      </button>
-                      <button
-                        onClick={() => openEditModal(client)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors shadow-sm"
-                      >
-                        <Edit size={14} /> {isAr ? 'تعديل' : 'Edit'}
-                      </button>
-                      <button
-                        onClick={() => setClientToDelete(client)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors shadow-sm"
-                      >
-                        <Trash2 size={14} /> {isAr ? 'حذف' : 'Delete'}
-                      </button>
+                      {/* Mobile Actions */}
+                      <div className="flex items-center gap-2 border-t border-gray-100 pt-3">
+                        <button
+                          onClick={() => setSelectedClient(client)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-white bg-brand-dark hover:bg-brand rounded-xl transition-colors shadow-xs"
+                        >
+                          <Eye size={14} /> {isAr ? 'ملف الأعمال 360°' : '360° Dossier'}
+                        </button>
+                        <button
+                          onClick={() => openEditModal(client)}
+                          className="p-2 text-gray-600 bg-gray-100 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors"
+                        >
+                          <Edit size={14} />
+                        </button>
+                        <button
+                          onClick={() => setClientToDelete(client)}
+                          className="p-2 text-gray-600 bg-gray-100 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
@@ -1987,23 +2664,76 @@ const ClientManager = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
-                        label={isAr ? 'رقم الهاتف / الواتساب' : 'Contact Phone / WhatsApp'}
+                        label={isAr ? 'مجال النشاط / القطاع (Company Field)' : 'Company Field / Industry'}
+                        name="activity"
+                        required
+                        value={formData.activity || formData.industry}
+                        onChange={(e) => {
+                          handleInputChange(e);
+                          setFormData(prev => ({ ...prev, industry: e.target.value, activity: e.target.value }));
+                        }}
+                        placeholder={isAr ? 'الإنشاء والمقاولات' : 'Construction & Contracting'}
+                        hint={isAr ? 'مجال عمل الشركة' : 'Business sector'}
+                      />
+
+                      <FormField
+                        label={isAr ? 'هاتف الشركة الرئيسي' : 'Company General Phone'}
                         name="phone"
                         required
                         value={formData.phone}
                         onChange={handleInputChange}
                         placeholder="+968 9000 0000"
-                        hint={isAr ? 'للتواصل السريع' : 'Primary contact'}
+                        hint={isAr ? 'هاتف الاستقبال أو المكتب' : 'Company office line'}
                       />
+                    </div>
+
+                    {/* Company Representative / Person Representing Company */}
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <UserCircle2 size={16} className="text-brand-dark" />
+                        <div>
+                          <span className="text-xs font-black text-gray-900 block">
+                            {isAr ? 'بيانات ممثل الشركة / المفوض (Client Representative)' : 'Company Representative (Authorized Contact)'}
+                          </span>
+                          <span className="text-[11px] text-gray-500 font-medium block">
+                            {isAr ? 'الشخص المسؤول عن تمثيل الشركة ومتابعة الأعمال والمهام' : 'The person representing the company for tasks and correspondence'}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                        <FormField
+                          label={isAr ? 'اسم ممثل الشركة / المفوض' : 'Representative Name'}
+                          name="representative_name"
+                          value={formData.representative_name}
+                          onChange={handleInputChange}
+                          required
+                          placeholder={isAr ? 'سالم بن حمد الحارثي' : 'Salim Al-Harthi'}
+                          hint={isAr ? 'اسم المسؤول' : 'Full legal name'}
+                        />
+
+                        <FormField
+                          label={isAr ? 'هاتف / واتساب المفوض' : 'Representative Phone / WhatsApp'}
+                          name="representative_phone"
+                          value={formData.representative_phone || formData.phone}
+                          onChange={(e) => {
+                            handleInputChange(e);
+                            setFormData(prev => ({ ...prev, representative_phone: e.target.value }));
+                          }}
+                          required
+                          placeholder="+968 9000 0000"
+                          hint={isAr ? 'للتواصل السريع المباشر' : 'Direct mobile / WhatsApp'}
+                        />
+                      </div>
 
                       <FormField
-                        label={t('employee.activity')}
-                        name="activity"
-                        required
-                        value={formData.activity}
+                        label={isAr ? 'البريد الإلكتروني للمفوض (اختياري)' : 'Representative Email (Optional)'}
+                        name="representative_email"
+                        type="email"
+                        value={formData.representative_email}
                         onChange={handleInputChange}
-                        placeholder={isAr ? 'الإنشاء والمقاولات' : 'Construction & Contracting'}
-                        hint={isAr ? 'نشاط السجل' : 'Business sector'}
+                        placeholder="representative@company.om"
+                        hint={isAr ? 'لإرسال التقارير وتحديثات الأعمال' : 'For reports & job updates'}
                       />
                     </div>
 
@@ -2175,7 +2905,7 @@ const ClientManager = () => {
 
                     {/* Direct Deliverable Assignment */}
                     {!editingClient && (
-                      <div className="p-4 bg-red-50/60 rounded-xl border border-red-100 space-y-2">
+                      <div className="p-4 bg-red-50/60 rounded-2xl border border-red-150 space-y-3">
                         <label className="flex items-center gap-2.5 cursor-pointer">
                           <input
                             type="checkbox"
@@ -2183,24 +2913,87 @@ const ClientManager = () => {
                             onChange={e => setCreateInitialTask(e.target.checked)}
                             className="rounded text-brand-dark focus:ring-brand-dark h-4 w-4 cursor-pointer"
                           />
-                          <span className="text-xs font-bold text-gray-800">
-                            {isAr ? 'تعيين مهمة عمل أولى للعميل في قسمك فوراً' : 'Assign initial service deliverable immediately in your department'}
+                          <span className="text-xs font-black text-gray-900">
+                            {isAr ? 'بدء عمل / مهمة أولى لهذه الشركة فوراً (Job / Task)' : 'Initiate First Job / Task for this Company'}
                           </span>
                         </label>
                         {createInitialTask && (
-                          <div className="pt-1.5 space-y-1">
-                            <input
-                              type="text"
-                              value={initialTaskTitle}
-                              onChange={e => setInitialTaskTitle(e.target.value)}
-                              placeholder={isAr ? `مثال: ${currentDeptConfig?.name_ar || 'التدقيق والامتثال'} 2026` : `e.g. ${currentDeptConfig?.name || 'Audit & Compliance'} Deliverable`}
-                              className="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:border-brand-dark outline-none font-medium"
-                            />
-                            <p className="text-[10px] text-gray-500">
-                              {isAr
-                                ? 'سيتم إدراج المهمة تلقائياً في جدول خدماتك وسجل DSR لربط التحصيل والفوترة.'
-                                : 'This deliverable will be linked automatically to your services and DSR register for payment & billing.'}
-                            </p>
+                          <div className="pt-2 space-y-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">
+                                  {isAr ? 'عنوان العمل / الخدمة' : 'Job / Service Title'}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={initialTaskTitle}
+                                  onChange={e => setInitialTaskTitle(e.target.value)}
+                                  placeholder={isAr ? `مثال: التدقيق والمراجعة ربع السنوية 2026` : `e.g. Q1 Audit & Financial Review`}
+                                  className="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:border-brand-dark outline-none font-medium"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">
+                                  {isAr ? 'القسم المسؤول' : 'Assigned Department'}
+                                </label>
+                                <select
+                                  value={initialTaskDept}
+                                  onChange={e => setInitialTaskDept(e.target.value)}
+                                  className="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:border-brand-dark outline-none font-medium"
+                                >
+                                  {getAllDepartments().map(d => (
+                                    <option key={d.id} value={d.id}>
+                                      {isAr ? d.name_ar : d.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">
+                                  {isAr ? 'أتعاب / تكلفة هذا العمل (ريال عماني)' : 'Job Charge / Fee (OMR - Separate)'}
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={initialTaskCharge}
+                                    onChange={e => setInitialTaskCharge(e.target.value)}
+                                    placeholder="300"
+                                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-black text-gray-900 focus:border-brand-dark outline-none"
+                                  />
+                                  <span className={`absolute ${isAr ? 'left-3' : 'right-3'} top-2.5 text-[10px] font-black text-gray-400`}>
+                                    OMR
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                  {isAr ? 'أتعاب منفصلة خاصة بهذا العمل بدون رسوم ثابتة' : 'Custom charges for this job without fixed defaults'}
+                                </p>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">
+                                  {isAr ? 'مدة / تكرار العمل' : 'Duration / Frequency'}
+                                </label>
+                                <select
+                                  value={initialTaskDuration}
+                                  onChange={e => setInitialTaskDuration(e.target.value)}
+                                  className="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:border-brand-dark outline-none font-semibold text-gray-800"
+                                >
+                                  <option value="quarterly">{isAr ? 'ربع سنوي (Quarterly Q1-Q4)' : 'Quarterly (Q1 - Q4 Statuses)'}</option>
+                                  <option value="annual">{isAr ? 'سنوي (1 Year / Annual)' : 'Annual (1-Year Retainer)'}</option>
+                                  <option value="one_time">{isAr ? 'مرة واحدة (1-Time Service)' : 'One-Time Service'}</option>
+                                  <option value="monthly">{isAr ? 'شهري (Monthly)' : 'Monthly'}</option>
+                                </select>
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                  {isAr ? 'تتبع الإنجاز والدفع بناءً على المدة المختارة' : 'Execution & payment tracked per duration'}
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
