@@ -42,10 +42,12 @@ ALTER TABLE public.services ADD COLUMN IF NOT EXISTS activities JSONB DEFAULT '[
 ALTER TABLE public.services ADD COLUMN IF NOT EXISTS job_documents JSONB DEFAULT '[]'::jsonb;
 -- job_documents: array of files [{ "id": "doc-1", "name": "Tax Return Q1.pdf", "url": "...", "uploaded_at": "..." }]
 
--- 3. Sync existing budget to charge_amount if charge_amount is 0
+ALTER TABLE public.services ADD COLUMN IF NOT EXISTS budget NUMERIC DEFAULT 0;
+
+-- 3. Ensure charge_amount and budget are initialized
 UPDATE public.services
-SET charge_amount = budget
-WHERE (charge_amount IS NULL OR charge_amount = 0) AND budget > 0;
+SET charge_amount = COALESCE(charge_amount, budget, 0),
+    budget = COALESCE(budget, charge_amount, 0);
 
 -- 4. Create performance indexes
 CREATE INDEX IF NOT EXISTS idx_services_client_id ON public.services(client_id);

@@ -54,6 +54,8 @@ import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
 import { autoCreateDSREntryFromTask } from '../../utils/dsrSync';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 import { getAllDepartments } from '../../config/departments';
+import CompanyDocumentManager from '../../components/crm/CompanyDocumentManager';
+import JobDeliverableManager from '../../components/crm/JobDeliverableManager';
 
 export interface Client {
   id: string;
@@ -1519,7 +1521,17 @@ const ClientManagement = () => {
                                     >
                                       {isAr ? 'إضافة' : 'Add'}
                                     </button>
-                                  </div>
+                                  {/* Deliverables / Documents attached to this job */}
+                                  <JobDeliverableManager
+                                    jobId={svc.id}
+                                    clientId={selectedClient.id}
+                                    jobTitle={svc.title}
+                                    existingDocuments={svc.job_documents}
+                                    isAr={isAr}
+                                    onDocumentsUpdated={(updatedDocs) => {
+                                      svc.job_documents = updatedDocs;
+                                    }}
+                                  />
                                 </div>
 
                                 {/* Footer: Assignee & Creation info */}
@@ -1543,49 +1555,18 @@ const ClientManagement = () => {
 
                   {/* ── TAB 2: Common Company Documents ────────────────────── */}
                   {drawerTab === 'documents' && (
-                    <div className="space-y-4 animate-fade-in">
-                      <div>
-                        <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
-                          <FolderCheck size={15} className="text-brand-dark" />
-                          {isAr ? 'المستندات القانونية والرسمية العامة للشركة' : 'Common Corporate Documents'}
-                        </h4>
-                        <p className="text-[10px] text-gray-400 font-medium">
-                          {isAr ? 'المستندات الرسمية الثابتة للشركة (السجل التجاري، غرفة التجارة، شهادة القيمة المضافة وغيرها)' : 'Permanent company legal documents (Commercial Reg, Chamber, VAT Cert, Articles of Assoc)'}
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-3">
-                        {[
-                          { key: 'cr_doc', title: isAr ? 'شهادة السجل التجاري (CR Certificate)' : 'Commercial Registration (CR) Certificate', sub: isAr ? 'وزارة التجارة والصناعة وترويج الاستثمار' : 'MoCIIP Oman Official Certificate', tag: 'CR: ' + (selectedClient.cr_number || '---') },
-                          { key: 'chamber_doc', title: isAr ? 'شهادة انتساب غرفة التجارة والصناعة (OCCI)' : 'Chamber of Commerce Certificate (OCCI)', sub: isAr ? 'شهادة الانتساب السنوية للغرفة' : 'Annual Chamber Membership Certificate', tag: isAr ? 'غرفة تجارة عمان' : 'OCCI' },
-                          { key: 'vat_cert', title: isAr ? 'شهادة التسجيل في ضريبة القيمة المضافة (VAT)' : 'VAT Registration Certificate', sub: isAr ? 'جهاز الضرائب العُماني (OTA)' : 'Oman Tax Authority', tag: selectedClient.tax_number ? `TIN: ${selectedClient.tax_number}` : 'VAT' },
-                          { key: 'tax_card', title: isAr ? 'البطاقة الضريبية / شهادة الخضوع للضريبة' : 'Tax Card / Corporate Income Tax ID', sub: isAr ? 'إثبات التسجيل في ضريبة الدخل' : 'Direct Tax Compliance Certificate', tag: isAr ? 'ضريبة الدخل' : 'CIT' },
-                          { key: 'articles_assoc', title: isAr ? 'عقد التأسيس وملاحق التعديل' : 'Articles of Association (Constitutive Contract)', sub: isAr ? 'العقد التأسيسي وتحديد الشركاء والمفوضين' : 'Company Formation & Shareholding Structure', tag: isAr ? 'عقد تأسيس' : 'Legal' },
-                        ].map((doc, idx) => (
-                          <div key={doc.key} className="bg-white border border-gray-200 rounded-2xl p-4 flex justify-between items-center shadow-xs">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-brand-dark">
-                                <FileText size={18} />
-                              </div>
-                              <div>
-                                <h5 className="text-xs font-black text-gray-900">{doc.title}</h5>
-                                <p className="text-[10px] text-gray-400 mt-0.5">{doc.sub}</p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md text-[9px] font-mono font-bold">
-                                {doc.tag}
-                              </span>
-                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-md text-[9px] font-bold flex items-center gap-1">
-                                <Check size={10} />
-                                {isAr ? 'معتمد' : 'Verified'}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    <CompanyDocumentManager
+                      clientId={selectedClient.id}
+                      companyName={selectedClient.company_name}
+                      crNumber={selectedClient.cr_number}
+                      taxNumber={selectedClient.tax_number}
+                      vatNumber={selectedClient.tax_number}
+                      existingDocuments={selectedClient.common_documents}
+                      onDocumentsUpdated={(updatedDocs) => {
+                        selectedClient.common_documents = updatedDocs;
+                      }}
+                      isAr={isAr}
+                    />
                   )}
 
                   {/* ── TAB 3: Profile Overview ────────────────────────────── */}
