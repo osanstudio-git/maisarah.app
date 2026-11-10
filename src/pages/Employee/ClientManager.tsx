@@ -43,7 +43,8 @@ import {
   Tag,
   Banknote,
   Activity,
-  Phone
+  Phone,
+  Calendar
 } from 'lucide-react';
 import {
   normalizeDepartmentId,
