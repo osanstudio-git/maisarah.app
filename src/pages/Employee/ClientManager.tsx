@@ -56,7 +56,7 @@ import { DEPARTMENT_CONFIGS, getAllDepartments } from '../../config/departments'
 import { autoCreateDSREntryFromTask, deleteDSRsByClientId } from '../../utils/dsrSync';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 import ClientDepartmentChecklist from '../../components/employee/ClientDepartmentChecklist';
-import CompanyDocumentManager from '../../components/crm/CompanyDocumentManager';
+import CompanyDocumentManager, { type CompanyDocument } from '../../components/crm/CompanyDocumentManager';
 import JobDeliverableManager, { type JobDocument } from '../../components/crm/JobDeliverableManager';
 
 // ---------------------------------------------------------------------------
@@ -81,6 +81,7 @@ interface Client {
   company_name: string;
   cr_number: string | null;
   vat_number: string | null;
+  tax_number?: string | null;
   activity: string | null;
   compliance_status: string;
   email?: string | null;
@@ -98,6 +99,7 @@ interface Client {
   representative_email?: string | null;
   industry?: string | null;
   contact_person?: string | null;
+  common_documents?: CompanyDocument[] | null;
 }
 
 interface Invoice {

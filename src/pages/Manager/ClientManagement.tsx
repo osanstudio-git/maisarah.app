@@ -54,8 +54,8 @@ import PaymentReceiptModal from '../../components/crm/PaymentReceiptModal';
 import { autoCreateDSREntryFromTask } from '../../utils/dsrSync';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 import { getAllDepartments } from '../../config/departments';
-import CompanyDocumentManager from '../../components/crm/CompanyDocumentManager';
-import JobDeliverableManager from '../../components/crm/JobDeliverableManager';
+import CompanyDocumentManager, { type CompanyDocument } from '../../components/crm/CompanyDocumentManager';
+import JobDeliverableManager, { type JobDocument } from '../../components/crm/JobDeliverableManager';
 
 export interface Client {
   id: string;
@@ -78,14 +78,7 @@ export interface Client {
   created_at: string;
   address?: string;
   notes?: string;
-  common_documents?: Array<{
-    id: string;
-    key: string;
-    name: string;
-    file_url?: string;
-    status: 'uploaded' | 'verified' | 'pending';
-    updated_at?: string;
-  }>;
+  common_documents?: CompanyDocument[] | null;
   portal_access_sent?: boolean;
   portal_sent_at?: string;
   portal_user_id?: string;
@@ -125,12 +118,7 @@ export interface ServiceJob {
     title: string;
     completed: boolean;
   }>;
-  job_documents?: Array<{
-    id: string;
-    name: string;
-    url?: string;
-    uploaded_at?: string;
-  }>;
+  job_documents?: JobDocument[] | null;
   profiles?: {
     id?: string;
     full_name: string;
