@@ -597,18 +597,20 @@ const ClientDetail = ({
                               >
                                 {isAr ? 'إضافة' : 'Add'}
                               </button>
-                            {/* Deliverables / Documents attached to this job */}
-                            <JobDeliverableManager
-                              jobId={svc.id}
-                              clientId={client.id}
-                              jobTitle={svc.title}
-                              existingDocuments={svc.job_documents}
-                              isAr={isAr}
-                              onDocumentsUpdated={(updatedDocs) => {
-                                svc.job_documents = updatedDocs;
-                              }}
-                            />
+                            </div>
                           </div>
+
+                          {/* Deliverables / Documents attached to this job */}
+                          <JobDeliverableManager
+                            jobId={svc.id}
+                            clientId={client.id}
+                            jobTitle={svc.title}
+                            existingDocuments={svc.job_documents}
+                            isAr={isAr}
+                            onDocumentsUpdated={(updatedDocs) => {
+                              svc.job_documents = updatedDocs;
+                            }}
+                          />
 
                           {/* Footer Info */}
                           <div className="flex justify-between items-center pt-2 border-t border-gray-100 text-[10px] text-gray-500">

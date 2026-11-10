@@ -1275,7 +1275,59 @@ const ClientManagement = () => {
                             onClick={() => fetchClientDetails(client)}
                             className="p-2 bg-brand-dark/5 hover:bg-brand-dark text-brand-dark hover:text-white rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[10px] font-black uppercase tracking-wider"
                           >
-                            <span>{isAr ? 'الملف            {/* Dossier Tabs */}
+                            <span>{isAr ? 'الملف' : '360°'}</span>
+                            <ChevronRight size={14} className={isAr ? 'rotate-180' : ''} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Executive 360° Dossier Slide-out Drawer ───────────────────────── */}
+      {selectedClient && (
+        <>
+          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-40 animate-fade-in" onClick={() => setSelectedClient(null)} />
+          <div 
+            className={`fixed top-0 ${isAr ? 'left-0' : 'right-0'} h-full w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-all duration-300 flex flex-col`}
+            dir={isAr ? 'rtl' : 'ltr'}
+          >
+            {/* Drawer Top Header */}
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/80">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black shadow-md ${
+                  isB2BClient(selectedClient) ? 'bg-brand-dark text-white' : 'bg-purple-700 text-white'
+                }`}>
+                  {isB2BClient(selectedClient) ? <Building2 size={24} /> : <User size={24} />}
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-gray-900 leading-tight">{selectedClient.company_name || selectedClient.full_name}</h2>
+                  <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold mt-0.5">
+                    {isB2BClient(selectedClient) ? (
+                      <span className="font-mono bg-gray-200 px-2 py-0.5 rounded">CR: {selectedClient.cr_number || '1527047'}</span>
+                    ) : (
+                      <span className="font-mono bg-purple-100 text-purple-800 px-2 py-0.5 rounded">Civil ID: {selectedClient.civil_id || '91823746'}</span>
+                    )}
+                    <span>•</span>
+                    <span className="text-brand-dark">{selectedClient.tier || (isB2BClient(selectedClient) ? 'Tier-A Corporate Account' : 'Private VIP Client')}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setSelectedClient(null)} 
+                className="p-2.5 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Dossier Tabs */}
             <div className="flex border-b border-gray-100 bg-white px-6 gap-2 text-xs font-black uppercase tracking-wider overflow-x-auto">
               <button
                 onClick={() => setDrawerTab('operations')}
@@ -1521,18 +1573,20 @@ const ClientManagement = () => {
                                     >
                                       {isAr ? 'إضافة' : 'Add'}
                                     </button>
-                                  {/* Deliverables / Documents attached to this job */}
-                                  <JobDeliverableManager
-                                    jobId={svc.id}
-                                    clientId={selectedClient.id}
-                                    jobTitle={svc.title}
-                                    existingDocuments={svc.job_documents}
-                                    isAr={isAr}
-                                    onDocumentsUpdated={(updatedDocs) => {
-                                      svc.job_documents = updatedDocs;
-                                    }}
-                                  />
+                                  </div>
                                 </div>
+
+                                {/* Deliverables / Documents attached to this job */}
+                                <JobDeliverableManager
+                                  jobId={svc.id}
+                                  clientId={selectedClient.id}
+                                  jobTitle={svc.title}
+                                  existingDocuments={svc.job_documents}
+                                  isAr={isAr}
+                                  onDocumentsUpdated={(updatedDocs) => {
+                                    svc.job_documents = updatedDocs;
+                                  }}
+                                />
 
                                 {/* Footer: Assignee & Creation info */}
                                 <div className="flex justify-between items-center pt-2 border-t border-gray-100 text-[10px] text-gray-500">
@@ -2241,94 +2295,6 @@ const ClientManagement = () => {
                   className="flex-1 py-3 bg-brand-dark hover:bg-brand text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer disabled:opacity-50"
                 >
                   {isSavingOp ? (isAr ? 'جاري الإسناد...' : 'Creating...') : (isAr ? 'تأكيد إسناد العمل' : 'Confirm Assignment')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── Tax Invoice Modal ─────────────────────────────────────────────── */}
-      <TaxInvoiceModal
-        isOpen={showTaxInvoiceModal}
-        onClose={() => setShowTaxInvoiceModal(false)}
-        clientData={docClientData}
-      />
-
-      {/* ── Payment Receipt Modal ─────────────────────────────────────────── */}
-      <PaymentReceiptModal
-        isOpen={showReceiptModal}
-        onClose={() => setShowReceiptModal(false)}
-        clientData={docClientData}
-      />
-
-      {/* ── Portal Access & Credential Handover Modal ──────────────────────── */}
-      <PortalAccessCredentialModal
-        isOpen={isPortalModalOpen}
-        onClose={() => {
-          setIsPortalModalOpen(false);
-          setPortalTarget(null);
-        }}
-        target={portalTarget}
-        onSuccess={({ targetId }) => {
-          setClients(prev => prev.map(c => c.id === targetId ? { ...c, portal_access_sent: true } : c));
-          fetchClientsAndStats(true);
-        }}
-      />
-    </div>
-  );
-};
-
-export default ClientManagement;verable Title *'}</label>
-                <input
-                  type="text"
-                  required
-                  value={quickOpForm.title}
-                  onChange={(e) => setQuickOpForm({ ...quickOpForm, title: e.target.value })}
-                  placeholder={isAr ? 'مثال: إعداد الإقرار الضريبي Q2 2026' : 'e.g., VAT Return Filing Q2 2026'}
-                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'الموظف المسؤول المباشر' : 'Assignee'}</label>
-                  <select
-                    value={quickOpForm.employee_id}
-                    onChange={(e) => setQuickOpForm({ ...quickOpForm, employee_id: e.target.value })}
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark cursor-pointer"
-                  >
-                    {employees.map(emp => (
-                      <option key={emp.id} value={emp.id}>{emp.full_name} ({emp.role || 'Staff'})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">{isAr ? 'الموعد النهائي (SLA)' : 'Due Date (SLA)'}</label>
-                  <input
-                    type="date"
-                    value={quickOpForm.due_date}
-                    onChange={(e) => setQuickOpForm({ ...quickOpForm, due_date: e.target.value })}
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowQuickOpModal(false)}
-                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold text-xs cursor-pointer"
-                >
-                  {isAr ? 'إلغاء' : 'Cancel'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingOp}
-                  className="flex-1 py-3 bg-brand-dark hover:bg-brand text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer disabled:opacity-50"
-                >
-                  {isSavingOp ? (isAr ? 'جاري التكليف...' : 'Assigning...') : (isAr ? 'تأكيد التكليف' : 'Confirm Assignment')}
                 </button>
               </div>
             </form>

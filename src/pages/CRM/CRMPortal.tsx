@@ -931,8 +931,8 @@ export default function CRMPortal() {
 
       const finalClientName = quoteForm.companyName
         ? (quoteForm.clientName && quoteForm.clientName !== quoteForm.companyName
-            ? `${quoteForm.companyName} (${quoteForm.clientName})`
-            : quoteForm.companyName)
+          ? `${quoteForm.companyName} (${quoteForm.clientName})`
+          : quoteForm.companyName)
         : (quoteForm.clientName || 'Valued Client');
 
       if (editingQuoteId) {
@@ -1373,8 +1373,8 @@ export default function CRMPortal() {
           const sLower = serviceName.toLowerCase();
           const deptId = sLower.includes('tax') || sLower.includes('vat') ? 'tax'
             : sLower.includes('bookkeeping') || sLower.includes('accounting') ? 'bookkeeping'
-            : sLower.includes('corporate') ? 'corporate'
-            : 'audit';
+              : sLower.includes('corporate') ? 'corporate'
+                : 'audit';
 
           secondaryTasks.push(
             Promise.resolve(supabase.from('client_jobs').insert([{
@@ -3627,11 +3627,10 @@ export default function CRMPortal() {
 
               {/* Status Message (Success / Error) */}
               {onboardFormMsg && (
-                <div className={`p-4 rounded-xl flex items-center gap-3 text-xs font-bold animate-in fade-in ${
-                  onboardFormMsg.type === 'ok'
+                <div className={`p-4 rounded-xl flex items-center gap-3 text-xs font-bold animate-in fade-in ${onboardFormMsg.type === 'ok'
                     ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                     : 'bg-rose-50 text-rose-800 border border-rose-200'
-                }`}>
+                  }`}>
                   {onboardFormMsg.type === 'ok' ? (
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                   ) : (
