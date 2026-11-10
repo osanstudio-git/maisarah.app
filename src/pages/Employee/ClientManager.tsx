@@ -2968,7 +2968,7 @@ const ClientManager = () => {
                                 </label>
                                 <select
                                   value={initialTaskDuration}
-                                  onChange={e => setInitialTaskDuration(e.target.value)}
+                                  onChange={e => setInitialTaskDuration(e.target.value as 'one_time' | 'quarterly' | 'annual' | 'monthly')}
                                   className="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:border-brand-dark outline-none font-semibold text-gray-800"
                                 >
                                   <option value="quarterly">{isAr ? 'ربع سنوي (Quarterly Q1-Q4)' : 'Quarterly (Q1 - Q4 Statuses)'}</option>
