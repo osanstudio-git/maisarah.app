@@ -56,7 +56,7 @@ import { autoCreateDSREntryFromTask, deleteDSRsByClientId } from '../../utils/ds
 import PortalAccessCredentialModal, { type PortalAccessTarget } from '../../components/crm/PortalAccessCredentialModal';
 import ClientDepartmentChecklist from '../../components/employee/ClientDepartmentChecklist';
 import CompanyDocumentManager from '../../components/crm/CompanyDocumentManager';
-import JobDeliverableManager from '../../components/crm/JobDeliverableManager';
+import JobDeliverableManager, { type JobDocument } from '../../components/crm/JobDeliverableManager';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -123,6 +123,7 @@ interface Service {
   quarterly_status?: { q1: string; q2: string; q3: string; q4: string } | null;
   payment_status?: 'unpaid' | 'partially_paid' | 'paid' | string | null;
   activities?: Array<{ id: string; title: string; completed: boolean }> | null;
+  job_documents?: JobDocument[] | null;
   profiles?: { full_name: string } | null;
 }
 
