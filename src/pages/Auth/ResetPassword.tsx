@@ -28,30 +28,57 @@ const ResetPassword = () => {
       }
     });
 
-    // 2. Also check if active session or recovery hash exists
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setHasRecoverySession(true);
-      } else if (location.hash && location.hash.includes('access_token')) {
-        setHasRecoverySession(true);
-      } else {
-        // Allow a small grace period for Supabase client to parse the URL hash
-        setTimeout(() => {
-          supabase.auth.getSession().then(({ data: { session: laterSession } }) => {
-            setHasRecoverySession(!!laterSession);
-          });
-        }, 1200);
+    // 2. Check for PKCE 'code' in query params, 'access_token' in hash, or active session
+    const resolveRecoverySession = async () => {
+      try {
+        const searchParams = new URLSearchParams(location.search);
+        const code = searchParams.get('code');
+
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error && data?.session) {
+            setHasRecoverySession(true);
+            return;
+          }
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          setHasRecoverySession(true);
+          return;
+        }
+
+        if (location.hash && location.hash.includes('access_token')) {
+          setHasRecoverySession(true);
+          return;
+        }
+
+        // Allow grace period for auth client auto-detection
+        setTimeout(async () => {
+          const { data: { session: laterSession } } = await supabase.auth.getSession();
+          setHasRecoverySession(!!laterSession);
+        }, 1500);
+      } catch (err) {
+        console.warn('Recovery session resolution note:', err);
+        setHasRecoverySession(false);
       }
-    });
+    };
+
+    resolveRecoverySession();
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [location.hash]);
+  }, [location.hash, location.search]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (hasRecoverySession === false) {
+      setError(isAr ? 'جلسة الاستعادة منتهية أو غير موجودة. يرجى طلب رابط جديد من صفحة الدخول.' : 'Recovery link has expired or session is missing. Please request a fresh reset link.');
+      return;
+    }
 
     if (password.length < 6) {
       setError(isAr ? 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل' : 'Password must be at least 6 characters');
@@ -223,7 +250,7 @@ const ResetPassword = () => {
                 {/* Submit Button */}
                 <button 
                   type="submit" 
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || hasRecoverySession === false}
                   className="w-full bg-[#A11212] hover:bg-red-800 text-white font-black uppercase tracking-wider py-4 rounded-2xl transition-all shadow-lg shadow-red-900/20 flex justify-center items-center mt-6 active:scale-95 disabled:opacity-50 cursor-pointer text-xs"
                 >
                   {isSubmitting ? (

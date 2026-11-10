@@ -620,7 +620,9 @@ export default function CRMPortal() {
     prices: { 'Tax & VAT': 120 } as Record<string, number>,
     cycles: { 'Tax & VAT': 'quarterly' } as Record<string, string>,
     deadlines: { 'Tax & VAT': new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0] } as Record<string, string>,
-    notes: {} as Record<string, string>
+    notes: {} as Record<string, string>,
+    customTitles: {} as Record<string, string>,
+    priorities: {} as Record<string, string>
   });
   const [isSavingCombo, setIsSavingCombo] = useState(false);
   const [comboSuccessMsg, setComboSuccessMsg] = useState<string | null>(null);
@@ -1211,14 +1213,14 @@ export default function CRMPortal() {
     setIsSubmittingOnboard(true);
     setOnboardFormMsg(null);
 
-    // Timeout helper to prevent UI freezing on stalled network requests
-    const runWithTimeout = <T,>(promise: Promise<T>, ms = 6000): Promise<T> => {
+    // Timeout helper to prevent UI freezing on stalled network requests (supports both Promise and Supabase thenables)
+    const runWithTimeout = <T,>(promise: PromiseLike<T>, ms = 6000): Promise<T> => {
       let timer: any;
       const timeoutPromise = new Promise<T>((_, reject) => {
         timer = setTimeout(() => reject(new Error('Network request timed out')), ms);
       });
       return Promise.race([
-        promise.then(res => { clearTimeout(timer); return res; }),
+        Promise.resolve(promise).then(res => { clearTimeout(timer); return res; }),
         timeoutPromise
       ]);
     };
@@ -1584,6 +1586,8 @@ export default function CRMPortal() {
         const cycle = comboSetup.cycles[dept] || 'monthly';
         const deadline = comboSetup.deadlines[dept] || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
         const notes = comboSetup.notes[dept] || `${dept} deliverable for ${clientName}`;
+        const taskTitle = comboSetup.customTitles?.[dept]?.trim() || `${dept} - ${clientName}`;
+        const priority = comboSetup.priorities?.[dept] || 'Medium';
 
         // Insert / Update in client_jobs
         const { error: jobErr } = await supabase
@@ -1603,17 +1607,30 @@ export default function CRMPortal() {
         if (jobErr) console.warn('client_jobs insert notice:', jobErr.message);
 
         // Insert / Update in services table for employee workspace scoping
-        await supabase.from('services').insert([{
-          title: `${dept} - ${clientName}`,
+        const svcPayload: any = {
+          title: taskTitle,
           description: notes,
           client_id: selectedClientForCombo,
           employee_id: assignedId,
           department_id: normalizeDepartmentId(dept),
           due_date: deadline,
-          status: 'ongoing'
-        }]);
+          status: 'ongoing',
+          priority: priority,
+          charge_amount: price,
+          budget: price,
+          duration_type: cycle === 'one_time' ? 'one_time' : cycle === 'quarterly' ? 'quarterly' : cycle === 'yearly' ? 'annual' : 'monthly',
+          payment_status: 'unpaid'
+        };
 
-        // Send targeted real-time notification to assigned staff
+        let { error: svcErr } = await supabase.from('services').insert([svcPayload]);
+        if (svcErr && (svcErr.message?.includes('charge_amount') || svcErr.message?.includes('duration_type'))) {
+          delete svcPayload.charge_amount;
+          delete svcPayload.duration_type;
+          delete svcPayload.payment_status;
+          await supabase.from('services').insert([svcPayload]);
+        }
+
+        // Send targeted real-time notification to assigned staff with task details & notes
         if (assignedId) {
           try {
             await supabase.from('notifications').insert([{
@@ -1624,8 +1641,8 @@ export default function CRMPortal() {
               type: 'job_assigned',
               title: isAr ? 'تكليف بمهمة جديدة من CRM' : 'New Task Assigned from CRM',
               message: isAr
-                ? `تم تكليفك رسمياً بخدمة (${dept}) للعميل "${clientName}". الأتعاب المتفق عليها: OMR ${price}. الموعد النهائي: ${deadline}.`
-                : `You have been assigned (${dept}) for client "${clientName}". Agreed Fee: OMR ${price}. Deadline: ${deadline}.`,
+                ? `تم تكليفك بمهمة "${taskTitle}" للعميل "${clientName}". الأتعاب: OMR ${price}. الموعد: ${deadline}. التفاصيل: ${notes.slice(0, 120)}`
+                : `You have been assigned "${taskTitle}" for client "${clientName}". Fee: OMR ${price}. Deadline: ${deadline}. Notes: ${notes.slice(0, 120)}`,
               ref_id: selectedClientForCombo,
               ref_table: 'clients'
             }]);
@@ -2068,9 +2085,11 @@ export default function CRMPortal() {
                                 prices: {},
                                 cycles: {},
                                 deadlines: {},
-                                notes: {}
+                                notes: {},
+                                customTitles: {},
+                                priorities: {}
                               });
-                              setActiveTab('combo_work');
+                              handleTabChange('combo_work');
                             }}
                             className="bg-red-50 hover:bg-brand-dark hover:text-white border border-red-200 text-brand-dark text-[10px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1"
                             title={isAr ? 'تعيين مهام وموظفي الأقسام' : 'Assign Department Tasks'}
@@ -2138,7 +2157,9 @@ export default function CRMPortal() {
                         prices: {},
                         cycles: {},
                         deadlines: {},
-                        notes: {}
+                        notes: {},
+                        customTitles: {},
+                        priorities: {}
                       });
                     }
                   }}
@@ -2311,11 +2332,31 @@ export default function CRMPortal() {
                             </div>
                           </div>
 
-                          {/* Deadline & Work Scope */}
+                          {/* Specific Task Title / Deliverable Name */}
+                          <div>
+                            <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                              {isAr ? 'عنوان المهمة / المخرج المحدد' : 'Specific Task / Deliverable Title'}
+                            </label>
+                            <input
+                              type="text"
+                              placeholder={isAr ? `مثال: ${dept} - إقرار الربع الأول 2026` : `e.g. ${dept} Delivery`}
+                              value={comboSetup.customTitles?.[dept] || ''}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setComboSetup(prev => ({
+                                  ...prev,
+                                  customTitles: { ...(prev.customTitles || {}), [dept]: v }
+                                }));
+                              }}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-[#A11212]"
+                            />
+                          </div>
+
+                          {/* Deadline & Priority */}
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
-                                {isAr ? 'الموعد النهائي' : 'Target Deadline'}
+                                {isAr ? 'الموعد النهائي (Deadline)' : 'Target Deadline'}
                               </label>
                               <input
                                 type="date"
@@ -2333,22 +2374,45 @@ export default function CRMPortal() {
 
                             <div>
                               <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
-                                {isAr ? 'نطاق العمل / ملاحظة' : 'Work Scope / Note'}
+                                {isAr ? 'الأولوية (Priority)' : 'Priority'}
                               </label>
-                              <input
-                                type="text"
-                                placeholder={isAr ? 'تفاصيل المهمة...' : 'Deliverable scope...'}
-                                value={notesVal}
+                              <select
+                                value={comboSetup.priorities?.[dept] || 'Medium'}
                                 onChange={(e) => {
-                                  const t = e.target.value;
+                                  const p = e.target.value;
                                   setComboSetup(prev => ({
                                     ...prev,
-                                    notes: { ...prev.notes, [dept]: t }
+                                    priorities: { ...(prev.priorities || {}), [dept]: p }
                                   }));
                                 }}
-                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-medium outline-none focus:border-[#A11212]"
-                              />
+                                className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold outline-none focus:border-[#A11212]"
+                              >
+                                <option value="Low">{isAr ? 'منخفضة (Low)' : 'Low'}</option>
+                                <option value="Medium">{isAr ? 'عادية (Medium)' : 'Medium'}</option>
+                                <option value="High">{isAr ? 'عالية (High)' : 'High'}</option>
+                                <option value="Urgent">{isAr ? 'طارئة وعاجلة (Urgent)' : 'Urgent'}</option>
+                              </select>
                             </div>
+                          </div>
+
+                          {/* Task Details & Notes Textarea */}
+                          <div>
+                            <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                              {isAr ? 'تفاصيل وملاحظات المهمة للموظف (Task Details & Notes)' : 'Task Details, Notes & Scope'}
+                            </label>
+                            <textarea
+                              rows={2}
+                              placeholder={isAr ? 'اكتب تعليمات وملاحظات ومخرجات العمل للموظف المكلف...' : 'Instructions, required deliverables and notes for the assigned employee...'}
+                              value={notesVal}
+                              onChange={(e) => {
+                                const t = e.target.value;
+                                setComboSetup(prev => ({
+                                  ...prev,
+                                  notes: { ...prev.notes, [dept]: t }
+                                }));
+                              }}
+                              className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none focus:border-[#A11212] resize-none"
+                            />
                           </div>
 
                           <p className="text-[9px] text-gray-400 font-bold">
