@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
     const cleanEmail = email.trim().toLowerCase()
 
     // Map system access role to a valid database role constraint
-    const validRoles = ['employee', 'manager', 'hr', 'accountant', 'client', 'department_head', 'crm']
+    const validRoles = ['employee', 'manager', 'hr', 'accountant', 'client', 'department_head', 'crm', 'sales', 'b2b_coordinator']
     const safeRole = validRoles.includes(role) ? role : 'employee'
     const actualJobTitle = body.job_title || (validRoles.includes(role) ? 'Staff Member' : role)
 
@@ -264,11 +264,11 @@ Deno.serve(async (req) => {
     const profileData: any = {
       id: userId,
       email: cleanEmail,
-      full_name: full_name || '',
       role: safeRole,
       department_id: department_id || 'audit',
       secondary_roles: cleanSecondaryRoles
     }
+    if (full_name) profileData.full_name = full_name
     if (body.client_type) profileData.client_type = body.client_type
     if (body.company_name) profileData.company_name = body.company_name
     if (body.phone) profileData.phone = body.phone
@@ -284,14 +284,15 @@ Deno.serve(async (req) => {
       const hrData: any = {
         id: userId,
         email: cleanEmail,
-        full_name: full_name || '',
-        phone: body.phone || '',
         dept: body.dept || department_id || 'Audit',
-        role: actualJobTitle,
-        accessRole: safeRole,
+        department_id: department_id || 'audit',
+        accessrole: safeRole,
         status: 'active',
         secondary_roles: cleanSecondaryRoles
       }
+      if (full_name) hrData.full_name = full_name
+      if (body.phone) hrData.phone = body.phone
+      if (body.job_title || !existingProfile?.id) hrData.role = actualJobTitle
       if (body.basic_salary !== undefined) hrData.basic_salary = Number(body.basic_salary)
       if (body.joined_date) hrData.joined_date = body.joined_date
       if (body.immediate_supervisor) hrData.immediate_supervisor = body.immediate_supervisor

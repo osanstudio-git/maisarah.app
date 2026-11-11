@@ -489,18 +489,29 @@ const EmployeeManagement = () => {
         const r = String(role || '').toLowerCase().trim();
         const t = String(jobTitle || '').toLowerCase().trim();
 
-        if (d.includes('manage') || d.includes('execut') || r === 'manager' || t.includes('executive') || t.includes('manager')) return 'management';
-        if (d.includes('hr') || d.includes('human') || d.includes('support') || d.includes('admin') || r === 'hr' || t.includes('hr')) return 'internal_support';
-        if (d.includes('innovat') || d.includes('tech') || d.includes('dev')) return 'innovation_dev';
-        if (d.includes('crm') || d.includes('client') || d.includes('success')) return 'client_success';
-        if (d.includes('tax') || d.includes('vat')) return 'tax_vat';
-        if (d.includes('book') || d.includes('ledger') || d.includes('account')) return 'bookkeeping';
-        if (d.includes('advis') || d.includes('consult')) return 'business_advisory';
-        if (d.includes('audit')) return 'audit';
+        // Check explicit department IDs / names first so jobTitle words like "Manager" don't override assigned department
+        if (d) {
+          if (d === 'tax_vat') return 'tax_vat';
+          if (d === 'income_tax') return 'income_tax';
+          if (d === 'bookkeeping') return 'bookkeeping';
+          if (d === 'audit') return 'audit';
+          if (d === 'consultancy' || d === 'business_advisory') return 'consultancy';
+          if (d === 'liquidation') return 'liquidation';
+          if (d === 'client_success' || d === 'internal_support') return 'client_success';
+          if (d === 'management') return 'management';
 
-        if (r === 'manager' || t.includes('executive')) return 'management';
-        if (r === 'hr' || t.includes('hr')) return 'internal_support';
-        if (r === 'crm' || t.includes('client')) return 'client_success';
+          if (d.includes('income tax') || d.includes('income_tax')) return 'income_tax';
+          if (d.includes('tax') || d.includes('vat')) return 'tax_vat';
+          if (d.includes('book') || d.includes('ledger') || d.includes('account')) return 'bookkeeping';
+          if (d.includes('audit')) return 'audit';
+          if (d.includes('advis') || d.includes('consult')) return 'consultancy';
+          if (d.includes('liquidat') || d.includes('corporate')) return 'liquidation';
+          if (d.includes('crm') || d.includes('client') || d.includes('success') || d.includes('hr') || d.includes('human') || d.includes('support') || d.includes('admin')) return 'client_success';
+          if (d.includes('manage') || d.includes('execut')) return 'management';
+        }
+
+        if (r === 'manager' || t.includes('executive') || t.includes('general manager') || t.includes('ceo')) return 'management';
+        if (r === 'hr' || r === 'crm' || t.includes('hr') || t.includes('client')) return 'client_success';
         if (r === 'accountant') return 'bookkeeping';
 
         return 'audit';
@@ -1276,6 +1287,92 @@ const EmployeeManagement = () => {
     setWorkspaceSuccessMsg(null);
   };
 
+  const isUuid = (val?: string | null) =>
+    !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+  // Resilient helper: updates a profile by UUID (or email fallback) and handles missing optional columns gracefully
+  const syncProfileUpdateResilient = async (
+    targetId: string | undefined,
+    cleanEmail: string,
+    payload: { full_name?: string; role: string; department_id?: string; secondary_roles?: string[]; phone?: string }
+  ): Promise<{ ok: boolean; errorMessage?: string }> => {
+    const applyUpdate = async (fields: Record<string, any>) => {
+      if (isUuid(targetId)) {
+        const res = await supabase.from('profiles').update(fields).eq('id', targetId!).select('id');
+        if (!res.error && res.data && res.data.length > 0) return { error: null };
+        if (res.error) return res;
+      }
+      if (cleanEmail) {
+        return await supabase.from('profiles').update(fields).eq('email', cleanEmail).select('id');
+      }
+      return { error: { message: 'Missing employee ID and email' } };
+    };
+
+    let res: { error: any } = await applyUpdate(payload);
+    if (!res.error) return { ok: true };
+
+    const errMsg = String(res.error?.message || res.error?.details || '');
+    const errCode = String(res.error?.code || '');
+    console.warn('Primary profiles update error:', res.error);
+
+    // Retry without optional columns if schema hasn't been migrated yet (400 / PGRST204 / 42703)
+    if (errMsg.includes('secondary_roles') || errMsg.includes('department_id') || errCode === 'PGRST204' || errCode === '42703') {
+      const { secondary_roles: _s, ...withoutSecondary } = payload;
+      res = await applyUpdate(withoutSecondary);
+      if (!res.error) return { ok: true };
+
+      const { department_id: _d, ...coreOnly } = withoutSecondary;
+      res = await applyUpdate(coreOnly);
+      if (!res.error) return { ok: true };
+    }
+
+    return { ok: false, errorMessage: res.error?.message || 'Profile update failed' };
+  };
+
+  // Resilient helper: updates or creates an hr_employees row so job_title (role) & dept always persist
+  const syncHrEmployeeUpsertResilient = async (
+    targetId: string | undefined,
+    cleanEmail: string,
+    hrData: Record<string, any>
+  ): Promise<{ ok: boolean; errorMessage?: string }> => {
+    const targetRowId = isUuid(targetId) ? targetId! : undefined;
+
+    if (targetRowId) {
+      let res = await supabase.from('hr_employees').upsert({ id: targetRowId, ...hrData }, { onConflict: 'id' });
+      if (!res.error) return { ok: true };
+
+      console.warn('hr_employees upsert error (retrying core columns):', res.error);
+      const coreHrData = {
+        id: targetRowId,
+        full_name: hrData.full_name,
+        email: hrData.email,
+        phone: hrData.phone,
+        dept: hrData.dept,
+        role: hrData.role
+      };
+      res = await supabase.from('hr_employees').upsert(coreHrData, { onConflict: 'id' });
+      if (!res.error) return { ok: true };
+      return { ok: false, errorMessage: res.error.message };
+    }
+
+    if (cleanEmail) {
+      let res = await supabase.from('hr_employees').update(hrData).eq('email', cleanEmail);
+      if (!res.error) return { ok: true };
+      const coreHrData = {
+        full_name: hrData.full_name,
+        email: hrData.email,
+        phone: hrData.phone,
+        dept: hrData.dept,
+        role: hrData.role
+      };
+      res = await supabase.from('hr_employees').update(coreHrData).eq('email', cleanEmail);
+      if (!res.error) return { ok: true };
+      return { ok: false, errorMessage: res.error.message };
+    }
+
+    return { ok: false, errorMessage: 'Missing employee identifier' };
+  };
+
   // Save Workspace Access (Supports granting multiple workspaces or revoking accidental assignments)
   const handleSaveWorkspaceAccess = async () => {
     if (!workspaceModalEmployee) return;
@@ -1289,28 +1386,43 @@ const EmployeeManagement = () => {
         ...workspaceSecondaryRoles
       ]));
 
-      // 1. Direct DB updates
-      const profileUpdate: any = {
-        role: workspacePrimaryRole,
-        secondary_roles: effectiveSecondary
-      };
-
-      const hrEmployeeUpdate: any = {
-        accessrole: workspacePrimaryRole,
-        secondary_roles: effectiveSecondary
-      };
-
-      await Promise.allSettled([
-        supabase.from('profiles').update(profileUpdate).or(`id.eq.${workspaceModalEmployee.id},email.eq.${cleanEmail}`),
-        supabase.from('hr_employees').update(hrEmployeeUpdate).or(`id.eq.${workspaceModalEmployee.id},email.eq.${cleanEmail}`)
+      // 1. Direct DB updates (checked)
+      const [profileRes] = await Promise.all([
+        syncProfileUpdateResilient(workspaceModalEmployee.id, cleanEmail, {
+          role: workspacePrimaryRole,
+          secondary_roles: effectiveSecondary
+        }),
+        syncHrEmployeeUpsertResilient(workspaceModalEmployee.id, cleanEmail, {
+          full_name: workspaceModalEmployee.name_en || cleanEmail,
+          email: cleanEmail,
+          phone: workspaceModalEmployee.phone || '',
+          dept: getDepartmentById(workspaceModalEmployee.department_id || '')?.name || workspaceModalEmployee.department_id || 'Audit',
+          department_id: workspaceModalEmployee.department_id || 'audit',
+          role: workspaceModalEmployee.job_title || 'Staff Member',
+          accessrole: workspacePrimaryRole,
+          secondary_roles: effectiveSecondary
+        })
       ]);
 
-      // 2. Background edge function invocation with 3s timeout
-      invokeEdgeFunctionWithTimeout('manage-auth', {
-        email: cleanEmail,
-        role: workspacePrimaryRole,
-        secondary_roles: effectiveSecondary
-      }, 3000).catch(e => console.warn('manage-auth invoke notice:', e));
+      // 2. Auth sync via edge function (preserves existing job_title & dept)
+      let edgeOk = false;
+      try {
+        const edgeRes: any = await invokeEdgeFunctionWithTimeout('manage-auth', {
+          email: cleanEmail,
+          role: workspacePrimaryRole,
+          department_id: workspaceModalEmployee.department_id || 'audit',
+          job_title: workspaceModalEmployee.job_title || 'Staff Member',
+          dept: getDepartmentById(workspaceModalEmployee.department_id || '')?.name || workspaceModalEmployee.department_id || 'Audit',
+          secondary_roles: effectiveSecondary
+        }, 4000);
+        edgeOk = !edgeRes?.error;
+      } catch (e) {
+        console.warn('manage-auth invoke notice:', e);
+      }
+
+      if (!profileRes.ok && !edgeOk) {
+        throw new Error(profileRes.errorMessage || 'Failed to update profile permissions in database');
+      }
 
       // 3. Update local state
       setEmployees(prev => prev.map(emp => {
@@ -1374,6 +1486,7 @@ const EmployeeManagement = () => {
     setEditingEmployee(emp);
     const primaryRole = emp.role || 'employee';
     const secRoles = normalizeSecondaryRoles(emp.secondaryRoles, primaryRole);
+    const normalizedDept = getDepartmentById(emp.department_id || '')?.id || emp.department_id || 'audit';
 
     setFormData({
       fullName: emp.name_en || emp.name_ar,
@@ -1382,7 +1495,7 @@ const EmployeeManagement = () => {
       password: '',
       role: primaryRole,
       jobTitle: emp.job_title || 'Auditor',
-      department_id: emp.department_id || 'audit',
+      department_id: normalizedDept,
       secondaryRoles: secRoles
     });
     setIsModalOpen(true);
@@ -1403,15 +1516,15 @@ const EmployeeManagement = () => {
       const effectiveSecondary = normalizeSecondaryRoles(formData.secondaryRoles, formData.role);
 
       if (editingEmployee) {
-        // 1. Direct DB updates immediately (profiles, hr_employees, hr_recruits)
-        const profileUpdate: any = {
+        // 1. Resilient direct DB updates (profiles, hr_employees, hr_recruits)
+        const profilePayload = {
           full_name: formData.fullName,
           role: formData.role,
           department_id: formData.department_id,
           secondary_roles: effectiveSecondary
         };
 
-        const hrEmployeeData: any = {
+        const hrEmployeeData = {
           full_name: formData.fullName,
           email: cleanEmail,
           phone: formData.phone,
@@ -1422,29 +1535,76 @@ const EmployeeManagement = () => {
           accessrole: formData.role
         };
 
+        const [profileRes, hrRes] = await Promise.all([
+          syncProfileUpdateResilient(editingEmployee.id, cleanEmail, profilePayload),
+          syncHrEmployeeUpsertResilient(editingEmployee.id, cleanEmail, hrEmployeeData)
+        ]);
+
+        // Update hr_recruits if an entry matches by email (or UUID)
         try {
-          await Promise.allSettled([
-            supabase.from('profiles').update(profileUpdate).or(`id.eq.${editingEmployee.id},email.eq.${cleanEmail}`),
-            supabase.from('hr_employees').update(hrEmployeeData).or(`id.eq.${editingEmployee.id},email.eq.${cleanEmail}`),
-            supabase.from('hr_recruits').update({
+          if (isUuid(editingEmployee.id)) {
+            await supabase.from('hr_recruits').update({
               dept: targetDeptName,
               role: targetJobTitle,
               name: formData.fullName,
               placement_status: 'placed'
-            }).or(`id.eq.${editingEmployee.id},email.eq.${cleanEmail}`)
-          ]);
-        } catch (dbErr) {
-          console.warn('Direct edit DB update notice:', dbErr);
+            }).eq('id', editingEmployee.id);
+          } else if (cleanEmail) {
+            await supabase.from('hr_recruits').update({
+              dept: targetDeptName,
+              role: targetJobTitle,
+              name: formData.fullName,
+              placement_status: 'placed'
+            }).eq('email', cleanEmail);
+          }
+        } catch (recErr) {
+          console.warn('hr_recruits edit sync notice:', recErr);
         }
 
-        // 2. Background auth sync with strict 3s timeout (non-blocking)
-        invokeEdgeFunctionWithTimeout('manage-auth', {
-          email: cleanEmail,
-          full_name: formData.fullName,
-          role: formData.role,
-          department_id: formData.department_id,
-          secondary_roles: effectiveSecondary
-        }, 3000).catch(authEdgeErr => console.warn('manage-auth invoke notice during edit:', authEdgeErr));
+        // 2. Sync auth & profile via service-role edge function (include job_title & dept so they are NOT overwritten!)
+        let edgeOk = false;
+        let edgeErrMsg = '';
+        try {
+          const edgeRes: any = await invokeEdgeFunctionWithTimeout('manage-auth', {
+            email: cleanEmail,
+            full_name: formData.fullName,
+            role: formData.role,
+            department_id: formData.department_id,
+            secondary_roles: effectiveSecondary,
+            job_title: targetJobTitle,
+            dept: targetDeptName,
+            phone: formData.phone
+          }, 4000);
+          if (edgeRes?.error) {
+            edgeErrMsg = edgeRes.error?.message || String(edgeRes.error);
+          } else {
+            edgeOk = true;
+          }
+        } catch (authEdgeErr: any) {
+          edgeErrMsg = authEdgeErr?.message || '';
+          console.warn('manage-auth invoke notice during edit:', authEdgeErr);
+        }
+
+        // Stop and report real error if BOTH direct DB update AND edge function failed
+        if (!profileRes.ok && !edgeOk) {
+          const reason = profileRes.errorMessage || edgeErrMsg || 'Database rejected the profile update (check Supabase columns & role constraint).';
+          setFormMessage({
+            type: 'error',
+            text: isAr ? `فشل حفظ التغييرات: ${reason}` : `Failed to update employee: ${reason}`
+          });
+          setNotification({
+            show: true,
+            title: isAr ? 'فشل التحديث' : 'Update Failed',
+            message: reason,
+            type: 'error'
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (!hrRes.ok) {
+          console.warn('hr_employees sync warning:', hrRes.errorMessage);
+        }
 
         // 3. Update local storage placed employees & recruits cache
         try {
@@ -1640,27 +1800,20 @@ const EmployeeManagement = () => {
     setDossierError(null);
 
     try {
-      // 1. Update security access profiles table
-      const profileUpdate: any = {
+      const cleanEmail = (viewingEmployee.email || '').trim().toLowerCase();
+      // 1. Update security access profiles table resiliently
+      const profileRes = await syncProfileUpdateResilient(viewingEmployee.id, cleanEmail, {
         full_name: editFormData.fullName,
         phone: editFormData.phone,
         role: editFormData.accessRole,
         department_id: editFormData.department_id
-      };
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update(profileUpdate)
-        .eq('id', viewingEmployee.id);
+      });
 
-      if (profileError) throw profileError;
+      if (!profileRes.ok && profileRes.errorMessage) {
+        console.warn('Dossier profiles update notice:', profileRes.errorMessage);
+      }
 
-      const deptNames: Record<string, string> = {
-        audit: 'Audit',
-        tax_vat: 'Tax & VAT',
-        bookkeeping: 'Bookkeeping',
-        business_advisory: 'Business Advisory',
-        client_success: 'Client Success'
-      };
+      const targetDeptName = getDepartmentById(editFormData.department_id)?.name || editFormData.department_id || 'Audit';
 
       // 2. Upsert core employee records table (which stores phone, civil id, salary, allowances, etc.)
       const employeeUpdate = {
@@ -1668,8 +1821,8 @@ const EmployeeManagement = () => {
         full_name: editFormData.fullName,
         email: viewingEmployee.email,
         phone: editFormData.phone,
-        role: editFormData.accessRole === 'department_head' ? 'Department Head (HOD)' : editFormData.jobTitle,
-        dept: deptNames[editFormData.department_id] || 'Audit',
+        role: editFormData.jobTitle || (editFormData.accessRole === 'department_head' ? 'Department Head (HOD)' : 'Staff Member'),
+        dept: targetDeptName,
         accessrole: editFormData.accessRole,
         department_id: editFormData.department_id,
         employee_type: editFormData.employeeType,
@@ -2251,6 +2404,11 @@ const EmployeeManagement = () => {
                         onChange={e => setFormData({ ...formData, jobTitle: e.target.value })}
                         className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-[#A11212] focus:bg-white outline-none transition-all cursor-pointer"
                       >
+                        {formData.jobTitle &&
+                          !getJobPositionsByDepartment(formData.department_id).includes(formData.jobTitle) &&
+                          !['Department Head', 'Senior Auditor', 'Tax Consultant', 'Accounting Consultant', 'Staff Member'].includes(formData.jobTitle) && (
+                            <option value={formData.jobTitle}>{formData.jobTitle}</option>
+                        )}
                         {getJobPositionsByDepartment(formData.department_id).map(pos => (
                           <option key={pos} value={pos}>{pos}</option>
                         ))}
@@ -2258,6 +2416,7 @@ const EmployeeManagement = () => {
                         <option value="Senior Auditor">Senior Auditor</option>
                         <option value="Tax Consultant">Tax Consultant</option>
                         <option value="Accounting Consultant">Accounting Consultant</option>
+                        <option value="Staff Member">Staff Member</option>
                       </select>
                     </div>
                   </div>
