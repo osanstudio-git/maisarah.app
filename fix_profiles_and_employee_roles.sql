@@ -65,3 +65,4 @@ END $$;
 NOTIFY pgrst, 'reload schema';
 
 SELECT 'SUCCESS: profiles and hr_employees schema & role constraints updated!' AS status;
+

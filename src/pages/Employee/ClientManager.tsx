@@ -323,7 +323,7 @@ const ClientDetail = ({
 
   // Real financial calculations
   const totalBilled = services.reduce((sum, s) => sum + (Number(s.charge_amount) || Number(s.budget) || 0), 0) +
-                      invoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+    invoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
   const paidInvoices = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (Number(i.amount) || 0), 0);
   const paidJobs = services.filter(s => s.payment_status === 'paid').reduce((s, j) => s + (Number(j.charge_amount) || Number(j.budget) || 0), 0);
   const totalPaid = paidInvoices + paidJobs;
@@ -404,11 +404,10 @@ const ClientDetail = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex-1 min-w-[140px] py-4 text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                activeTab === tab.id
+              className={`flex-1 min-w-[140px] py-4 text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${activeTab === tab.id
                   ? 'text-brand-dark border-b-2 border-brand-dark bg-brand-dark/5'
                   : 'text-gray-400 hover:text-gray-700'
-              }`}
+                }`}
             >
               {tab.icon}
               <span>{tab.label}</span>
@@ -473,11 +472,10 @@ const ClientDetail = ({
                                 <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase bg-brand-dark/10 text-brand-dark">
                                   {svc.department_id ? svc.department_id.replace('_', ' ') : 'General'}
                                 </span>
-                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                                  svc.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
-                                  svc.status === 'delayed' ? 'bg-red-100 text-red-800' :
-                                  svc.status === 'under_review' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                                }`}>
+                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${svc.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                                    svc.status === 'delayed' ? 'bg-red-100 text-red-800' :
+                                      svc.status === 'under_review' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                                  }`}>
                                   {svc.status.replace('_', ' ')}
                                 </span>
                               </div>
@@ -493,18 +491,17 @@ const ClientDetail = ({
                               <button
                                 type="button"
                                 onClick={() => handleTogglePayment(svc.id, svc.payment_status)}
-                                className={`mt-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md border cursor-pointer transition-all ${
-                                  svc.payment_status === 'paid' 
+                                className={`mt-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md border cursor-pointer transition-all ${svc.payment_status === 'paid'
                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                                     : svc.payment_status === 'partially_paid'
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                                    : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                                }`}
+                                      ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                      : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                                  }`}
                                 title={isAr ? 'انقر لتغيير حالة السداد' : 'Click to cycle payment status'}
                               >
                                 {svc.payment_status === 'paid' ? (isAr ? '✓ مسدد بالكامل' : '✓ 100% Paid') :
-                                 svc.payment_status === 'partially_paid' ? (isAr ? 'دفعة جزئية' : 'Partial') :
-                                 (isAr ? 'غير مسدد' : 'Unpaid')}
+                                  svc.payment_status === 'partially_paid' ? (isAr ? 'دفعة جزئية' : 'Partial') :
+                                    (isAr ? 'غير مسدد' : 'Unpaid')}
                               </button>
                             </div>
                           </div>
@@ -518,9 +515,9 @@ const ClientDetail = ({
                               </span>
                               <span className="text-[10px] font-bold text-gray-700">
                                 {svcDuration === 'quarterly' ? (isAr ? 'عمل ربعي دوري (٤ فترات)' : 'Quarterly Cycles (Q1 - Q4)') :
-                                 svcDuration === 'annual' ? (isAr ? 'عقد سنوي (سنة كاملة)' : 'Annual (1-Year)') :
-                                 svcDuration === 'monthly' ? (isAr ? 'اشتراك شهري' : 'Monthly Retainer') :
-                                 (isAr ? 'مشروع لمرة واحدة' : 'One-Time Project')}
+                                  svcDuration === 'annual' ? (isAr ? 'عقد سنوي (سنة كاملة)' : 'Annual (1-Year)') :
+                                    svcDuration === 'monthly' ? (isAr ? 'اشتراك شهري' : 'Monthly Retainer') :
+                                      (isAr ? 'مشروع لمرة واحدة' : 'One-Time Project')}
                               </span>
                             </div>
 
@@ -534,20 +531,19 @@ const ClientDetail = ({
                                       key={q}
                                       type="button"
                                       onClick={() => handleCycleQuarter(svc.id, qStatus, q)}
-                                      className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase flex flex-col items-center justify-center transition-all cursor-pointer border ${
-                                        qVal === 'completed'
+                                      className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase flex flex-col items-center justify-center transition-all cursor-pointer border ${qVal === 'completed'
                                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                                           : qVal === 'ongoing'
-                                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                                          : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                                      }`}
+                                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                            : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                                        }`}
                                       title={isAr ? `انقر لتغيير حالة ${q.toUpperCase()}` : `Click to cycle ${q.toUpperCase()} status`}
                                     >
                                       <span>{q.toUpperCase()}</span>
                                       <span className="text-[8px] font-bold opacity-90">
                                         {qVal === 'completed' ? (isAr ? 'مكتمل' : 'Done') :
-                                         qVal === 'ongoing' ? (isAr ? 'جاري' : 'In Progress') :
-                                         (isAr ? 'معلق' : 'Pending')}
+                                          qVal === 'ongoing' ? (isAr ? 'جاري' : 'In Progress') :
+                                            (isAr ? 'معلق' : 'Pending')}
                                       </span>
                                     </button>
                                   );
@@ -569,9 +565,8 @@ const ClientDetail = ({
                                   <div
                                     key={act.id}
                                     onClick={() => handleToggleActivity(svc.id, svcActivities, act.id)}
-                                    className={`flex items-center gap-2 p-2 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
-                                      act.completed ? 'bg-emerald-50/60 border-emerald-100 text-emerald-900 line-through opacity-75' : 'bg-white border-gray-100 text-gray-800 hover:border-gray-200'
-                                    }`}
+                                    className={`flex items-center gap-2 p-2 rounded-xl text-xs font-bold cursor-pointer transition-all border ${act.completed ? 'bg-emerald-50/60 border-emerald-100 text-emerald-900 line-through opacity-75' : 'bg-white border-gray-100 text-gray-800 hover:border-gray-200'
+                                      }`}
                                   >
                                     {act.completed ? (
                                       <CheckSquare size={14} className="text-emerald-600 shrink-0" />
@@ -1976,8 +1971,8 @@ const ClientManager = () => {
               setB2bTab('directory');
             }}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${b2bTab === 'directory'
-                ? 'bg-brand-dark text-white shadow-sm shadow-brand-dark/20'
-                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+              ? 'bg-brand-dark text-white shadow-sm shadow-brand-dark/20'
+              : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
               }`}
           >
             <Building2 size={15} />
@@ -1991,8 +1986,8 @@ const ClientManager = () => {
             type="button"
             onClick={() => setB2bTab('b2b_network')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${b2bTab === 'b2b_network'
-                ? 'bg-indigo-700 text-white shadow-sm shadow-indigo-700/20'
-                : 'bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200'
+              ? 'bg-indigo-700 text-white shadow-sm shadow-indigo-700/20'
+              : 'bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200'
               }`}
           >
             <Users size={15} />
@@ -2581,8 +2576,8 @@ const ClientManager = () => {
                   type="button"
                   onClick={() => setRegistrationStep(1)}
                   className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${registrationStep === 1
-                      ? 'bg-brand-dark text-white shadow-xs'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                    ? 'bg-brand-dark text-white shadow-xs'
+                    : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                     }`}
                 >
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${registrationStep === 1 ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>1</span>
@@ -2593,8 +2588,8 @@ const ClientManager = () => {
                   type="button"
                   onClick={handleProceedToStep2}
                   className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${registrationStep === 2
-                      ? 'bg-brand-dark text-white shadow-xs'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                    ? 'bg-brand-dark text-white shadow-xs'
+                    : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                     }`}
                 >
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${registrationStep === 2 ? 'bg-white/20' : 'bg-gray-100 text-gray-700'}`}>2</span>
@@ -2687,7 +2682,7 @@ const ClientManager = () => {
                           </span>
                         </div>
                       </div>
-                      
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                         <FormField
                           label={isAr ? 'اسم ممثل الشركة / المفوض' : 'Representative Name'}

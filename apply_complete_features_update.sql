@@ -142,3 +142,4 @@ END $$;
 -- 6. VERIFY MIGRATION COMPLETION
 -- ----------------------------------------------------------------------------
 SELECT 'SUCCESS: All schema columns, client jobs, notifications, and document storage policies are up to date!' AS status;
+
