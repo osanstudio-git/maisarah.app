@@ -21,13 +21,20 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS department_id TEXT DEFAULT 'audit';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS secondary_roles TEXT[] DEFAULT '{}';
 
--- 3. Update `profiles_role_check` constraint if one exists
-DO $$
-BEGIN
-    ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
-EXCEPTION
-    WHEN others THEN NULL;
-END $$;
+-- 3. Drop old `profiles_role_check` constraint and recreate with ALL portal roles
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check
+CHECK (role::text IN (
+    'employee',
+    'manager',
+    'hr',
+    'accountant',
+    'client',
+    'department_head',
+    'crm',
+    'sales',
+    'b2b_coordinator'
+));
 
 -- 4. Ensure all required columns exist on `public.hr_employees`
 ALTER TABLE public.hr_employees ADD COLUMN IF NOT EXISTS full_name TEXT;

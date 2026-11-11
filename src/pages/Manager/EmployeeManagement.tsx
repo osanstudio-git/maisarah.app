@@ -1420,7 +1420,11 @@ const EmployeeManagement = () => {
         console.warn('manage-auth invoke notice:', e);
       }
 
-      if (!profileRes.ok && !edgeOk) {
+      const isSchemaOrConstraintErr =
+        !profileRes.ok &&
+        /constraint|enum|23514|22P02/i.test(profileRes.errorMessage || '');
+
+      if ((!profileRes.ok && !edgeOk) || isSchemaOrConstraintErr) {
         throw new Error(profileRes.errorMessage || 'Failed to update profile permissions in database');
       }
 
@@ -1585,8 +1589,12 @@ const EmployeeManagement = () => {
           console.warn('manage-auth invoke notice during edit:', authEdgeErr);
         }
 
-        // Stop and report real error if BOTH direct DB update AND edge function failed
-        if (!profileRes.ok && !edgeOk) {
+        const isSchemaOrConstraintErr =
+          !profileRes.ok &&
+          /constraint|enum|23514|22P02/i.test(profileRes.errorMessage || '');
+
+        // Stop and report real error if BOTH direct DB update AND edge function failed, OR if DB hit a constraint/enum error
+        if ((!profileRes.ok && !edgeOk) || isSchemaOrConstraintErr) {
           const reason = profileRes.errorMessage || edgeErrMsg || 'Database rejected the profile update (check Supabase columns & role constraint).';
           setFormMessage({
             type: 'error',
