@@ -1415,7 +1415,7 @@ const EmployeeManagement = () => {
           dept: getDepartmentById(workspaceModalEmployee.department_id || '')?.name || workspaceModalEmployee.department_id || 'Audit',
           secondary_roles: effectiveSecondary
         }, 4000);
-        edgeOk = !edgeRes?.error;
+        edgeOk = !edgeRes?.error && edgeRes?.data?.success !== false && !edgeRes?.data?.profileError;
       } catch (e) {
         console.warn('manage-auth invoke notice:', e);
       }
@@ -1575,8 +1575,8 @@ const EmployeeManagement = () => {
             dept: targetDeptName,
             phone: formData.phone
           }, 4000);
-          if (edgeRes?.error) {
-            edgeErrMsg = edgeRes.error?.message || String(edgeRes.error);
+          if (edgeRes?.error || edgeRes?.data?.success === false || edgeRes?.data?.profileError) {
+            edgeErrMsg = edgeRes?.data?.profileError || edgeRes?.data?.error || edgeRes?.error?.message || String(edgeRes?.error || 'Edge sync failed');
           } else {
             edgeOk = true;
           }

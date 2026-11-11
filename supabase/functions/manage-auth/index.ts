@@ -317,8 +317,13 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, userId, user: { id: userId } }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({
+        success: !profErr,
+        userId,
+        user: { id: userId },
+        ...(profErr ? { profileError: profErr.message, error: profErr.message } : {})
+      }),
+      { status: profErr ? 400 : 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (err: any) {
     return new Response(
