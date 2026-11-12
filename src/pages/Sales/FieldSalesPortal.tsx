@@ -23,8 +23,9 @@ interface SalesLead {
   interested_service: string;
   department_id: string;
   estimated_value: number;
-  status: 'new' | 'contacted' | 'quoted' | 'accepted' | 'rejected' | 'lost';
+  status: 'new' | 'contacted' | 'consultation' | 'proposal_sent' | 'quoted' | 'negotiation' | 'accepted' | 'won' | 'rejected' | 'lost';
   priority: 'low' | 'medium' | 'high' | 'urgent';
+  assigned_to?: string | null;
   notes?: string | null;
   created_at: string;
   converted_client_id?: string | null;
@@ -33,7 +34,7 @@ interface SalesLead {
 
 interface QuotationSummary {
   id: string;
-  quote_number?: string;
+  quotation_number?: string;
   lead_id?: string;
   total_amount?: number;
   status?: string;
@@ -41,11 +42,15 @@ interface QuotationSummary {
 
 interface VisitRecord {
   id: string;
+  rep_id?: string | null;
+  rep_name?: string | null;
+  lead_id?: string | null;
   client_name: string;
   location: string;
   purpose: string;
   outcome: string;
   follow_up_date: string;
+  notes?: string | null;
   created_at: string;
 }
 
@@ -54,7 +59,7 @@ const SERVICE_RATE_CARD = [
     id: 'vat_return',
     nameEn: 'VAT Quarterly Filing & Audit Review',
     nameAr: 'إقرار وضريبة القيمة المضافة الربعي',
-    dept: 'tax',
+    dept: 'tax_vat',
     priceOMR: '50 - 150',
     turnaround: '2-3 Days',
     docs: 'Tax invoices, sales/purchase ledger, bank statements'
@@ -72,7 +77,7 @@ const SERVICE_RATE_CARD = [
     id: 'cr_formation',
     nameEn: 'New Commercial Registration (CR)',
     nameAr: 'تأسيس سجل تجاري جديد وشركة',
-    dept: 'legal',
+    dept: 'business_advisory',
     priceOMR: '100 - 250',
     turnaround: '3-5 Days',
     docs: 'Passport copies, partner names, proposed business activities'
@@ -81,7 +86,7 @@ const SERVICE_RATE_CARD = [
     id: 'bookkeeping_monthly',
     nameEn: 'Monthly Retainer Bookkeeping',
     nameAr: 'مسك الدفاتر والمحاسبة الشهرية',
-    dept: 'accounting',
+    dept: 'bookkeeping',
     priceOMR: '80 - 200 /mo',
     turnaround: 'Ongoing',
     docs: 'Monthly receipts, bank statements, petty cash sheets'
@@ -90,7 +95,7 @@ const SERVICE_RATE_CARD = [
     id: 'corporate_tax',
     nameEn: 'Corporate Income Tax Assessment',
     nameAr: 'الإقرار الضريبي السنوي لضريبة الدخل',
-    dept: 'tax',
+    dept: 'tax_vat',
     priceOMR: '150 - 400',
     turnaround: '4-7 Days',
     docs: 'Audited financials, tax portal login credentials'
@@ -99,7 +104,7 @@ const SERVICE_RATE_CARD = [
     id: 'pro_visa',
     nameEn: 'PRO & Investor Visa Processing',
     nameAr: 'معاملات سند وتأشيرات المستثمرين',
-    dept: 'pro',
+    dept: 'business_advisory',
     priceOMR: '40 - 100',
     turnaround: '1-3 Days',
     docs: 'CR copy, Chamber certificate, applicant passport'
@@ -119,8 +124,12 @@ export default function FieldSalesPortal() {
   const [visits, setVisits] = useState<VisitRecord[]>([]);
   const [quotationsMap, setQuotationsMap] = useState<Record<string, QuotationSummary>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [scopeFilter, setScopeFilter] = useState<'my' | 'all'>('my');
+  const [repTargetOMR, setRepTargetOMR] = useState<number>(3000);
+  const [repCommissionRate, setRepCommissionRate] = useState<number>(8);
 
   // Fast Lead Form State
   const [leadForm, setLeadForm] = useState({
@@ -128,6 +137,8 @@ export default function FieldSalesPortal() {
     company_name: '',
     cr_number: '',
     phone: '',
+    email: '',
+    source: 'Field Sales',
     interested_service: SERVICE_RATE_CARD[0].nameEn,
     department_id: SERVICE_RATE_CARD[0].dept,
     estimated_value: '150',
@@ -137,6 +148,12 @@ export default function FieldSalesPortal() {
   });
   const [isCapturing, setIsCapturing] = useState(false);
   const [captureSuccess, setCaptureSuccess] = useState(false);
+
+  // Lead Detail Drawer State
+  const [selectedLead, setSelectedLead] = useState<SalesLead | null>(null);
+  const [detailNoteInput, setDetailNoteInput] = useState('');
+  const [isSavingDetail, setIsSavingDetail] = useState(false);
+  const [detailFeedback, setDetailFeedback] = useState<string | null>(null);
 
   // Client Conversion & Direct Client Registration States
   const [showConvertModal, setShowConvertModal] = useState(false);
@@ -157,11 +174,13 @@ export default function FieldSalesPortal() {
 
   // Visit Form State
   const [visitForm, setVisitForm] = useState({
+    lead_id: '',
     client_name: '',
     location: '',
     purpose: 'New Service Pitch',
     outcome: 'Interested - Requesting Quotation',
-    follow_up_date: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0]
+    follow_up_date: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
+    notes: ''
   });
   const [isAddingVisit, setIsAddingVisit] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
@@ -204,22 +223,60 @@ export default function FieldSalesPortal() {
     return () => clearTimeout(timer);
   }, [convertForm.cr_number, isAr]);
 
+  // Broadcast notifications to both CRM & Manager
+  const notifyCrmAndManager = useCallback(async (title: string, message: string) => {
+    try {
+      await supabase.from('notifications').insert([
+        {
+          sender_id: user?.id || null,
+          recipient_role: 'manager',
+          title,
+          message,
+          type: 'general'
+        },
+        {
+          sender_id: user?.id || null,
+          recipient_role: 'crm',
+          title,
+          message,
+          type: 'general'
+        }
+      ]);
+    } catch (err) {
+      console.warn('Notification notice:', err);
+    }
+  }, [user?.id]);
+
   // Fetch Leads & Quotations for this rep
   const fetchSalesData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
+    setLoadError(null);
     try {
-      const [leadsRes, quotesRes] = await Promise.all([
+      const [leadsRes, quotesRes, visitsRes, profileRes] = await Promise.all([
         supabase
           .from('crm_leads')
           .select('*')
           .order('created_at', { ascending: false }),
         supabase
           .from('quotations')
-          .select('id, quote_number, lead_id, total_amount, status')
-          .order('created_at', { ascending: false })
+          .select('id, quotation_number, lead_id, total_amount, status')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('sales_visits')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        user?.id
+          ? supabase
+              .from('profiles')
+              .select('sales_target_omr, commission_rate')
+              .eq('id', user.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null })
       ]);
 
-      if (!leadsRes.error && leadsRes.data) {
+      if (leadsRes.error) {
+        setLoadError(leadsRes.error.message || 'Unable to load leads from database.');
+      } else if (leadsRes.data) {
         setLeads(leadsRes.data as SalesLead[]);
       }
 
@@ -233,19 +290,25 @@ export default function FieldSalesPortal() {
         setQuotationsMap(qMap);
       }
 
-      // Load visits from local store cache
-      const savedVisits = localStorage.getItem('maisarah_field_visits');
-      if (savedVisits) {
-        try {
-          setVisits(JSON.parse(savedVisits));
-        } catch { }
+      if (!visitsRes.error && visitsRes.data) {
+        setVisits(visitsRes.data as VisitRecord[]);
+      }
+
+      if (profileRes?.data) {
+        if (Number(profileRes.data.sales_target_omr) > 0) {
+          setRepTargetOMR(Number(profileRes.data.sales_target_omr));
+        }
+        if (Number(profileRes.data.commission_rate) >= 0 && profileRes.data.commission_rate !== null) {
+          setRepCommissionRate(Number(profileRes.data.commission_rate));
+        }
       }
     } catch (err: any) {
       console.warn('Field Sales fetch notice:', err.message);
+      setLoadError(err.message || 'Failed to sync sales data.');
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchSalesData();
@@ -260,6 +323,9 @@ export default function FieldSalesPortal() {
         fetchSalesData(true);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
+        fetchSalesData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_visits' }, () => {
         fetchSalesData(true);
       })
       .subscribe();
@@ -306,7 +372,8 @@ export default function FieldSalesPortal() {
           contact_name: leadForm.contact_name.trim(),
           company_name: leadForm.company_name.trim() || null,
           phone: leadForm.phone.trim() || null,
-          source: 'Field Sales',
+          email: leadForm.email.trim().toLowerCase() || null,
+          source: leadForm.source || 'Field Sales',
           interested_service: leadForm.interested_service,
           department_id: leadForm.department_id,
           estimated_value: Number(leadForm.estimated_value) || 0,
@@ -321,15 +388,12 @@ export default function FieldSalesPortal() {
       if (error) throw error;
 
       // Broadcast notification to CRM & Manager
-      await supabase.from('notifications').insert([{
-        sender_id: user?.id || null,
-        recipient_role: 'manager',
-        title: isAr ? 'فرصة بيع ميدانية جديدة' : 'New Field Sales Lead Captured',
-        message: isAr
+      await notifyCrmAndManager(
+        isAr ? 'فرصة بيع ميدانية جديدة' : 'New Field Sales Lead Captured',
+        isAr
           ? `سجّل ${repName} فرصة جديدة: "${leadForm.contact_name}" (${leadForm.company_name || 'شركة'}). القيمة المتوقعة: OMR ${leadForm.estimated_value}.`
-          : `${repName} captured a new field lead: "${leadForm.contact_name}" (${leadForm.company_name || 'Client'}). Est: OMR ${leadForm.estimated_value}.`,
-        type: 'general'
-      }]);
+          : `${repName} captured a new field lead: "${leadForm.contact_name}" (${leadForm.company_name || 'Client'}). Est: OMR ${leadForm.estimated_value}.`
+      );
 
       setCaptureSuccess(true);
       setLeadForm({
@@ -337,6 +401,8 @@ export default function FieldSalesPortal() {
         company_name: '',
         cr_number: '',
         phone: '',
+        email: '',
+        source: 'Field Sales',
         interested_service: SERVICE_RATE_CARD[0].nameEn,
         department_id: SERVICE_RATE_CARD[0].dept,
         estimated_value: '150',
@@ -370,18 +436,15 @@ export default function FieldSalesPortal() {
 
       setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, status: newStatus } : l));
 
-      // Broadcast update to CRM
-      await supabase.from('notifications').insert([{
-        sender_id: user?.id || null,
-        recipient_role: 'manager',
-        title: isAr ? 'تحديث مرحلة الفرصة البيعية' : 'Lead Stage Updated',
-        message: isAr
+      // Broadcast update to CRM & Manager
+      await notifyCrmAndManager(
+        isAr ? 'تحديث مرحلة الفرصة البيعية' : 'Lead Stage Updated',
+        isAr
           ? `قام ${repName} بتحديث حالة العميل "${lead.contact_name}" إلى (${newStatus}).`
-          : `${repName} updated status of "${lead.contact_name}" to (${newStatus}).`,
-        type: 'general'
-      }]);
+          : `${repName} updated status of "${lead.contact_name}" to (${newStatus}).`
+      );
 
-      if (newStatus === 'accepted' && !lead.converted_client_id) {
+      if ((newStatus === 'accepted' || newStatus === 'won') && !lead.converted_client_id) {
         handleOpenConvert(lead);
       }
     } catch (err: any) {
@@ -473,29 +536,43 @@ export default function FieldSalesPortal() {
           .eq('id', convertModalLead.id);
       }
 
-      // 3. Insert onboarding task into client_jobs
+      // 3. Insert onboarding task into client_jobs AND services (Operations)
       const serviceName = convertModalLead?.interested_service || convertForm.activity || 'Sales Client Onboarding';
-      await supabase.from('client_jobs').insert([{
-        client_id: newClient.id,
-        service_type: serviceName,
-        billing_type: 'one_time',
-        status: 'pending',
-        amount: billingNum,
-        vat_amount: +(billingNum * 0.05).toFixed(3),
-        description: `New Client Onboarding task from Sales Rep ${repName}`,
-        deadline: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
-      }]);
+      const serviceDept = convertModalLead?.department_id ||
+        SERVICE_RATE_CARD.find(s => s.nameEn === serviceName)?.dept ||
+        'audit';
+      const onboardingDeadline = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+
+      await Promise.allSettled([
+        supabase.from('client_jobs').insert([{
+          client_id: newClient.id,
+          service_type: serviceName,
+          billing_type: 'one_time',
+          status: 'pending',
+          amount: billingNum,
+          vat_amount: +(billingNum * 0.05).toFixed(3),
+          description: `New Client Onboarding task from Sales Rep ${repName}`,
+          deadline: onboardingDeadline
+        }]),
+        supabase.from('services').insert([{
+          client_id: newClient.id,
+          title: serviceName,
+          department_id: serviceDept,
+          charge_amount: billingNum,
+          budget: billingNum,
+          duration_type: 'one_time',
+          status: 'pending',
+          notes: `Registered by Field Sales (${repName})`
+        }])
+      ]);
 
       // 4. Send notification to CRM & Managers
-      await supabase.from('notifications').insert([{
-        sender_id: user?.id || null,
-        recipient_role: 'manager',
-        title: isAr ? '🎉 عميل رسمي جديد من المبيعات' : '🎉 New Official Client from Field Sales',
-        message: isAr
+      await notifyCrmAndManager(
+        isAr ? '🎉 عميل رسمي جديد من المبيعات' : '🎉 New Official Client from Field Sales',
+        isAr
           ? `قام مندوب المبيعات ${repName} بتسجيل وتأكيد العميل "${newClient.company_name}" رسمياً في النظام!`
-          : `Sales Rep ${repName} confirmed & registered client "${newClient.company_name}" into the system!`,
-        type: 'general'
-      }]);
+          : `Sales Rep ${repName} confirmed & registered client "${newClient.company_name}" into the system!`
+      );
 
       setConvertSuccess(
         isAr
@@ -514,48 +591,57 @@ export default function FieldSalesPortal() {
     }
   };
 
-  // Log Visit with Real-Time Notification & CRM Timeline Update
+  // Log Visit to Supabase `sales_visits` with Real-Time Notification & CRM Timeline Update
   const handleSaveVisit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!visitForm.client_name.trim()) return;
 
     setIsAddingVisit(true);
     try {
-      const newVisit: VisitRecord = {
-        id: `v-${Date.now()}`,
-        client_name: visitForm.client_name.trim(),
-        location: visitForm.location || 'Client Office',
-        purpose: visitForm.purpose,
-        outcome: visitForm.outcome,
-        follow_up_date: visitForm.follow_up_date,
-        created_at: new Date().toISOString()
-      };
+      const cleanName = visitForm.client_name.trim();
+      const matchedLead = visitForm.lead_id
+        ? leads.find(l => l.id === visitForm.lead_id)
+        : leads.find(l =>
+            (l.contact_name && l.contact_name.toLowerCase().includes(cleanName.toLowerCase())) ||
+            (l.company_name && l.company_name.toLowerCase().includes(cleanName.toLowerCase()))
+          );
 
-      // 1. Send live visit notification to CRM & Managers
-      await supabase.from('notifications').insert([{
-        sender_id: user?.id || null,
-        recipient_role: 'manager',
-        title: isAr ? '📍 زيارة ميدانية جديدة' : '📍 Field Visit Check-In',
-        message: isAr
-          ? `قام ${repName} بزيارة "${newVisit.client_name}" في (${newVisit.location}). النتيجة: "${newVisit.outcome}".`
-          : `${repName} checked in at "${newVisit.client_name}" (${newVisit.location}). Outcome: "${newVisit.outcome}".`,
-        type: 'general'
-      }]);
+      // 1. Insert real visit record into `sales_visits`
+      const { data: savedVisit, error: visitErr } = await supabase
+        .from('sales_visits')
+        .insert([{
+          rep_id: user?.id || null,
+          rep_name: repName,
+          lead_id: matchedLead?.id || null,
+          client_name: cleanName,
+          location: visitForm.location.trim() || 'Client Office',
+          purpose: visitForm.purpose,
+          outcome: visitForm.outcome,
+          follow_up_date: visitForm.follow_up_date || null,
+          notes: visitForm.notes.trim() || null
+        }])
+        .select()
+        .single();
 
-      // 2. If matching lead exists, append to lead's activity log in crm_leads
-      const matchedLead = leads.find(l =>
-        (l.contact_name && l.contact_name.toLowerCase().includes(newVisit.client_name.toLowerCase())) ||
-        (l.company_name && l.company_name.toLowerCase().includes(newVisit.client_name.toLowerCase()))
+      if (visitErr) throw visitErr;
+
+      // 2. Send live visit notification to CRM & Managers
+      await notifyCrmAndManager(
+        isAr ? '📍 زيارة ميدانية جديدة' : '📍 Field Visit Check-In',
+        isAr
+          ? `قام ${repName} بزيارة "${savedVisit.client_name}" (${savedVisit.purpose}) في (${savedVisit.location}). النتيجة: "${savedVisit.outcome}".`
+          : `${repName} checked in at "${savedVisit.client_name}" (${savedVisit.purpose}) at ${savedVisit.location}. Outcome: "${savedVisit.outcome}".`
       );
 
+      // 3. If linked or matching lead exists, append to lead's activity log in crm_leads
       if (matchedLead) {
         const { userNotes, meta } = parseLeadNotes(matchedLead.notes);
         const updatedLog = meta.activity_log || [];
         updatedLog.unshift({
           id: `act-${Date.now()}`,
           timestamp: new Date().toISOString(),
-          action: 'Field Visit Check-in',
-          details: `${newVisit.outcome} at ${newVisit.location}. Follow-up: ${newVisit.follow_up_date}`,
+          action: `Field Visit (${visitForm.purpose})`,
+          details: `${savedVisit.outcome} at ${savedVisit.location}. Follow-up: ${savedVisit.follow_up_date || 'N/A'}`,
           author: repName
         });
         const newNotes = encodeLeadNotes(userNotes, { ...meta, activity_log: updatedLog });
@@ -565,21 +651,19 @@ export default function FieldSalesPortal() {
           .eq('id', matchedLead.id);
       }
 
-      // 3. Save to local state and cache
-      const updated = [newVisit, ...visits];
-      setVisits(updated);
-      localStorage.setItem('maisarah_field_visits', JSON.stringify(updated));
-
+      setVisits(prev => [savedVisit as VisitRecord, ...prev]);
       setVisitForm({
+        lead_id: '',
         client_name: '',
         location: '',
         purpose: 'New Service Pitch',
         outcome: 'Interested - Requesting Quotation',
-        follow_up_date: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0]
+        follow_up_date: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
+        notes: ''
       });
       setShowVisitModal(false);
     } catch (err: any) {
-      console.warn('Notice saving visit notification:', err.message);
+      alert(err.message || 'Error saving field visit');
     } finally {
       setIsAddingVisit(false);
     }
@@ -597,27 +681,130 @@ export default function FieldSalesPortal() {
     window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
   };
 
+  // Duplicate Phone / CR warning in Quick Lead Capture
+  const duplicateLeadNotice = useMemo(() => {
+    const cleanPhone = leadForm.phone.replace(/[^0-9]/g, '');
+    const cleanCr = leadForm.cr_number.trim();
+    if (cleanPhone.length < 6 && cleanCr.length < 7) return null;
+
+    const match = leads.find(l => {
+      const lp = (l.phone || '').replace(/[^0-9]/g, '');
+      const phoneMatch = cleanPhone.length >= 6 && lp.length >= 6 && (lp.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(lp.slice(-8)));
+      const crMatch = cleanCr.length === 7 && (l.notes || '').includes(cleanCr);
+      return phoneMatch || crMatch;
+    });
+    if (!match) return null;
+    return isAr
+      ? `⚠️ تنبيه: توجد فرصة مسجلة مسبقاً لـ "${match.contact_name}" (${match.company_name || match.phone})`
+      : `⚠️ Possible duplicate lead: "${match.contact_name}" (${match.company_name || match.phone}) is already in pipeline.`;
+  }, [leads, leadForm.phone, leadForm.cr_number, isAr]);
+
+  // 1-Click Request Quotation from CRM inside Lead Detail Drawer
+  const handleRequestQuotation = async (lead: SalesLead) => {
+    setIsSavingDetail(true);
+    setDetailFeedback(null);
+    try {
+      const { userNotes, meta } = parseLeadNotes(lead.notes);
+      const updatedLog = meta.activity_log || [];
+      updatedLog.unshift({
+        id: `act-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: 'Quotation Requested from CRM',
+        details: `${repName} requested an official quotation for ${lead.interested_service} (Est. OMR ${lead.estimated_value}).`,
+        author: repName
+      });
+      const newNotes = encodeLeadNotes(userNotes, { ...meta, activity_log: updatedLog });
+      const nextStatus = (lead.status === 'new' || lead.status === 'contacted') ? 'consultation' : lead.status;
+
+      const { error } = await supabase
+        .from('crm_leads')
+        .update({ status: nextStatus, notes: newNotes, updated_at: new Date().toISOString() })
+        .eq('id', lead.id);
+      if (error) throw error;
+
+      await notifyCrmAndManager(
+        isAr ? '📄 طلب عرض سعر من المبيعات' : '📄 Quotation Requested by Field Sales',
+        isAr
+          ? `طلب ${repName} إعداد عرض سعر للعميل "${lead.contact_name}" (${lead.company_name || 'شركة'}) لخدمة: ${lead.interested_service}.`
+          : `${repName} requested a CRM quotation for "${lead.contact_name}" (${lead.company_name || 'Lead'}) — ${lead.interested_service}.`
+      );
+
+      const updatedLead = { ...lead, status: nextStatus as SalesLead['status'], notes: newNotes };
+      setSelectedLead(updatedLead);
+      setLeads(prev => prev.map(l => l.id === lead.id ? updatedLead : l));
+      setDetailFeedback(isAr ? '✓ تم إرسال طلب عرض السعر إلى فريق CRM بنجاح!' : '✓ Quotation request sent to CRM team!');
+    } catch (err: any) {
+      alert(err.message || 'Failed to request quotation');
+    } finally {
+      setIsSavingDetail(false);
+    }
+  };
+
+  // Append Field Note to Lead Timeline
+  const handleAddLeadNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || !detailNoteInput.trim()) return;
+    setIsSavingDetail(true);
+    setDetailFeedback(null);
+    try {
+      const { userNotes, meta } = parseLeadNotes(selectedLead.notes);
+      const updatedLog = meta.activity_log || [];
+      updatedLog.unshift({
+        id: `act-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: 'Field Sales Note',
+        details: detailNoteInput.trim(),
+        author: repName
+      });
+      const newNotes = encodeLeadNotes(userNotes, { ...meta, activity_log: updatedLog });
+      const { error } = await supabase
+        .from('crm_leads')
+        .update({ notes: newNotes, updated_at: new Date().toISOString() })
+        .eq('id', selectedLead.id);
+      if (error) throw error;
+
+      const updatedLead = { ...selectedLead, notes: newNotes };
+      setSelectedLead(updatedLead);
+      setLeads(prev => prev.map(l => l.id === selectedLead.id ? updatedLead : l));
+      setDetailNoteInput('');
+      setDetailFeedback(isAr ? '✓ تم حفظ الملاحظة' : '✓ Note added to timeline');
+    } catch (err: any) {
+      alert(err.message || 'Failed to add note');
+    } finally {
+      setIsSavingDetail(false);
+    }
+  };
+
+  // My Leads vs Team Leads
+  const myLeads = useMemo(() => {
+    if (!user?.id) return leads;
+    return leads.filter(l => l.assigned_to === user.id);
+  }, [leads, user?.id]);
+
   // Filtered Leads
   const filteredLeads = useMemo(() => {
-    return leads.filter(l => {
+    const sourceList = scopeFilter === 'my' ? myLeads : leads;
+    return sourceList.filter(l => {
       const matchSearch =
         l.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         l.company_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         l.phone?.includes(searchQuery);
-      const matchStatus = statusFilter === 'all' || l.status === statusFilter;
+      const normalizedFilter = statusFilter === 'proposal_sent' ? ['proposal_sent', 'quoted'] :
+        statusFilter === 'accepted' ? ['accepted', 'won'] : [statusFilter];
+      const matchStatus = statusFilter === 'all' || normalizedFilter.includes(l.status);
       return matchSearch && matchStatus;
     });
-  }, [leads, searchQuery, statusFilter]);
+  }, [leads, myLeads, scopeFilter, searchQuery, statusFilter]);
 
-  // Target Metrics Calculations
+  // Target Metrics Calculations (scoped to rep's own leads)
   const metrics = useMemo(() => {
-    const totalLeadsCount = leads.length;
-    const wonLeads = leads.filter(l => l.status === 'accepted');
-    const pipelineValue = leads.reduce((acc, curr) => acc + (Number(curr.estimated_value) || 0), 0);
+    const totalLeadsCount = myLeads.length;
+    const wonLeads = myLeads.filter(l => l.status === 'accepted' || l.status === 'won');
+    const pipelineValue = myLeads.reduce((acc, curr) => acc + (Number(curr.estimated_value) || 0), 0);
     const wonValue = wonLeads.reduce((acc, curr) => acc + (Number(curr.estimated_value) || 0), 0);
-    const monthlyTargetOMR = 3000;
+    const monthlyTargetOMR = repTargetOMR || 3000;
     const targetProgress = Math.min(100, Math.round((wonValue / monthlyTargetOMR) * 100));
-    const estimatedCommission = Number((wonValue * 0.08).toFixed(3)); // 8% commission model
+    const estimatedCommission = Number((wonValue * ((repCommissionRate || 8) / 100)).toFixed(3));
 
     return {
       totalLeadsCount,
@@ -628,7 +815,7 @@ export default function FieldSalesPortal() {
       targetProgress,
       estimatedCommission
     };
-  }, [leads]);
+  }, [myLeads, repTargetOMR, repCommissionRate]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-24" dir={isAr ? 'rtl' : 'ltr'}>
@@ -777,6 +964,19 @@ export default function FieldSalesPortal() {
         {activeTab === 'leads' && (
           <div className="space-y-3">
 
+            {/* Database / Permission Error Banner */}
+            {loadError && (
+              <div className="p-3.5 bg-rose-50 border border-rose-300 text-rose-900 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <AlertCircle size={18} className="text-rose-600 shrink-0" />
+                  <span>{loadError}</span>
+                </div>
+                <button onClick={() => fetchSalesData()} className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 rounded-lg text-[10px] font-black uppercase">
+                  {isAr ? 'إعادة المحاولة' : 'Retry'}
+                </button>
+              </div>
+            )}
+
             {/* Convert / Sync Success Banner */}
             {convertSuccess && (
               <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-2xl text-xs font-black flex items-center justify-between gap-2 shadow-xs">
@@ -787,6 +987,28 @@ export default function FieldSalesPortal() {
                 <button onClick={() => setConvertSuccess(null)} className="text-emerald-700 hover:text-emerald-900"><X size={15} /></button>
               </div>
             )}
+
+            {/* My Leads vs All Leads Scope Toggle */}
+            <div className="flex items-center justify-between gap-2 bg-white border border-gray-200 rounded-2xl p-1 shadow-xs">
+              <button
+                type="button"
+                onClick={() => setScopeFilter('my')}
+                className={`flex-1 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  scopeFilter === 'my' ? 'bg-brand-dark text-white shadow-xs' : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {isAr ? `فرصي (${myLeads.length})` : `My Leads (${myLeads.length})`}
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter('all')}
+                className={`flex-1 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  scopeFilter === 'all' ? 'bg-brand-dark text-white shadow-xs' : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {isAr ? `كل فرص الفريق (${leads.length})` : `All Team Leads (${leads.length})`}
+              </button>
+            </div>
 
             {/* Search & Filter Bar */}
             <div className="flex gap-2">
@@ -810,8 +1032,10 @@ export default function FieldSalesPortal() {
                 <option value="all">{isAr ? 'الكل' : 'All'}</option>
                 <option value="new">{isAr ? 'جديدة' : 'New'}</option>
                 <option value="contacted">{isAr ? 'تم التواصل' : 'Contacted'}</option>
-                <option value="quoted">{isAr ? 'تم العرض' : 'Quoted'}</option>
-                <option value="accepted">{isAr ? 'مقبولة (Won)' : 'Accepted'}</option>
+                <option value="consultation">{isAr ? 'استشارة' : 'Consultation'}</option>
+                <option value="proposal_sent">{isAr ? 'تم تقديم عرض' : 'Proposal Sent'}</option>
+                <option value="negotiation">{isAr ? 'تفاوض' : 'Negotiation'}</option>
+                <option value="accepted">{isAr ? 'مقبولة (Won)' : 'Won / Accepted'}</option>
                 <option value="lost">{isAr ? 'ملغاة' : 'Lost'}</option>
               </select>
             </div>
@@ -846,7 +1070,7 @@ export default function FieldSalesPortal() {
                 </div>
               ) : (
                 filteredLeads.map((lead) => {
-                  const isWon = lead.status === 'accepted';
+                  const isWon = lead.status === 'accepted' || lead.status === 'won';
                   const quote = quotationsMap[lead.id];
                   return (
                     <div
@@ -859,7 +1083,9 @@ export default function FieldSalesPortal() {
                             <h3 className="font-black text-xs text-gray-900 truncate">{lead.contact_name}</h3>
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
                               isWon ? 'bg-emerald-100 text-emerald-700' :
-                              lead.status === 'quoted' ? 'bg-amber-100 text-amber-700' :
+                              lead.status === 'quoted' || lead.status === 'proposal_sent' ? 'bg-amber-100 text-amber-700' :
+                              lead.status === 'negotiation' ? 'bg-purple-100 text-purple-700' :
+                              lead.status === 'lost' || lead.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
                               'bg-blue-100 text-blue-700'
                             }`}>
                               {lead.status}
@@ -892,7 +1118,7 @@ export default function FieldSalesPortal() {
                         <div className="flex items-center justify-between text-[10px] font-bold bg-amber-50/80 border border-amber-200 text-amber-900 px-3 py-1.5 rounded-xl">
                           <div className="flex items-center gap-1.5 truncate">
                             <FileText size={12} className="text-amber-600 shrink-0" />
-                            <span className="font-mono font-black">{quote.quote_number || 'Quotation'}</span>
+                            <span className="font-mono font-black">{quote.quotation_number || 'Quotation'}</span>
                             <span>•</span>
                             <span>OMR {Number(quote.total_amount || 0).toFixed(0)}</span>
                           </div>
@@ -918,20 +1144,23 @@ export default function FieldSalesPortal() {
                           {isAr ? 'المرحلة:' : 'Stage:'}
                         </span>
                         <select
-                          value={lead.status}
+                          value={lead.status === 'quoted' ? 'proposal_sent' : lead.status === 'won' ? 'accepted' : lead.status}
                           onChange={(e) => handleQuickStatusChange(lead, e.target.value as any)}
                           className={`text-[10px] font-black py-1 px-2.5 rounded-xl border outline-none cursor-pointer transition-all ${
-                            lead.status === 'accepted' ? 'bg-emerald-50 border-emerald-300 text-emerald-800' :
-                            lead.status === 'quoted' ? 'bg-amber-50 border-amber-300 text-amber-800' :
-                            lead.status === 'contacted' ? 'bg-blue-50 border-blue-300 text-blue-800' :
+                            isWon ? 'bg-emerald-50 border-emerald-300 text-emerald-800' :
+                            lead.status === 'quoted' || lead.status === 'proposal_sent' ? 'bg-amber-50 border-amber-300 text-amber-800' :
+                            lead.status === 'negotiation' ? 'bg-purple-50 border-purple-300 text-purple-800' :
+                            lead.status === 'contacted' || lead.status === 'consultation' ? 'bg-blue-50 border-blue-300 text-blue-800' :
                             lead.status === 'rejected' || lead.status === 'lost' ? 'bg-rose-50 border-rose-300 text-rose-800' :
                             'bg-gray-50 border-gray-200 text-gray-700'
                           }`}
                         >
                           <option value="new">{isAr ? 'جديدة (New)' : 'New'}</option>
                           <option value="contacted">{isAr ? 'تم التواصل (Contacted)' : 'Contacted'}</option>
-                          <option value="quoted">{isAr ? 'تم تقديم عرض (Quoted)' : 'Quoted'}</option>
-                          <option value="accepted">{isAr ? 'صفقة رابحة (Won)' : 'Accepted (Won)'}</option>
+                          <option value="consultation">{isAr ? 'استشارة (Consultation)' : 'Consultation'}</option>
+                          <option value="proposal_sent">{isAr ? 'تم تقديم عرض (Proposal Sent)' : 'Proposal Sent'}</option>
+                          <option value="negotiation">{isAr ? 'تفاوض (Negotiation)' : 'Negotiation'}</option>
+                          <option value="accepted">{isAr ? 'صفقة رابحة (Won)' : 'Won / Accepted'}</option>
                           <option value="lost">{isAr ? 'ملغاة (Lost)' : 'Lost'}</option>
                         </select>
                       </div>
@@ -947,7 +1176,7 @@ export default function FieldSalesPortal() {
                         </button>
                       )}
 
-                      {/* Action Bar (1-Click Call & WhatsApp) */}
+                      {/* Action Bar (1-Click Call, WhatsApp & Details) */}
                       <div className="flex items-center gap-2 pt-1">
                         {lead.phone ? (
                           <>
@@ -961,17 +1190,30 @@ export default function FieldSalesPortal() {
 
                             <button
                               onClick={() => handleOpenWhatsApp(lead.phone, lead.contact_name)}
-                              className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                              className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
                             >
                               <MessageCircle size={13} />
                               <span>WhatsApp</span>
                             </button>
                           </>
                         ) : (
-                          <span className="text-[10px] text-gray-400 font-medium py-1">
+                          <span className="flex-1 text-[10px] text-gray-400 font-medium py-1">
                             {isAr ? 'لا يوجد رقم هاتف مسجل' : 'No phone number'}
                           </span>
                         )}
+
+                        <button
+                          onClick={() => {
+                            setSelectedLead(lead);
+                            setDetailNoteInput('');
+                            setDetailFeedback(null);
+                          }}
+                          className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-[11px] font-black flex items-center justify-center gap-1 transition-all cursor-pointer"
+                          title={isAr ? 'التفاصيل وطلب عرض سعر' : 'Details & Quote Request'}
+                        >
+                          <FileText size={13} className="text-brand-dark" />
+                          <span>{isAr ? 'التفاصيل' : 'Details'}</span>
+                        </button>
                       </div>
                     </div>
                   );
@@ -1060,22 +1302,81 @@ export default function FieldSalesPortal() {
                 </div>
               </div>
 
-              {/* Phone & WhatsApp */}
-              <div>
-                <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
-                  {isAr ? 'رقم الهاتف / الواتساب *' : 'Phone / WhatsApp *'}
-                </label>
-                <div className="relative">
-                  <Phone size={14} className={`absolute top-3.5 text-gray-400 ${isAr ? 'right-3' : 'left-3'}`} />
+              {/* Phone & Email */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                    {isAr ? 'رقم الهاتف / الواتساب *' : 'Phone / WhatsApp *'}
+                  </label>
+                  <div className="relative">
+                    <Phone size={14} className={`absolute top-3.5 text-gray-400 ${isAr ? 'right-3' : 'left-3'}`} />
+                    <input
+                      required
+                      type="tel"
+                      placeholder="+968 9123 4567"
+                      value={leadForm.phone}
+                      onChange={(e) => setLeadForm(prev => ({ ...prev, phone: e.target.value }))}
+                      className={`w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark focus:bg-white transition-all ${isAr ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                        }`}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                    {isAr ? 'البريد الإلكتروني (اختياري)' : 'Email (Optional)'}
+                  </label>
                   <input
-                    required
-                    type="tel"
-                    placeholder="+968 9123 4567"
-                    value={leadForm.phone}
-                    onChange={(e) => setLeadForm(prev => ({ ...prev, phone: e.target.value }))}
-                    className={`w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono font-bold outline-none focus:border-brand-dark focus:bg-white transition-all ${isAr ? 'pr-9 pl-3' : 'pl-9 pr-3'
-                      }`}
+                    type="email"
+                    placeholder="contact@company.om"
+                    value={leadForm.email}
+                    onChange={(e) => setLeadForm(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark focus:bg-white transition-all"
                   />
+                </div>
+              </div>
+
+              {/* Live Duplicate Phone / CR Notice */}
+              {duplicateLeadNotice && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-[11px] font-bold flex items-center gap-2">
+                  <AlertCircle size={15} className="text-amber-600 shrink-0" />
+                  <span>{duplicateLeadNotice}</span>
+                </div>
+              )}
+
+              {/* Source & Priority */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                    {isAr ? 'مصدر الفرصة' : 'Lead Source'}
+                  </label>
+                  <select
+                    value={leadForm.source}
+                    onChange={(e) => setLeadForm(prev => ({ ...prev, source: e.target.value }))}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark focus:bg-white transition-all"
+                  >
+                    <option value="Field Sales">{isAr ? 'زيارة ميدانية' : 'Field Visit'}</option>
+                    <option value="Walk-in">{isAr ? 'حضور مباشر' : 'Walk-in'}</option>
+                    <option value="Referral">{isAr ? 'توصية / إحالة' : 'Referral'}</option>
+                    <option value="Cold Call">{isAr ? 'اتصال مباشر' : 'Cold Call'}</option>
+                    <option value="Networking">{isAr ? 'فعاليات وشبكات' : 'Networking / Event'}</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">
+                    {isAr ? 'الأولوية' : 'Priority'}
+                  </label>
+                  <select
+                    value={leadForm.priority}
+                    onChange={(e) => setLeadForm(prev => ({ ...prev, priority: e.target.value as any }))}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-brand-dark focus:bg-white transition-all"
+                  >
+                    <option value="low">{isAr ? 'منخفضة' : 'Low'}</option>
+                    <option value="medium">{isAr ? 'متوسطة' : 'Medium'}</option>
+                    <option value="high">{isAr ? 'عالية' : 'High'}</option>
+                    <option value="urgent">{isAr ? 'عاجلة' : 'Urgent'}</option>
+                  </select>
                 </div>
               </div>
 
@@ -1172,7 +1473,7 @@ export default function FieldSalesPortal() {
             {/* Visit Modal */}
             {showVisitModal && (
               <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-3xl p-5 max-w-sm w-full space-y-3 shadow-2xl animate-scale-up">
+                <div className="bg-white rounded-3xl p-5 max-w-md w-full space-y-3 shadow-2xl animate-scale-up max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center justify-between pb-2 border-b border-gray-100">
                     <h3 className="font-black text-xs text-gray-900">{isAr ? 'تسجيل زيارة عميل جديدة' : 'Record Client Visit'}</h3>
                     <button onClick={() => setShowVisitModal(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
@@ -1180,7 +1481,31 @@ export default function FieldSalesPortal() {
 
                   <form onSubmit={handleSaveVisit} className="space-y-3">
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-400 mb-1">{isAr ? 'اسم العميل / الشركة' : 'Client / Company'}</label>
+                      <label className="block text-[10px] font-bold text-gray-400 mb-1">{isAr ? 'ربط بفرصة موجودة (اختياري)' : 'Link Existing Lead (Optional)'}</label>
+                      <select
+                        value={visitForm.lead_id}
+                        onChange={(e) => {
+                          const selectedId = e.target.value;
+                          const found = leads.find(l => l.id === selectedId);
+                          setVisitForm(prev => ({
+                            ...prev,
+                            lead_id: selectedId,
+                            client_name: found ? (found.company_name || found.contact_name) : prev.client_name
+                          }));
+                        }}
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none"
+                      >
+                        <option value="">{isAr ? '-- عميل / فرصة غير مرتبطة --' : '-- Walk-in / Unlinked Client --'}</option>
+                        {leads.map(l => (
+                          <option key={l.id} value={l.id}>
+                            {l.company_name ? `${l.company_name} (${l.contact_name})` : l.contact_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 mb-1">{isAr ? 'اسم العميل / الشركة *' : 'Client / Company *'}</label>
                       <input
                         required
                         type="text"
@@ -1191,7 +1516,16 @@ export default function FieldSalesPortal() {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-400 mb-1">{isAr ? 'الموقع' : 'Location'}</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[10px] font-bold text-gray-400">{isAr ? 'الموقع' : 'Location'}</label>
+                        <button
+                          type="button"
+                          onClick={handleDetectLocation}
+                          className="text-[10px] font-black text-brand-dark hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Navigation size={10} /> GPS
+                        </button>
+                      </div>
                       <input
                         type="text"
                         placeholder="Muscat, Al Khuwair..."
@@ -1199,6 +1533,33 @@ export default function FieldSalesPortal() {
                         onChange={(e) => setVisitForm(prev => ({ ...prev, location: e.target.value }))}
                         className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none"
                       />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 mb-1">{isAr ? 'غرض الزيارة' : 'Visit Purpose'}</label>
+                        <select
+                          value={visitForm.purpose}
+                          onChange={(e) => setVisitForm(prev => ({ ...prev, purpose: e.target.value }))}
+                          className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none"
+                        >
+                          <option value="New Service Pitch">{isAr ? 'عرض خدمات جديدة' : 'New Service Pitch'}</option>
+                          <option value="Quotation Follow-up">{isAr ? 'متابعة عرض سعر' : 'Quotation Follow-up'}</option>
+                          <option value="Document Collection">{isAr ? 'استلام مستندات' : 'Document Collection'}</option>
+                          <option value="Contract Signing">{isAr ? 'توقيع عقد' : 'Contract Signing'}</option>
+                          <option value="Account Review">{isAr ? 'مراجعة حساب' : 'Account Review'}</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 mb-1">{isAr ? 'تاريخ المتابعة القادم' : 'Follow-up Date'}</label>
+                        <input
+                          type="date"
+                          value={visitForm.follow_up_date}
+                          onChange={(e) => setVisitForm(prev => ({ ...prev, follow_up_date: e.target.value }))}
+                          className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none"
+                        />
+                      </div>
                     </div>
 
                     <div>
@@ -1215,11 +1576,27 @@ export default function FieldSalesPortal() {
                       </select>
                     </div>
 
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 mb-1">{isAr ? 'ملاحظات الزيارة' : 'Visit Notes'}</label>
+                      <textarea
+                        rows={2}
+                        placeholder={isAr ? 'تفاصيل إضافية...' : 'Summary of client discussion...'}
+                        value={visitForm.notes}
+                        onChange={(e) => setVisitForm(prev => ({ ...prev, notes: e.target.value }))}
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none resize-none"
+                      />
+                    </div>
+
                     <button
                       type="submit"
-                      className="w-full py-3 bg-brand-dark text-white rounded-xl font-black text-xs uppercase"
+                      disabled={isAddingVisit}
+                      className="w-full py-3 bg-brand-dark text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      {isAr ? 'حفظ الزيارة' : 'Save Visit'}
+                      {isAddingVisit ? (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <span>{isAr ? 'حفظ الزيارة' : 'Save Visit'}</span>
+                      )}
                     </button>
                   </form>
                 </div>
@@ -1230,22 +1607,37 @@ export default function FieldSalesPortal() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {visits.length === 0 ? (
                 <div className="bg-white rounded-3xl p-8 text-center border border-gray-200 text-gray-400 text-xs font-bold">
-                  {isAr ? 'لا توجد زيارات مسجلة اليوم' : 'No visits recorded yet today'}
+                  {isAr ? 'لا توجد زيارات مسجلة حتى الآن' : 'No visits recorded yet'}
                 </div>
               ) : (
                 visits.map(v => (
-                  <div key={v.id} className="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-xs space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-black text-xs text-gray-900">{v.client_name}</h4>
-                      <span className="text-[10px] font-bold text-gray-400">{new Date(v.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <div key={v.id} className="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-xs space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="font-black text-xs text-gray-900 truncate">{v.client_name}</h4>
+                      <span className="text-[10px] font-bold text-gray-400 shrink-0">
+                        {new Date(v.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })} • {new Date(v.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
-                    <p className="text-[11px] font-medium text-gray-600 flex items-center gap-1">
-                      <MapPin size={11} className="text-brand-dark shrink-0" />
-                      <span>{v.location}</span>
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <MapPin size={11} className="text-brand-dark shrink-0" />
+                        {v.location}
+                      </span>
+                      {v.purpose && (
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md">{v.purpose}</span>
+                      )}
+                      {v.follow_up_date && (
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-800 rounded-md flex items-center gap-1">
+                          <Calendar size={10} /> {v.follow_up_date}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[10px] font-black bg-slate-50 text-slate-700 px-2.5 py-1 rounded-lg">
                       {v.outcome}
                     </div>
+                    {v.notes && (
+                      <p className="text-[11px] text-gray-500 font-medium">{v.notes}</p>
+                    )}
                   </div>
                 ))
               )}
@@ -1498,6 +1890,117 @@ export default function FieldSalesPortal() {
             </div>
           </div>
         )}
+
+        {/* ── LEAD DETAIL & QUOTE REQUEST DRAWER ───────────────────────────── */}
+        {selectedLead && (() => {
+          const { userNotes, meta } = parseLeadNotes(selectedLead.notes);
+          const activityLog = meta.activity_log || [];
+          const quote = quotationsMap[selectedLead.id];
+          return (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+              <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-lg w-full space-y-4 shadow-2xl animate-scale-up border border-gray-100 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-start justify-between gap-2 pb-3 border-b border-gray-100">
+                  <div>
+                    <h3 className="font-black text-sm text-gray-900">{selectedLead.contact_name}</h3>
+                    <p className="text-[11px] font-bold text-gray-500">
+                      {selectedLead.company_name || (isAr ? 'عميل فردي / بدون شركة' : 'Individual / Prospect')} • {selectedLead.source}
+                    </p>
+                  </div>
+                  <button onClick={() => setSelectedLead(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={18} /></button>
+                </div>
+
+                {detailFeedback && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-black">
+                    {detailFeedback}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2.5 bg-slate-50 p-3.5 rounded-2xl text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 block">{isAr ? 'الهاتف' : 'Phone'}</span>
+                    <span className="font-mono font-black text-gray-800">{selectedLead.phone || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 block">{isAr ? 'البريد الإلكتروني' : 'Email'}</span>
+                    <span className="font-bold text-gray-800 truncate block">{selectedLead.email || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 block">{isAr ? 'الخدمة المطلوبة' : 'Service'}</span>
+                    <span className="font-bold text-gray-800">{selectedLead.interested_service}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 block">{isAr ? 'القيمة المتوقعة' : 'Est. Value'}</span>
+                    <span className="font-black text-brand-dark">OMR {Number(selectedLead.estimated_value || 0).toFixed(0)}</span>
+                  </div>
+                </div>
+
+                {userNotes && (
+                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 text-xs text-amber-950 font-medium">
+                    <span className="text-[10px] font-black uppercase text-amber-700 block mb-0.5">{isAr ? 'ملاحظات أولية' : 'Initial Notes'}</span>
+                    {userNotes}
+                  </div>
+                )}
+
+                {quote ? (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs font-black text-emerald-900">
+                    <span>{quote.quotation_number || 'Quotation'} • OMR {Number(quote.total_amount || 0).toFixed(0)}</span>
+                    <span className="uppercase text-[10px] px-2 py-0.5 bg-white rounded-full border border-emerald-200">{quote.status}</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isSavingDetail}
+                    onClick={() => handleRequestQuotation(selectedLead)}
+                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+                  >
+                    <FileText size={14} />
+                    <span>{isAr ? 'طلب عرض سعر رسمي من فريق CRM' : 'Request Official Quotation from CRM'}</span>
+                  </button>
+                )}
+
+                {/* Add Note Form */}
+                <form onSubmit={handleAddLeadNote} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder={isAr ? 'أضف ملاحظة متابعة...' : 'Add follow-up note to timeline...'}
+                    value={detailNoteInput}
+                    onChange={(e) => setDetailNoteInput(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:border-brand-dark"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSavingDetail || !detailNoteInput.trim()}
+                    className="px-3.5 py-2 bg-brand-dark text-white rounded-xl text-xs font-black disabled:opacity-50 cursor-pointer"
+                  >
+                    {isAr ? 'حفظ' : 'Add'}
+                  </button>
+                </form>
+
+                {/* Activity Timeline */}
+                <div className="space-y-2">
+                  <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                    {isAr ? 'سجل النشاط والمتابعة' : 'Activity Timeline'} ({activityLog.length})
+                  </h4>
+                  {activityLog.length === 0 ? (
+                    <p className="text-[11px] text-gray-400 italic">{isAr ? 'لا توجد أنشطة مسجلة بعد.' : 'No activity entries yet.'}</p>
+                  ) : (
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                      {activityLog.map((act: any) => (
+                        <div key={act.id} className="p-2.5 bg-gray-50 rounded-xl border border-gray-100 text-[11px]">
+                          <div className="flex items-center justify-between font-black text-gray-800">
+                            <span>{act.action}</span>
+                            <span className="text-[9px] text-gray-400">{new Date(act.timestamp).toLocaleDateString()}</span>
+                          </div>
+                          {act.details && <p className="text-gray-600 mt-0.5">{act.details}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       </main>
 

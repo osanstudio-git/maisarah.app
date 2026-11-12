@@ -116,11 +116,9 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
       case 'sales':
         return [
           { title: isAr ? 'بوابة المبيعات الميدانية' : 'Field Sales Portal', icon: Target, path: '/sales' },
-          { title: isAr ? 'شركاء وفرق B2B' : 'B2B Corporate Hub', icon: Building2, path: '/crm/b2b' },
-          { title: isAr ? 'خط تأهيل وإدارة الفرص' : 'Lead Pipeline & Intake', icon: Target, path: '/crm/leads' },
+          { title: isAr ? 'خط تأهيل وإدارة الفرص' : 'Lead Pipeline & Intake', icon: Layers, path: '/crm/leads' },
           { title: isAr ? 'إدارة العملاء والفرص' : 'Clients & Leads', icon: Users, path: '/crm/clients' },
           { title: isAr ? 'استوديو عروض الأسعار' : 'Quotations Studio', icon: FileText, path: '/crm/quotations' },
-          { title: isAr ? 'نادي الأعمال' : 'Business Club', icon: Star, path: '/crm/club' },
           { title: t('messaging.messages'), icon: MessageCircle, path: '/crm/messages' },
           { title: t('vault.documents'), icon: Folder, path: '/crm/documents' },
         ];

@@ -228,6 +228,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       department_head: '/hod/dashboard',
       hr: '/hr/dashboard',
       crm: '/crm/dashboard',
+      sales: '/sales',
       manager: '/manager',
       client: '/client'
     };
