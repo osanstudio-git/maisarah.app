@@ -13,6 +13,7 @@ import {
 import { provisionClientOrMemberAuth, type ProvisionResult } from '../../utils/clientAuthProvisioner';
 import { isDirectEmployeeMode } from '../../utils/workflowConfig';
 import PortalAccessCredentialModal, { type PortalAccessTarget } from './PortalAccessCredentialModal';
+import EngagementLetterModal from './EngagementLetterModal';
 import ModernCRMDashboard from './ModernCRMDashboard';
 import {
   type SalesStage,
@@ -265,12 +266,16 @@ export default function CRMLeadManagement() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
   // Notification Toast
-  const [toast, setToast] = useState<{ show: boolean; title: string; message: string; type: 'success' | 'error' }>({
+  const [toast, setToast] = useState<{ show: boolean; title: string; message: string; type: 'success' | 'error' | 'info' }>({
     show: false,
     title: '',
     message: '',
     type: 'success'
   });
+
+  // 2-Page Engagement Letter Studio Modal
+  const [isEngagementStudioOpen, setIsEngagementStudioOpen] = useState(false);
+  const [selectedEngagementClient, setSelectedEngagementClient] = useState<any>(null);
 
   useEffect(() => {
     if (toast.show) {
@@ -2480,11 +2485,20 @@ export default function CRMLeadManagement() {
 
       {/* ── Toast Alert ─────────────────────────────────────────────────── */}
       {toast.show && (
-        <div className={`fixed top-6 end-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${toast.type === 'success'
-            ? 'bg-emerald-900/95 text-emerald-100 border-emerald-500/30'
-            : 'bg-red-900/95 text-red-100 border-red-500/30'
+        <div className={`fixed top-6 end-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${
+            toast.type === 'success'
+              ? 'bg-emerald-900/95 text-emerald-100 border-emerald-500/30'
+              : toast.type === 'info'
+              ? 'bg-blue-900/95 text-blue-100 border-blue-500/30'
+              : 'bg-red-900/95 text-red-100 border-red-500/30'
           }`}>
-          {toast.type === 'success' ? <CheckCircle2 size={20} className="text-emerald-400 shrink-0" /> : <AlertCircle size={20} className="text-red-400 shrink-0" />}
+          {toast.type === 'success' ? (
+            <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />
+          ) : toast.type === 'info' ? (
+            <AlertCircle size={20} className="text-blue-400 shrink-0" />
+          ) : (
+            <AlertCircle size={20} className="text-red-400 shrink-0" />
+          )}
           <div>
             <p className="text-xs font-black uppercase tracking-wider">{toast.title}</p>
             <p className="text-xs font-semibold mt-0.5 text-white/90">{toast.message}</p>
@@ -5396,12 +5410,37 @@ export default function CRMLeadManagement() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setIsQuoteModalOpen(false)}
-                  className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-2">
+                  {isAuditDoc && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedEngagementClient({
+                          clientName: selectedLeadForQuote.contact_name,
+                          companyName: selectedLeadForQuote.company_name || selectedLeadForQuote.contact_name,
+                          crNumber: (selectedLeadForQuote as any).cr_number || '',
+                          email: selectedLeadForQuote.email || '',
+                          phone: selectedLeadForQuote.phone || '',
+                          serviceType: 'Annual Statutory Audit',
+                          totalAmount: quoteForm.total_amount,
+                          quoteNumber: activeQuotation.quotation_number,
+                        });
+                        setIsEngagementStudioOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#800000] hover:bg-[#600000] text-white rounded-xl text-xs font-black shadow-sm transition-all cursor-pointer"
+                      title={isAr ? 'فتح استوديو خطاب الارتباط المكون من صفحتين مطابق للنموذج الرسمي' : 'Open 2-Page Official Engagement Letter Studio'}
+                    >
+                      <Award size={14} className="text-amber-300" />
+                      <span>{isAr ? 'استوديو خطاب الارتباط (2-Page)' : '2-Page Audit Letter'}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setIsQuoteModalOpen(false)}
+                    className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
 
               <form onSubmit={handleSaveQuotation} className="p-6 space-y-4">
@@ -6271,6 +6310,16 @@ export default function CRMLeadManagement() {
         onSuccess={() => {
           fetchLeads(true);
         }}
+      />
+
+      {/* ── 2-PAGE AUDIT ENGAGEMENT LETTER STUDIO MODAL ── */}
+      <EngagementLetterModal
+        isOpen={isEngagementStudioOpen}
+        onClose={() => {
+          setIsEngagementStudioOpen(false);
+          setSelectedEngagementClient(null);
+        }}
+        clientData={selectedEngagementClient}
       />
 
     </div>
