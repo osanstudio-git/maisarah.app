@@ -158,7 +158,7 @@ export default function CRMPortal() {
     const path = location.pathname;
     if (path.includes('/crm/b2b')) return 'b2b';
     if (path.includes('/crm/leads')) return 'pipeline';
-    if (path.includes('/crm/quotations')) return 'quotations';
+    if (path.includes('/crm/quotations') || path.includes('/crm/engagement-letter')) return 'quotations';
     if (path.includes('/crm/clients')) return 'clients';
     if (path.includes('/crm/combo')) return 'combo_work';
     if (path.includes('/crm/financials')) return 'financials';
@@ -708,6 +708,47 @@ export default function CRMPortal() {
   const [taxInvoiceModalOpen, setTaxInvoiceModalOpen] = useState(false);
   const [paymentReceiptModalOpen, setPaymentReceiptModalOpen] = useState(false);
   const [activeDocumentClient, setActiveDocumentClient] = useState<any>(null);
+
+  // Quick Create Engagement Letter handler with route navigation
+  const handleOpenCreateEngagementLetter = (initialClient?: any) => {
+    const defaultData = {
+      clientName: initialClient?.companyName || initialClient?.clientName || initialClient?.name || '',
+      companyName: initialClient?.companyName || initialClient?.clientName || initialClient?.name || '',
+      crNumber: initialClient?.crNumber || '',
+      email: initialClient?.email || '',
+      phone: initialClient?.phone || '',
+      serviceType: 'Annual Statutory Audit',
+      totalAmount: initialClient?.budget || initialClient?.amount || 450,
+      subtotal: initialClient?.subtotal || 450,
+      vatAmount: 0,
+      quoteNumber: `EL-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`
+    };
+    setActiveDocumentClient(defaultData);
+    setEngagementModalOpen(true);
+    if (!location.pathname.includes('/crm/engagement-letter')) {
+      navigate('/crm/quotations?create=engagement', { replace: false });
+    }
+  };
+
+  // Synchronize route with Engagement Letter Studio
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (location.pathname === '/crm/engagement-letter' || searchParams.get('create') === 'engagement') {
+      if (!engagementModalOpen) {
+        setActiveDocumentClient((prev: any) => prev || {
+          clientName: '',
+          companyName: '',
+          crNumber: '',
+          serviceType: 'Annual Statutory Audit',
+          totalAmount: 450,
+          subtotal: 450,
+          vatAmount: 0,
+          quoteNumber: `EL-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`
+        });
+        setEngagementModalOpen(true);
+      }
+    }
+  }, [location.pathname, location.search]);
 
   const convertNumberToWords = (num: number): string => {
     if (!num || num <= 0) return 'Zero Omani Rials Only';
@@ -2510,14 +2551,25 @@ export default function CRMPortal() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => openQuotationModalForLead()}
-              className="bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider px-5 py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-[#A11212]/20 active:scale-95 transition-all cursor-pointer"
-            >
-              <DollarSign size={16} />
-              <span>{isAr ? '+ إنشاء عرض سعر تفاعلي' : '+ Build Interactive Quotation'}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleOpenCreateEngagementLetter()}
+                className="bg-[#800000] hover:bg-[#660000] text-white text-xs font-black uppercase tracking-wider px-5 py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-[#800000]/25 active:scale-95 transition-all cursor-pointer border border-amber-400/30"
+              >
+                <Award size={16} className="text-amber-300" />
+                <span>{isAr ? '+ إنشاء خطاب ارتباط (EL)' : '+ Create Engagement Letter'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openQuotationModalForLead()}
+                className="bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black uppercase tracking-wider px-5 py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-[#A11212]/20 active:scale-95 transition-all cursor-pointer"
+              >
+                <DollarSign size={16} />
+                <span>{isAr ? '+ إنشاء عرض سعر تفاعلي' : '+ Build Interactive Quotation'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Key Metrics Cards */}
@@ -2776,12 +2828,22 @@ export default function CRMPortal() {
                 <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">Quotations & Client Acceptance Pipeline</h3>
                 <p className="text-xs text-gray-500 font-bold">Build proposals, track acceptance, and auto-trigger HOD job assignment</p>
               </div>
-              <button
-                onClick={() => openQuotationModalForLead()}
-                className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-purple-700/20 active:scale-95 transition-all"
-              >
-                <DollarSign size={14} /> {isAr ? 'عرض سعر جديد' : '+ Build Quotation'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenCreateEngagementLetter()}
+                  className="bg-[#800000] hover:bg-[#660000] text-white text-xs font-black uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-[#800000]/20 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Award size={14} className="text-amber-300" /> {isAr ? 'خطاب ارتباط جديد' : '+ Engagement Letter'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openQuotationModalForLead()}
+                  className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-purple-700/20 active:scale-95 transition-all cursor-pointer"
+                >
+                  <DollarSign size={14} /> {isAr ? 'عرض سعر جديد' : '+ Build Quotation'}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -4310,6 +4372,26 @@ export default function CRMPortal() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => {
+                    setShowQuotationModal(false);
+                    handleOpenCreateEngagementLetter({
+                      clientName: quoteForm.clientName,
+                      companyName: quoteForm.companyName || quoteForm.clientName,
+                      email: quoteForm.email,
+                      phone: quoteForm.phone,
+                      budget: quoteForm.baseAmount ? parseFloat(quoteForm.baseAmount) : 450,
+                      subtotal: quoteForm.baseAmount ? parseFloat(quoteForm.baseAmount) : 450,
+                    });
+                  }}
+                  className="bg-amber-600/90 hover:bg-amber-600 text-amber-50 border border-amber-500/40 text-xs font-black uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Switch to Audit Engagement Letter Studio"
+                >
+                  <Award size={15} className="text-amber-300" />
+                  <span className="hidden sm:inline">2-Page Engagement Letter</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => window.print()}
                   className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-black uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                 >
@@ -5225,8 +5307,39 @@ export default function CRMPortal() {
       {/* ── DOCUMENT STUDIO MODALS ── */}
       <EngagementLetterModal
         isOpen={engagementModalOpen}
-        onClose={() => setEngagementModalOpen(false)}
+        onClose={() => {
+          setEngagementModalOpen(false);
+          setActiveDocumentClient(null);
+          if (location.pathname === '/crm/engagement-letter' || location.search.includes('create=engagement')) {
+            navigate('/crm/quotations', { replace: true });
+          }
+        }}
         clientData={activeDocumentClient}
+        onSave={async (letterData) => {
+          try {
+            const { error } = await supabase.from('quotations').insert({
+              client_name: letterData.clientName || 'Arif for Construction and Projects LLC',
+              client_type: 'B2B',
+              budget: letterData.totalFeeOMR || 450,
+              subtotal: letterData.totalFeeOMR || 450,
+              tax: 0,
+              status: 'pending',
+              service_type: 'Statutory Audit',
+              services: ['Statutory Audit & Assurance'],
+              service_details: `Annual Statutory Audit Engagement for ${letterData.yearsCovered}. Total: OMR ${letterData.totalFeeOMR}`,
+              notes: `Audit Engagement Letter for ${letterData.clientName} (CR: ${letterData.clientCr}). Covers ${letterData.yearsCovered}.`
+            });
+            if (error) throw error;
+            fetchAll(false);
+            setEngagementModalOpen(false);
+            if (location.pathname === '/crm/engagement-letter' || location.search.includes('create=engagement')) {
+              navigate('/crm/quotations', { replace: true });
+            }
+          } catch (err: any) {
+            console.error('Save EL error:', err);
+            alert('Failed to save Engagement Letter: ' + err.message);
+          }
+        }}
       />
 
       <BookkeepingProposalModal
