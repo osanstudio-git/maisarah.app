@@ -259,7 +259,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList,
     e.preventDefault();
     if (!partnerForm.name || !partnerForm.contact_person) return;
 
-    const cleanCR = partnerForm.cr_number ? partnerForm.cr_number.replace(/\D/g, '').slice(0, 9) : undefined;
+    const cleanCR = partnerForm.cr_number ? partnerForm.cr_number.replace(/\D/g, '').slice(0, 7) : undefined;
 
     const newPartner: B2BPartner = {
       id: `b2b-${crypto.randomUUID().slice(0, 8)}`,
@@ -1118,26 +1118,26 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList,
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                      {isAr ? 'رقم السجل التجاري (9 أرقام)' : 'Commercial Registration (CR) - 9 Digits'}
+                      CR
                     </label>
                     <span className={`text-[10px] font-black px-2 py-0.5 rounded-md transition-colors ${
-                      partnerForm.cr_number.length === 9
+                      partnerForm.cr_number.length === 7
                         ? 'text-green-700 bg-green-50 border border-green-200'
                         : partnerForm.cr_number.length > 0
                         ? 'text-amber-700 bg-amber-50 border border-amber-200'
                         : 'text-gray-400'
                     }`}>
-                      {partnerForm.cr_number.length}/9 {partnerForm.cr_number.length === 9 ? '✓' : ''}
+                      {partnerForm.cr_number.length}/7 {partnerForm.cr_number.length === 7 ? '✓' : ''}
                     </span>
                   </div>
                   <input
                     type="text"
                     inputMode="numeric"
-                    maxLength={9}
-                    placeholder="e.g. 104928192 (9 Digits)"
+                    maxLength={7}
+                    placeholder="e.g. 1361665 (7 Digits)"
                     value={partnerForm.cr_number}
                     onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 9);
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 7);
                       setPartnerForm({ ...partnerForm, cr_number: val });
                     }}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"

@@ -3376,13 +3376,15 @@ export default function CRMPortal() {
 
                   <div>
                     <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">
-                      {isAr ? 'رقم السجل التجاري (CR No.)' : 'Commercial Registration (CR) No.'}
+                      CR
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. CR-1456789"
+                      inputMode="numeric"
+                      maxLength={7}
+                      placeholder="e.g. 1361665"
                       value={onboardForm.registrationNumber}
-                      onChange={(e) => setOnboardForm({ ...onboardForm, registrationNumber: e.target.value })}
+                      onChange={(e) => setOnboardForm({ ...onboardForm, registrationNumber: e.target.value.replace(/\D/g, '').slice(0, 7) })}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-[#A11212]"
                     />
                   </div>
