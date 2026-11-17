@@ -117,7 +117,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
         return [
           { title: isAr ? 'بوابة المبيعات الميدانية' : 'Field Sales Portal', icon: Target, path: '/sales' },
           { title: isAr ? 'خط تأهيل وإدارة الفرص' : 'Lead Pipeline & Intake', icon: Layers, path: '/crm/leads' },
-          { title: isAr ? 'إدارة العملاء والفرص' : 'Clients & Leads', icon: Users, path: '/crm/clients' },
+          { title: isAr ? 'العملاء وشركاء B2B' : 'Clients & B2B Hub', icon: Building2, path: '/crm/clients' },
           { title: isAr ? 'استوديو عروض الأسعار' : 'Quotations Studio', icon: FileText, path: '/crm/quotations' },
           { title: t('messaging.messages'), icon: MessageCircle, path: '/crm/messages' },
           { title: t('vault.documents'), icon: Folder, path: '/crm/documents' },
@@ -126,9 +126,8 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
         return [
           { title: isAr ? 'لوحة قيادة CRM' : 'CRM Dashboard', icon: Home, path: '/crm/dashboard' },
           { title: isAr ? 'المبيعات الميدانية' : 'Field Sales', icon: Target, path: '/sales' },
-          { title: isAr ? 'شركاء وفرق B2B' : 'B2B Corporate Hub', icon: Building2, path: '/crm/b2b' },
+          { title: isAr ? 'العملاء وشركاء B2B' : 'Clients & B2B Hub', icon: Building2, path: '/crm/clients' },
           { title: isAr ? 'استوديو عروض الأسعار' : 'Quotations Studio', icon: FileText, path: '/crm/quotations' },
-          { title: isAr ? 'إدارة العملاء والفرص' : 'Clients & Leads', icon: Users, path: '/crm/clients' },
           { title: isAr ? 'خط تأهيل الفرص' : 'Lead Pipeline', icon: Target, path: '/crm/leads' },
           { title: isAr ? 'إدارة العمل المركب' : 'Combo Work', icon: Layers, path: '/crm/combo' },
           { title: isAr ? 'الاعتمادات المالية' : 'Financial Controls', icon: FileCheck, path: '/crm/financials' },

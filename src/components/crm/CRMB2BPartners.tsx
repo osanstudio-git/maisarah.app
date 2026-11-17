@@ -27,7 +27,9 @@ import {
   LayoutGrid,
   List,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  UserPlus,
+  Link2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -48,9 +50,11 @@ interface CRMB2BPartnersProps {
   clients: any[];
   onOpenOnboardModal: (partnerId?: string, partnerName?: string) => void;
   staffList: any[];
+  initialOpenPartnerId?: string | null;
+  onRefreshClients?: () => void;
 }
 
-export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList }: CRMB2BPartnersProps) {
+export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList, initialOpenPartnerId, onRefreshClients }: CRMB2BPartnersProps) {
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
 
@@ -77,6 +81,42 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [clientToLink, setClientToLink] = useState('');
+  const [isLinkingClient, setIsLinkingClient] = useState(false);
+
+  // Sync initialOpenPartnerId if provided
+  useEffect(() => {
+    if (initialOpenPartnerId && partners.length > 0) {
+      const match = partners.find(p => p.id === initialOpenPartnerId);
+      if (match) setSelectedPartnerForDrawer(match);
+    }
+  }, [initialOpenPartnerId, partners]);
+
+  const handleLinkExistingClient = async (partner: B2BPartner) => {
+    if (!clientToLink) return;
+    setIsLinkingClient(true);
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .update({
+          b2b_partner_id: partner.id,
+          b2b_partner_name: partner.name,
+          client_type: 'B2B'
+        })
+        .eq('id', clientToLink);
+
+      if (error) throw error;
+      setClientToLink('');
+      setSuccessMessage(isAr ? 'تم ربط العميل بالشريك بنجاح' : 'Client linked to partner successfully');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      if (onRefreshClients) onRefreshClients();
+    } catch (err: any) {
+      console.error('Link client error:', err);
+      alert('Error linking client: ' + err.message);
+    } finally {
+      setIsLinkingClient(false);
+    }
+  };
 
   // Form State for Add/Edit B2B Partner
   const [partnerForm, setPartnerForm] = useState({
@@ -829,21 +869,58 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
             )}
 
             {/* Affiliated Clients Table */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <h4 className="text-xs font-black uppercase tracking-widest text-gray-900">
-                  {isAr ? 'الشركات والعملاء المسجلين تحت هذا الشريك' : 'Clients & Companies Under This Channel'}
-                </h4>
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-widest text-gray-900">
+                    {isAr ? 'الشركات والعملاء المسجلين تحت هذا الشريك' : 'Clients & Companies Under This Channel'}
+                  </h4>
+                  <p className="text-[10px] text-gray-400 font-bold">
+                    {isAr ? 'قائمة العملاء المنسوبين لقناة الأعمال هذه' : 'Clients attributed to this partner channel'}
+                  </p>
+                </div>
                 <button
+                  type="button"
                   onClick={() => {
                     const p = selectedPartnerForDrawer;
                     setSelectedPartnerForDrawer(null);
                     onOpenOnboardModal(p.id, p.name);
                   }}
-                  className="text-xs font-black text-[#A11212] hover:underline flex items-center gap-1"
+                  className="bg-[#800000] hover:bg-[#660000] text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
                 >
-                  <PlusCircle size={14} /> {isAr ? 'تسجيل عميل جديد' : 'Onboard Client Here'}
+                  <UserPlus size={14} className="text-amber-300" />
+                  <span>{isAr ? '+ إضافة عميل جديد تحت هذا الشريك' : '+ Add Client to this B2B'}</span>
                 </button>
+              </div>
+
+              {/* Inline Link Existing Client Box */}
+              <div className="p-3 bg-gray-50 border border-gray-200/80 rounded-2xl space-y-1.5">
+                <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider flex items-center gap-1">
+                  <Link2 size={12} className="text-gray-400" />
+                  {isAr ? 'ربط عميل مسجل مسبقاً بهذا الشريك:' : 'Link an Existing Client to this Partner:'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={clientToLink}
+                    onChange={(e) => setClientToLink(e.target.value)}
+                    className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 outline-none focus:border-[#800000]"
+                  >
+                    <option value="">{isAr ? '-- اختر عميلاً لربطه بهذا الشريك --' : '-- Select a client to assign to this partner --'}</option>
+                    {clients.filter(c => c.b2b_partner_id !== selectedPartnerForDrawer.id).map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.companyName || c.name} {c.registrationNumber ? `(CR: ${c.registrationNumber})` : ''} - {c.id}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!clientToLink || isLinkingClient}
+                    onClick={() => handleLinkExistingClient(selectedPartnerForDrawer)}
+                    className="bg-[#800000] hover:bg-black text-white text-xs font-black px-4 py-2 rounded-xl transition-all disabled:opacity-40 cursor-pointer shrink-0"
+                  >
+                    {isLinkingClient ? (isAr ? 'جاري الربط...' : 'Linking...') : (isAr ? 'تأكيد الربط' : 'Link Client')}
+                  </button>
+                </div>
               </div>
 
               {(!partnerClientsMap.get(selectedPartnerForDrawer.id) || partnerClientsMap.get(selectedPartnerForDrawer.id)!.length === 0) ? (
@@ -858,7 +935,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                       setSelectedPartnerForDrawer(null);
                       onOpenOnboardModal(p.id, p.name);
                     }}
-                    className="bg-[#A11212] hover:bg-[#800e0e] text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-xs"
+                    className="bg-[#800000] hover:bg-[#660000] text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-xs"
                   >
                     {isAr ? '+ إضافة أول عميل الآن' : '+ Add First Client Now'}
                   </button>
@@ -874,6 +951,11 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList 
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-green-500"></span>
                           <h5 className="text-xs font-black text-gray-900">{client.companyName || client.name}</h5>
+                          {client.registrationNumber && (
+                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
+                              CR: {client.registrationNumber}
+                            </span>
+                          )}
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-green-50 text-green-700 rounded">
                             {client.status || 'Active'}
                           </span>

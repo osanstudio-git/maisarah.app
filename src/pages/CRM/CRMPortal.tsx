@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -6,7 +6,8 @@ import {
   ChevronRight, XCircle, ArrowUpRight, BarChart2, ShieldCheck, Download,
   Trash2, Edit, Award, Sparkles, Building2, UserPlus, FileCheck, Check, ArrowRight,
   TrendingUp, RefreshCw, AlertTriangle, Calendar, Layers, Activity, Loader2,
-  PhoneCall, MessageSquare, Send, DollarSign, X, ExternalLink, Filter, Printer, Plus, CheckCheck, Briefcase, KeyRound
+  PhoneCall, MessageSquare, Send, DollarSign, X, ExternalLink, Filter, Printer, Plus, CheckCheck, Briefcase, KeyRound,
+  Search, User
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -58,6 +59,8 @@ interface Client {
   type: 'B2B' | 'B2C';
   companyName?: string;
   registrationNumber?: string;
+  b2b_partner_id?: string;
+  b2b_partner_name?: string;
   servicesPackage: string[];
   overallManager: string; // The Account Owner
   delegatedServices: Record<string, string>; // e.g. {"Tax & VAT": "Khalfan Al-Abri", "Audit": "Ali Al-Harthy"}
@@ -185,6 +188,23 @@ export default function CRMPortal() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
+  const [b2bPartnersList, setB2bPartnersList] = useState<any[]>([]);
+
+  // ── Unified Clients & B2B Hub View States ──
+  const [clientHubView, setClientHubView] = useState<'all_clients' | 'b2b_partners' | 'b2b_clients' | 'direct_clients'>('all_clients');
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [selectedB2BFilter, setSelectedB2BFilter] = useState('all');
+  const [clientManagerFilter, setClientManagerFilter] = useState('all');
+  const [initialB2BPartnerIdForDrawer, setInitialB2BPartnerIdForDrawer] = useState<string | null>(null);
+
+  // Sync route (/crm/b2b vs /crm/clients) with the sub-view
+  useEffect(() => {
+    if (location.pathname.includes('/crm/b2b')) {
+      setClientHubView('b2b_partners');
+    } else if (location.pathname.includes('/crm/clients')) {
+      setClientHubView(prev => prev === 'b2b_partners' ? 'all_clients' : prev);
+    }
+  }, [location.pathname]);
   const [reminders, setReminders] = useState<Reminder[]>(() => {
     try {
       const saved = localStorage.getItem('maisarah_crm_reminders');
@@ -271,6 +291,8 @@ export default function CRMPortal() {
       type: row.client_type ?? row.type ?? 'B2B',
       companyName: row.company_name ?? undefined,
       registrationNumber: row.cr_number ?? row.registration_number ?? undefined,
+      b2b_partner_id: row.b2b_partner_id ?? undefined,
+      b2b_partner_name: row.b2b_partner_name ?? undefined,
       servicesPackage: combinedServices,
       overallManager: computedManager,
       delegatedServices: row.delegated_services ?? {},
@@ -317,7 +339,7 @@ export default function CRMPortal() {
   const fetchAll = useCallback(async (isInitial = false) => {
     if (isInitial) setDbLoading(true);
     try {
-      const [crmLeadsRes, leadsRes, clientsRes, quotesRes, profilesRes, servicesRes, clientJobsRes] = await Promise.all([
+      const [crmLeadsRes, leadsRes, clientsRes, quotesRes, profilesRes, servicesRes, clientJobsRes, b2bPartnersRes] = await Promise.all([
         supabase.from('crm_leads').select('*').order('created_at', { ascending: false }),
         supabase.from('leads').select('*').order('created_at', { ascending: false }),
         supabase.from('clients').select('*').order('created_at', { ascending: false }),
@@ -325,6 +347,7 @@ export default function CRMPortal() {
         supabase.from('profiles').select('id, full_name, email, role'),
         supabase.from('services').select('id, client_id, title, department_id, employee_id, status'),
         supabase.from('client_jobs').select('id, client_id, service_type, billing_type, status, amount'),
+        supabase.from('b2b_partners').select('*').order('created_at', { ascending: false }),
       ]);
 
       const allLeadsMap = new Map<string, Lead>();
@@ -386,6 +409,9 @@ export default function CRMPortal() {
         setClients(clientsRes.data.map(row => mapClient(row, clientServicesMap, clientManagerMap, clientBillingMap)));
       }
       if (quotesRes.data) setQuotations(quotesRes.data.map(mapQuotation));
+      if (b2bPartnersRes.data) {
+        setB2bPartnersList(b2bPartnersRes.data.filter((p: any) => !p.id?.startsWith('b2b-0')));
+      }
       if (profilesRes.data && profilesRes.data.length > 0) {
         const fetchedStaff = profilesRes.data.map(p => ({
           id: p.id,
@@ -1915,6 +1941,43 @@ export default function CRMPortal() {
     return matchesSearch && matchesStep && matchesStatus;
   });
 
+  const filteredClients = useMemo(() => {
+    return clients.filter(c => {
+      // 1. Hub sub-tab segmentation
+      if (clientHubView === 'b2b_clients') {
+        if (!c.b2b_partner_id && c.type !== 'B2B') return false;
+      } else if (clientHubView === 'direct_clients') {
+        if (c.b2b_partner_id || c.type === 'B2B') return false;
+      }
+
+      // 2. Specific B2B Partner filter dropdown
+      if (selectedB2BFilter !== 'all') {
+        if (c.b2b_partner_id !== selectedB2BFilter) return false;
+      }
+
+      // 3. Manager filter dropdown
+      if (clientManagerFilter !== 'all') {
+        if (c.overallManager !== clientManagerFilter) return false;
+      }
+
+      // 4. Search query
+      if (clientSearchTerm.trim()) {
+        const q = clientSearchTerm.toLowerCase();
+        const matchName = (c.name || '').toLowerCase().includes(q);
+        const matchComp = (c.companyName || '').toLowerCase().includes(q);
+        const matchCR = (c.registrationNumber || '').toLowerCase().includes(q);
+        const matchEmail = (c.email || '').toLowerCase().includes(q);
+        const matchPhone = (c.phone || '').includes(q);
+        const matchPartner = (c.b2b_partner_name || '').toLowerCase().includes(q);
+        if (!matchName && !matchComp && !matchCR && !matchEmail && !matchPhone && !matchPartner) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [clients, clientHubView, selectedB2BFilter, clientManagerFilter, clientSearchTerm]);
+
   if (dbLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -1943,216 +2006,370 @@ export default function CRMPortal() {
         />
       )}
 
-      {/* 2. B2B CORPORATE & CHANNEL PARTNERS TAB */}
-      {activeTab === 'b2b' && (
-        <CRMB2BPartners
-          clients={clients}
-          staffList={staffList}
-          onOpenOnboardModal={handleOpenOnboardWithPartner}
-        />
-      )}
-
-      {/* 3. LEAD PIPELINE TAB (Phase 3 crm_leads) */}
+      {/* 2 & 3. LEAD PIPELINE TAB (Phase 3 crm_leads) */}
       {activeTab === 'pipeline' && (
         <CRMLeadManagement />
       )}
 
-      {/* 4. CLIENTS & LEADS DIRECTORY TAB */}
-      {activeTab === 'clients' && (
+      {/* 4 & 2. UNIFIED CLIENTS & B2B HUB TAB */}
+      {(activeTab === 'clients' || activeTab === 'b2b') && (
         <div className="space-y-6">
-          {/* Header Controls & Export Verification */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-            <div>
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">Onboarded Clients & Active Accounts</h3>
-              <p className="text-xs text-gray-500 font-bold">Select client rows to review historical data, timeline actions, or trigger export</p>
+          {/* Hub Sub-navigation Header */}
+          <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-1.5 bg-gray-100 p-1.5 rounded-xl border border-gray-250">
+              <button
+                type="button"
+                onClick={() => {
+                  setClientHubView('all_clients');
+                  if (activeTab !== 'clients') navigate('/crm/clients');
+                }}
+                className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                  clientHubView === 'all_clients'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <Users size={15} className={clientHubView === 'all_clients' ? 'text-[#800000]' : ''} />
+                <span>{isAr ? 'جميع العملاء' : 'All Clients'}</span>
+                <span className="bg-gray-200 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {clients.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setClientHubView('b2b_partners');
+                  if (activeTab !== 'b2b') navigate('/crm/b2b');
+                }}
+                className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                  clientHubView === 'b2b_partners'
+                    ? 'bg-[#800000] text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <Building2 size={15} className={clientHubView === 'b2b_partners' ? 'text-amber-300' : ''} />
+                <span>{isAr ? 'شبكة شركاء B2B' : 'B2B Partners Network'}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${clientHubView === 'b2b_partners' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'}`}>
+                  {b2bPartnersList.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setClientHubView('b2b_clients');
+                  if (activeTab !== 'clients') navigate('/crm/clients');
+                }}
+                className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                  clientHubView === 'b2b_clients'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <Layers size={15} className={clientHubView === 'b2b_clients' ? 'text-amber-600' : ''} />
+                <span>{isAr ? 'عملاء شركاء B2B' : 'B2B-Referred Clients'}</span>
+                <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {clients.filter(c => c.b2b_partner_id || c.type === 'B2B').length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setClientHubView('direct_clients');
+                  if (activeTab !== 'clients') navigate('/crm/clients');
+                }}
+                className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                  clientHubView === 'direct_clients'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <User size={15} className={clientHubView === 'direct_clients' ? 'text-blue-600' : ''} />
+                <span>{isAr ? 'عملاء مباشرون' : 'Direct Clients'}</span>
+                <span className="bg-blue-100 text-blue-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {clients.filter(c => !c.b2b_partner_id && c.type !== 'B2B').length}
+                </span>
+              </button>
             </div>
-            <div className="flex items-center gap-3">
-              {/* VP Signoff Toggle */}
-              <div className="flex items-center gap-2 bg-gray-50 px-3.5 py-2 rounded-xl border border-gray-250">
-                <ShieldCheck size={16} className={isVpSignedOff ? 'text-green-700' : 'text-gray-400'} />
-                <span className="text-[10px] font-black uppercase text-gray-600">VP Export Sign-off</span>
-                <input
-                  type="checkbox"
-                  checked={isVpSignedOff}
-                  onChange={(e) => setIsVpSignedOff(e.target.checked)}
-                  className="w-4 h-4 text-[#A11212] accent-[#A11212] rounded cursor-pointer"
-                />
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setClientHubView('b2b_partners');
+                  navigate('/crm/b2b');
+                }}
+                className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Building2 size={14} className="text-amber-700" />
+                <span>{isAr ? '+ إضافة شريك B2B' : '+ Create B2B Partner'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowDirectClientModal(true)}
+                className="bg-[#800000] hover:bg-[#660000] text-white text-xs font-black uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-[#800000]/20 active:scale-95 transition-all cursor-pointer"
+              >
+                <UserPlus size={14} />
+                <span>{isAr ? '+ إضافة عميل جديد' : '+ Add Client'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* VIEW: B2B Partners Network Component */}
+          {clientHubView === 'b2b_partners' ? (
+            <CRMB2BPartners
+              clients={clients}
+              staffList={staffList}
+              onOpenOnboardModal={handleOpenOnboardWithPartner}
+              initialOpenPartnerId={initialB2BPartnerIdForDrawer}
+              onRefreshClients={() => fetchAll(false)}
+            />
+          ) : (
+            <div className="space-y-4">
+              {/* Header Controls, Search & Filters */}
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+                <div className="relative flex-1">
+                  <Search size={16} className={`absolute ${isAr ? 'right-3.5' : 'left-3.5'} top-3 text-gray-400`} />
+                  <input
+                    type="text"
+                    placeholder={isAr ? 'البحث بالاسم، الشركة، السجل التجاري CR، الهاتف، أو اسم الشريك...' : 'Search client, company, CR, phone, or B2B partner...'}
+                    value={clientSearchTerm}
+                    onChange={(e) => setClientSearchTerm(e.target.value)}
+                    className={`w-full bg-gray-50 border border-gray-200 rounded-xl ${isAr ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 text-xs font-bold outline-none focus:border-[#800000] transition-colors`}
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* B2B Partner Filter */}
+                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                    <Building2 size={14} className="text-gray-400" />
+                    <select
+                      value={selectedB2BFilter}
+                      onChange={(e) => setSelectedB2BFilter(e.target.value)}
+                      className="bg-transparent text-xs font-bold text-gray-700 outline-none cursor-pointer"
+                    >
+                      <option value="all">{isAr ? 'جميع شركاء B2B' : 'All B2B Partners'}</option>
+                      {b2bPartnersList.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Account Owner Filter */}
+                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                    <User size={14} className="text-gray-400" />
+                    <select
+                      value={clientManagerFilter}
+                      onChange={(e) => setClientManagerFilter(e.target.value)}
+                      className="bg-transparent text-xs font-bold text-gray-700 outline-none cursor-pointer"
+                    >
+                      <option value="all">{isAr ? 'جميع مسؤولي الحسابات' : 'All Managers'}</option>
+                      {staffList.map(s => (
+                        <option key={s.id} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Export Directory */}
+                  <button
+                    type="button"
+                    onClick={handleExportData}
+                    className="bg-white border border-gray-200 hover:border-gray-400 text-gray-700 text-xs font-black uppercase tracking-wider px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Download size={14} />
+                    <span>Export</span>
+                  </button>
+                </div>
               </div>
 
-              <button
-                onClick={() => setShowDirectClientModal(true)}
-                className="bg-brand-dark hover:bg-brand-dark/90 text-white text-xs font-black uppercase tracking-wider px-4 py-3 rounded-xl flex items-center gap-1.5 shadow-md shadow-brand-dark/20 active:scale-95 transition-all"
-              >
-                <UserPlus size={14} /> {isAr ? 'إضافة عميل مباشر' : '+ Direct Client Add'}
-              </button>
-
-              <button
-                onClick={() => setShowOnboardingModal(true)}
-                className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-black uppercase tracking-wider px-4 py-3 rounded-xl flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
-              >
-                <PlusCircle size={14} /> {isAr ? 'تسجيل عميل جديد' : 'Onboard Form'}
-              </button>
-
-              <button
-                onClick={handleExportData}
-                className="bg-white border border-gray-200 hover:border-brand-dark/40 text-gray-700 text-xs font-black uppercase tracking-wider px-4 py-3 rounded-xl flex items-center gap-1.5 active:scale-95 transition-all"
-              >
-                <Download size={14} /> Export Directory
-              </button>
-            </div>
-          </div>
-
-          {/* Directory Table */}
-          <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-start">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100 text-gray-500">
-                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">ID</th>
-                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">Client</th>
-                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">Segment Type</th>
-                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">Services Package</th>
-                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">Account Owner</th>
-                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-end">ARR Value</th>
-                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-center">{isAr ? 'بوابة العميل' : 'Portal Access'}</th>
-                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {clients.map(client => (
-                    <tr key={client.id} className="hover:bg-gray-50/40 transition-colors">
-                      <td className="p-4 text-xs font-black text-gray-900">{client.id}</td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-[#A11212]/5 text-[#A11212] font-black text-xs flex items-center justify-center">
-                            {client.companyName ? <Building2 size={14} /> : client.name.charAt(0)}
-                          </div>
-                          <div>
-                            <p className="text-xs font-black text-gray-900">{client.companyName || client.name}</p>
-                            <p className="text-[10px] text-gray-400 font-bold">{client.email} · {client.phone}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${client.type === 'B2B'
-                          ? 'bg-red-50 text-red-700 border-red-100'
-                          : 'bg-gray-100 text-gray-700 border-gray-200'
-                          }`}>
-                          {client.type}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        {client.servicesPackage && client.servicesPackage.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {client.servicesPackage.map(s => (
-                              <span key={s} className="bg-gray-50 border border-gray-200 text-gray-700 text-[9px] px-2 py-0.5 rounded font-bold">
-                                {s}
+              {/* Clients Table */}
+              <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-start">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-gray-500">
+                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">ID</th>
+                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">{isAr ? 'العميل والشركة' : 'Client & Company'}</th>
+                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">{isAr ? 'قناة الأعمال / الشريك' : 'B2B Partner / Channel'}</th>
+                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">{isAr ? 'باقة الخدمات' : 'Services Package'}</th>
+                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">{isAr ? 'مسؤول الحساب' : 'Account Owner'}</th>
+                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-end">{isAr ? 'قيمة العقد' : 'ARR Value'}</th>
+                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-center">{isAr ? 'بوابة العميل' : 'Portal Access'}</th>
+                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-center">{isAr ? 'الإجراءات' : 'Actions'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredClients.map((client: Client) => (
+                        <tr key={client.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="p-4 text-xs font-mono font-bold text-gray-500">{client.id}</td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-[#800000]/10 text-[#800000] font-black text-xs flex items-center justify-center shrink-0">
+                                {client.companyName ? <Building2 size={16} /> : client.name.charAt(0)}
+                              </div>
+                              <div>
+                                <p className="text-xs font-black text-gray-900">{client.companyName || client.name}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {client.registrationNumber && (
+                                    <span className="text-[10px] font-mono text-gray-500 font-bold">
+                                      CR: {client.registrationNumber}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] text-gray-400 font-medium">
+                                    {client.phone || client.email}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            {client.b2b_partner_id || client.b2b_partner_name ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInitialB2BPartnerIdForDrawer(client.b2b_partner_id || null);
+                                  setClientHubView('b2b_partners');
+                                  navigate('/crm/b2b');
+                                }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-black bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition-all cursor-pointer shadow-2xs"
+                                title={isAr ? 'عرض ملف الشريك وقائمة عملائه' : 'Click to view B2B Partner 360 profile'}
+                              >
+                                <Building2 size={12} className="text-amber-700" />
+                                <span>{client.b2b_partner_name || 'B2B Partner'}</span>
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 px-2 py-0.5 bg-gray-50 border border-gray-200 rounded-lg">
+                                <User size={10} />
+                                {isAr ? 'مباشر (بدون وسيط)' : 'Direct / Walk-in'}
                               </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-gray-400 font-bold italic">{isAr ? 'بدون باقة محددة' : 'No service assigned'}</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-xs font-black text-gray-700">
-                        {client.overallManager ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 text-xs font-black">
-                            {client.overallManager}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-gray-400 font-bold italic">{isAr ? 'غير محدد' : 'Unassigned'}</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-xs font-black text-gray-950 text-end">
-                        {client.yearlyBilling.toLocaleString()} OMR
-                        <span className="block text-[8px] text-gray-400 font-bold">Monthly: {client.monthlyBilling} OMR</span>
-                      </td>
-                      <td className="p-4 text-center">
-                        {client.portal_access_sent ? (
-                          <div className="inline-flex items-center gap-1.5 justify-center">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                              <CheckCircle2 size={12} className="text-emerald-600" />
-                              {isAr ? 'مفعل وتم الإرسال' : 'Access Sent'}
-                            </span>
-                            <button
-                              onClick={() => {
-                                setPortalTarget({
-                                  id: client.id,
-                                  type: 'client',
-                                  name: client.name,
-                                  companyName: client.companyName,
-                                  email: client.email,
-                                  phone: client.phone,
-                                  portalAccessSent: true
-                                });
-                                setIsPortalModalOpen(true);
-                              }}
-                              title={isAr ? 'إعادة الإرسال أو عرض البيانات' : 'Resend or View Credentials'}
-                              className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                            >
-                              <RefreshCw size={12} />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setPortalTarget({
-                                id: client.id,
-                                type: 'client',
-                                name: client.name,
-                                companyName: client.companyName,
-                                email: client.email,
-                                phone: client.phone,
-                                portalAccessSent: false
-                              });
-                              setIsPortalModalOpen(true);
-                            }}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-all shadow-2xs cursor-pointer active:scale-95"
-                          >
-                            <KeyRound size={12} className="text-amber-600" />
-                            <span>{isAr ? 'إرسال بيانات الدخول' : 'Send Portal Access'}</span>
-                          </button>
-                        )}
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => {
-                              setSelectedClientForCombo(client.id);
-                              setComboSetup({
-                                overallManager: client.overallManager || (staffList[0]?.name || ''),
-                                services: client.servicesPackage && client.servicesPackage.length > 0 ? client.servicesPackage : ['Tax & VAT'],
-                                delegation: client.delegatedServices || {},
-                                prices: {},
-                                cycles: {},
-                                deadlines: {},
-                                notes: {},
-                                customTitles: {},
-                                priorities: {}
-                              });
-                              handleTabChange('combo_work');
-                            }}
-                            className="bg-red-50 hover:bg-brand-dark hover:text-white border border-red-200 text-brand-dark text-[10px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1"
-                            title={isAr ? 'تعيين مهام وموظفي الأقسام' : 'Assign Department Tasks'}
-                          >
-                            <Briefcase size={12} />
-                            <span>{isAr ? 'تعيين المهام' : 'Assign Tasks'}</span>
-                          </button>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            {client.servicesPackage && client.servicesPackage.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {client.servicesPackage.map((s: string) => (
+                                  <span key={s} className="bg-gray-50 border border-gray-200 text-gray-700 text-[9px] px-2 py-0.5 rounded font-bold">
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-gray-400 font-bold italic">{isAr ? 'بدون باقة محددة' : 'No service assigned'}</span>
+                            )}
+                          </td>
+                          <td className="p-4 text-xs font-black text-gray-700">
+                            {client.overallManager ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 text-xs font-black">
+                                {client.overallManager}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-gray-400 font-bold italic">{isAr ? 'غير محدد' : 'Unassigned'}</span>
+                            )}
+                          </td>
+                          <td className="p-4 text-xs font-black text-gray-950 text-end">
+                            {client.yearlyBilling.toLocaleString()} OMR
+                            <span className="block text-[8px] text-gray-400 font-bold">Monthly: {client.monthlyBilling} OMR</span>
+                          </td>
+                          <td className="p-4 text-center">
+                            {client.portal_access_sent ? (
+                              <div className="inline-flex items-center gap-1.5 justify-center">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                  <CheckCircle2 size={12} className="text-emerald-600" />
+                                  {isAr ? 'مفعل وتم الإرسال' : 'Access Sent'}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setPortalTarget({
+                                      id: client.id,
+                                      type: 'client',
+                                      name: client.name,
+                                      companyName: client.companyName,
+                                      email: client.email,
+                                      phone: client.phone,
+                                      portalAccessSent: true
+                                    });
+                                    setIsPortalModalOpen(true);
+                                  }}
+                                  title={isAr ? 'إعادة الإرسال أو عرض البيانات' : 'Resend or View Credentials'}
+                                  className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <RefreshCw size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setPortalTarget({
+                                    id: client.id,
+                                    type: 'client',
+                                    name: client.name,
+                                    companyName: client.companyName,
+                                    email: client.email,
+                                    phone: client.phone,
+                                    portalAccessSent: false
+                                  });
+                                  setIsPortalModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-all shadow-2xs cursor-pointer active:scale-95"
+                              >
+                                <KeyRound size={12} className="text-amber-600" />
+                                <span>{isAr ? 'إرسال بيانات الدخول' : 'Send Portal Access'}</span>
+                              </button>
+                            )}
+                          </td>
+                          <td className="p-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setSelectedClientForCombo(client.id);
+                                  setComboSetup({
+                                    overallManager: client.overallManager || (staffList[0]?.name || ''),
+                                    services: client.servicesPackage && client.servicesPackage.length > 0 ? client.servicesPackage : ['Tax & VAT'],
+                                    delegation: client.delegatedServices || {},
+                                    prices: {},
+                                    cycles: {},
+                                    deadlines: {},
+                                    notes: {},
+                                    customTitles: {},
+                                    priorities: {}
+                                  });
+                                  handleTabChange('combo_work');
+                                }}
+                                className="bg-red-50 hover:bg-brand-dark hover:text-white border border-red-200 text-brand-dark text-[10px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1"
+                                title={isAr ? 'تعيين مهام وموظفي الأقسام' : 'Assign Department Tasks'}
+                              >
+                                <Briefcase size={12} />
+                                <span>{isAr ? 'تعيين المهام' : 'Assign Tasks'}</span>
+                              </button>
 
-                          <button
-                            onClick={() => setSelectedClientForHistory(client)}
-                            className="bg-gray-50 border border-gray-200 hover:border-[#A11212] hover:text-[#A11212] text-gray-600 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl transition-all"
-                          >
-                            View Logs
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                              <button
+                                onClick={() => setSelectedClientForHistory(client)}
+                                className="bg-gray-50 border border-gray-200 hover:border-[#A11212] hover:text-[#A11212] text-gray-600 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl transition-all"
+                              >
+                                View Logs
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+
+                      {filteredClients.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="p-12 text-center text-gray-400">
+                            <Users size={36} className="mx-auto mb-2 text-gray-300" />
+                            <p className="text-xs font-bold">{isAr ? 'لم يتم العثور على عملاء يطابقون شروط البحث' : 'No clients found matching the selected filters.'}</p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
