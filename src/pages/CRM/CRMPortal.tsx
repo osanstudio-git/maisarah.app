@@ -2191,7 +2191,7 @@ export default function CRMPortal() {
                   <table className="w-full border-collapse text-start">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100 text-gray-500">
-                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">ID</th>
+                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start w-14">{isAr ? 'الرقم' : '#'}</th>
                         <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">{isAr ? 'العميل والشركة' : 'Client & Company'}</th>
                         <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">{isAr ? 'قناة الأعمال / الشريك' : 'B2B Partner / Channel'}</th>
                         <th className="p-4 text-[10px] font-black uppercase tracking-widest text-start">{isAr ? 'باقة الخدمات' : 'Services Package'}</th>
@@ -2202,9 +2202,9 @@ export default function CRMPortal() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {filteredClients.map((client: Client) => (
+                      {filteredClients.map((client: Client, index: number) => (
                         <tr key={client.id} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="p-4 text-xs font-mono font-bold text-gray-500">{client.id}</td>
+                          <td className="p-4 text-xs font-mono font-bold text-gray-400 w-14">#{index + 1}</td>
                           <td className="p-4">
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-xl bg-[#800000]/10 text-[#800000] font-black text-xs flex items-center justify-center shrink-0">
