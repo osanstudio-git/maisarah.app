@@ -261,8 +261,9 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList,
 
     const cleanCR = partnerForm.cr_number ? partnerForm.cr_number.replace(/\D/g, '').slice(0, 7) : undefined;
 
+    const newPartnerId = crypto.randomUUID();
     const newPartner: B2BPartner = {
-      id: `b2b-${crypto.randomUUID().slice(0, 8)}`,
+      id: newPartnerId,
       name: partnerForm.name.trim(),
       partner_type: partnerForm.partner_type,
       contact_person: partnerForm.contact_person.trim(),
@@ -271,7 +272,7 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList,
       location: partnerForm.location.trim() || 'Muscat',
       cr_number: cleanCR || undefined,
       notes: partnerForm.notes?.trim() || undefined,
-      created_at: new Date().toISOString().slice(0, 10)
+      created_at: new Date().toISOString()
     };
 
     // 1. Optimistically update local state & localStorage immediately
@@ -302,15 +303,26 @@ export default function CRMB2BPartners({ clients, onOpenOnboardModal, staffList,
       setSuccessMessage(null);
     }, 4500);
 
-    // 4. Save to Supabase in background with timeout protection
+    // 4. Save to Supabase in background with real UUID support
     try {
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Supabase network timeout')), 3000)
-      );
-      await Promise.race([
-        supabase.from('b2b_partners').insert([newPartner]),
-        timeoutPromise
-      ]);
+      const { data, error } = await supabase.from('b2b_partners').insert([{
+        id: newPartnerId,
+        name: newPartner.name,
+        partner_type: newPartner.partner_type,
+        contact_person: newPartner.contact_person,
+        phone: newPartner.phone,
+        email: newPartner.email || null,
+        location: newPartner.location,
+        cr_number: newPartner.cr_number || null,
+        notes: newPartner.notes || null,
+      }]).select().maybeSingle();
+
+      if (error) {
+        console.warn('Background notice saving B2B partner to Supabase:', error);
+      } else if (data) {
+        setPartners(prev => [data, ...prev.filter(p => p.id !== newPartnerId && p.id !== data.id)]);
+      }
+      if (onRefreshClients) onRefreshClients();
     } catch (err) {
       console.warn('Background notice saving B2B partner to Supabase:', err);
     }

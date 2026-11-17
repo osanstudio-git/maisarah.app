@@ -810,6 +810,7 @@ export default function CRMPortal() {
     email: '',
     phone: '',
     clientType: 'B2B' as 'B2B' | 'B2C',
+    b2bPartnerId: '',
     services: ['Business Advisory'] as string[],
     billingAmount: '10',
     manager: DEFAULT_STAFF[0].name,
@@ -1181,6 +1182,9 @@ export default function CRMPortal() {
         throw new Error(isAr ? 'يرجى إدخال اسم العميل أو اسم المنشأة' : 'Please enter contact person or company name');
       }
 
+      const selectedPartner = b2bPartnersList.find(p => p.id === directClientForm.b2bPartnerId);
+      const isB2B = Boolean(selectedPartner || (directClientForm.clientType === 'B2B' && directClientForm.companyName));
+
       // 1. Insert into clients table
       const { data: newClient, error: clientErr } = await supabase.from('clients').insert([{
         company_name: company,
@@ -1190,7 +1194,10 @@ export default function CRMPortal() {
         phone: cleanPhone,
         monthly_billing: billing,
         contract_expiry_date: expiryDate,
-        source: 'direct',
+        source: selectedPartner ? 'b2b' : 'direct',
+        client_type: isB2B ? 'B2B' : 'B2C',
+        b2b_partner_id: selectedPartner ? selectedPartner.id : null,
+        b2b_partner_name: selectedPartner ? selectedPartner.name : null,
       }]).select().maybeSingle();
 
       if (clientErr) throw clientErr;
@@ -1259,6 +1266,7 @@ export default function CRMPortal() {
         email: '',
         phone: '',
         clientType: 'B2B',
+        b2bPartnerId: '',
         services: ['Business Advisory'],
         billingAmount: '10',
         manager: DEFAULT_STAFF[0].name,
@@ -5312,6 +5320,34 @@ export default function CRMPortal() {
                     placeholder="+968 9000 0000"
                     className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">CR</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={7}
+                    value={directClientForm.registrationNumber}
+                    onChange={e => setDirectClientForm(p => ({ ...p, registrationNumber: e.target.value.replace(/\D/g, '').slice(0, 7) }))}
+                    placeholder="e.g. 1361665"
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isAr ? 'قناة شريك B2B (اختياري)' : 'B2B Partner Channel (Optional)'}</label>
+                  <select
+                    value={directClientForm.b2bPartnerId}
+                    onChange={e => setDirectClientForm(p => ({ ...p, b2bPartnerId: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 outline-none font-bold cursor-pointer"
+                  >
+                    <option value="">{isAr ? 'عميل مباشر (بدون وسيط)' : 'Direct Client (No Partner)'}</option>
+                    {b2bPartnersList.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.partner_type || 'B2B'})</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
