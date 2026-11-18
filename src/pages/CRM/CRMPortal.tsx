@@ -1186,7 +1186,7 @@ export default function CRMPortal() {
       const isB2B = Boolean(selectedPartner || (directClientForm.clientType === 'B2B' && directClientForm.companyName));
 
       // 1. Insert into clients table
-      const { data: newClient, error: clientErr } = await supabase.from('clients').insert([{
+      let { data: newClient, error: clientErr } = await supabase.from('clients').insert([{
         company_name: company,
         contact_person: contactName,
         cr_number: cleanCr,
@@ -1199,6 +1199,23 @@ export default function CRMPortal() {
         b2b_partner_id: selectedPartner ? selectedPartner.id : null,
         b2b_partner_name: selectedPartner ? selectedPartner.name : null,
       }]).select().maybeSingle();
+
+      if (clientErr && clientErr.message?.includes('client_type')) {
+        const retry = await supabase.from('clients').insert([{
+          company_name: company,
+          contact_person: contactName,
+          cr_number: cleanCr,
+          email: cleanEmail,
+          phone: cleanPhone,
+          monthly_billing: billing,
+          contract_expiry_date: expiryDate,
+          source: selectedPartner ? 'b2b' : 'direct',
+          b2b_partner_id: selectedPartner ? selectedPartner.id : null,
+          b2b_partner_name: selectedPartner ? selectedPartner.name : null,
+        }]).select().maybeSingle();
+        newClient = retry.data;
+        clientErr = retry.error;
+      }
 
       if (clientErr) throw clientErr;
 
