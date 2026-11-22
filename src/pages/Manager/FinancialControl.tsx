@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useTranslation } from 'react-i18next';
 import {
@@ -530,6 +531,57 @@ const FinancialControl = () => {
 
   return (
     <div className="space-y-6 pb-12" dir={isAr ? 'rtl' : 'ltr'}>
+      {/* ── MANAGER ACCOUNTING & REPORTS QUICK-LAUNCH COMMAND ─────────── */}
+      <div className="bg-gradient-to-r from-slate-900 via-zinc-900 to-[#5a0c0c] text-white rounded-[2rem] p-4 sm:p-5 border border-red-900/30 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-rose-300 shrink-0">
+            <Building2 size={20} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full border border-rose-500/30">
+                {isAr ? 'منظومة الرقابة المالية والمحاسبية' : 'Executive Accounting & Reports Suite'}
+              </span>
+            </div>
+            <h3 className="text-sm sm:text-base font-black text-white mt-0.5">
+              {isAr ? 'تقارير المحاسبة وسجلات DSR ومسير الرواتب المعتمدة' : 'Certified DSR Registers, Payroll WPS, Tally P&L & Cash Flow'}
+            </h3>
+          </div>
+        </div>
+
+        {/* Quick Launch Pills */}
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <Link
+            to="/accountant/cashflow"
+            className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-black border border-white/20 flex items-center gap-1.5 transition-all"
+          >
+            <span>{isAr ? 'التدفق النقدي' : 'Cash Flow Hub'}</span>
+            <ArrowUpRight size={14} />
+          </Link>
+          <Link
+            to="/accountant/dsr"
+            className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-black border border-white/20 flex items-center gap-1.5 transition-all"
+          >
+            <span>{isAr ? 'سجل ومبيعات DSR' : 'DSR Register'}</span>
+            <ArrowUpRight size={14} />
+          </Link>
+          <Link
+            to="/accountant/tally-pl"
+            className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-black border border-white/20 flex items-center gap-1.5 transition-all"
+          >
+            <span>{isAr ? 'قوائم تالي P&L' : 'Tally P&L'}</span>
+            <ArrowUpRight size={14} />
+          </Link>
+          <Link
+            to="/accountant/payroll"
+            className="px-3.5 py-2 rounded-xl bg-[#A11212] hover:bg-[#850e0e] text-white text-xs font-black shadow-sm flex items-center gap-1.5 transition-transform active:scale-95"
+          >
+            <span>{isAr ? 'مسير الرواتب WPS' : 'Payroll Sheet'}</span>
+            <ArrowUpRight size={14} />
+          </Link>
+        </div>
+      </div>
+
       {/* ── Section 1: Executive KPI Cards (Strictly Real Data) ─────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Collected Revenue */}
