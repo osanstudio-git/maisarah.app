@@ -71,6 +71,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
         return [
           { title: isAr ? 'لوحة تحكم المحاسب' : 'Accountant Dashboard', icon: Home, path: '/accountant' },
           { title: isAr ? 'سجل الخدمات اليومي (DSR)' : 'DSR Daily Register', icon: FileSpreadsheet, path: '/accountant/dsr' },
+          { title: isAr ? 'مسير الرواتب المعتمد (WPS)' : 'Payroll Sheet (WPS)', icon: CreditCard, path: '/accountant/payroll' },
           { title: isAr ? 'المطابقة البنكية الذكية' : 'Bank Reconciliation', icon: Landmark, path: '/accountant/reconciliation' },
           { title: isAr ? 'إدارة الفواتير والتحصيل' : 'Invoice Management', icon: FileText, path: '/accountant/invoices' },
           { title: isAr ? 'مدفوعات ودفعات العملاء' : 'Client Payments', icon: CreditCard, path: '/accountant/clients' },

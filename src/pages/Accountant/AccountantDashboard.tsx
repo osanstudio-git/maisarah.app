@@ -97,11 +97,13 @@ export default function AccountantDashboard() {
   const fetchAllData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
-      const [invRes, srvRes, dsrCloud, notifRes] = await Promise.all([
+      const [invRes, srvRes, dsrCloud, notifRes, hrEmpRes, payRunRes] = await Promise.all([
         supabase.from('invoices').select('*').order('created_at', { ascending: false }),
         supabase.from('services').select('*').order('created_at', { ascending: false }).limit(40),
         fetchCloudDSREntries().catch(() => getDSREntries()),
-        supabase.from('notifications').select('*').eq('role', 'accountant').order('created_at', { ascending: false })
+        supabase.from('notifications').select('*').eq('role', 'accountant').order('created_at', { ascending: false }),
+        supabase.from('hr_employees').select('*'),
+        supabase.from('hr_payroll_runs').select('*').eq('month', 'November 2026')
       ]);
 
       setInvoices((invRes.data as InvoiceRecord[]) || []);
@@ -109,10 +111,33 @@ export default function AccountantDashboard() {
       setDsrList(dsrCloud || getDSREntries());
       setNotifications(notifRes.data || []);
 
-      const savedPayroll = localStorage.getItem('accountant_pending_payroll');
-      if (savedPayroll) {
-        setPendingPayroll(JSON.parse(savedPayroll));
-      }
+      const hrEmps = (hrEmpRes.data || []).filter((e: any) => e.status !== 'inactive');
+      const payRuns = (payRunRes.data || []) as any[];
+      const currentMonthStr = 'November 2026';
+      const paidCacheKey = `accountant_paid_payroll_${currentMonthStr.replace(/\s+/g, '_')}`;
+      const localPaidIds = JSON.parse(localStorage.getItem(paidCacheKey) || '[]');
+
+      const livePayrollQueue = hrEmps.map((emp: any) => {
+        const liveRun = payRuns.find(r => r.employee_id === emp.id);
+        const allowances = emp.allowances || {};
+        const isPaid = liveRun?.status === 'Paid' || localPaidIds.includes(emp.id);
+        return {
+          id: liveRun?.id || `PAY-${emp.id.slice(0, 8)}`,
+          employeeId: emp.id,
+          employeeName: emp.full_name || 'Staff Member',
+          dept: emp.dept || 'Consultancy',
+          basicSalary: Number(emp.basic_salary || (liveRun ? liveRun.basic_salary : 1200)),
+          allowances: {
+            transport: Number(allowances.transport || (liveRun ? liveRun.transport_allowance : 150)),
+            housing: Number(allowances.housing || (liveRun ? liveRun.housing_allowance : 250)),
+            other: Number(allowances.other || (liveRun ? liveRun.other_allowance : 50))
+          },
+          deductions: liveRun ? Number(liveRun.deductions || 0) : (emp.nationality?.toLowerCase() === 'omani' ? 119 : 50),
+          status: isPaid ? 'Paid' : 'Pending'
+        };
+      });
+
+      setPendingPayroll(livePayrollQueue);
     } catch (err) {
       console.error('Error fetching accountant dashboard data:', err);
     } finally {
@@ -985,8 +1010,8 @@ export default function AccountantDashboard() {
 
       {/* ── 4. APPROVED STAFF PAYROLL DISBURSEMENT QUEUE (Collapsible Tab) ─────── */}
       <div className="bg-white rounded-3xl border border-gray-150 p-6 shadow-[0_2px_14px_rgba(0,0,0,0.03)]">
-        <div className="flex justify-between items-center cursor-pointer" onClick={() => setShowPayrollQueue(!showPayrollQueue)}>
-          <div>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="cursor-pointer" onClick={() => setShowPayrollQueue(!showPayrollQueue)}>
             <h3 className="font-black text-gray-900 text-sm flex items-center gap-2">
               <CreditCard className="text-[#A11212]" size={18} />
               {isAr ? 'طابور صرف رواتب الموظفين المعتمدة' : 'Approved Staff Payroll Queue ("To be Paid")'}
@@ -998,7 +1023,21 @@ export default function AccountantDashboard() {
               {isAr ? 'صرف مستحقات الموظفين المعتمدة نهائياً من الإدارة العامة' : 'Execute final bank salary disbursals approved by executive management.'}
             </p>
           </div>
-          <ChevronDown size={18} className={`text-gray-400 transition-transform ${showPayrollQueue ? 'rotate-180' : ''}`} />
+          <div className="flex items-center gap-2">
+            <Link
+              to="/accountant/payroll"
+              className="px-3.5 py-1.5 rounded-xl bg-red-900 hover:bg-red-800 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-2xs"
+            >
+              <span>{isAr ? 'فتح مسير الرواتب الكامل (WPS)' : 'Open Full Payroll Sheet (WPS)'}</span>
+              <ArrowUpRight size={13} />
+            </Link>
+            <button
+              onClick={() => setShowPayrollQueue(!showPayrollQueue)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition cursor-pointer"
+            >
+              <ChevronDown size={18} className={`transition-transform ${showPayrollQueue ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
         </div>
 
         {showPayrollQueue && (

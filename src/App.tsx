@@ -44,6 +44,7 @@ import EmployeeDSR from './pages/Employee/EmployeeDSR';
 
 // Accountant Views
 import AccountantDashboard from './pages/Accountant/AccountantDashboard';
+import AccountantPayroll from './pages/Accountant/AccountantPayroll';
 import InvoiceManagement from './pages/Accountant/InvoiceManagement';
 import ExpenseTracking from './pages/Accountant/ExpenseTracking';
 import ClientPayments from './pages/Accountant/ClientPayments';
@@ -132,6 +133,7 @@ function App() {
             <Route element={<ProtectedRoute allowedRoles={['accountant', 'manager']} />}>
               <Route path="/accountant" element={<AccountantDashboard />} />
               <Route path="/accountant/dsr" element={<DSRRegister />} />
+              <Route path="/accountant/payroll" element={<AccountantPayroll />} />
               <Route path="/accountant/reconciliation" element={<BankReconciliation />} />
               <Route path="/accountant/invoices" element={<InvoiceManagement />} />
               <Route path="/accountant/expenses" element={<ExpenseTracking />} />
