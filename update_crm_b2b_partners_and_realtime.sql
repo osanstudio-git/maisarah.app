@@ -103,3 +103,4 @@ CREATE INDEX IF NOT EXISTS idx_b2b_partners_created_at ON public.b2b_partners(cr
 -- ==============================================================================
 -- End of update script. Run this in the Supabase Dashboard -> SQL Editor.
 -- ==============================================================================
+
