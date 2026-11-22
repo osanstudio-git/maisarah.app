@@ -470,13 +470,22 @@ export default function AccountantDashboard() {
           </div>
         </div>
 
-        <Link
-          to="/accountant/tally-pl"
-          className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-[#A11212] hover:bg-[#850e0e] text-white text-xs font-black shadow-md flex items-center justify-center gap-2 transition-transform active:scale-95 shrink-0"
-        >
-          <span>{isAr ? 'محطة تالي P&L' : 'Open Tally P&L Station'}</span>
-          <ArrowUpRight size={16} />
-        </Link>
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full sm:w-auto shrink-0">
+          <Link
+            to="/accountant/cashflow"
+            className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-black border border-white/20 flex items-center justify-center gap-1.5 transition-all shrink-0"
+          >
+            <span>{isAr ? 'تحليل التدفق النقدي' : 'Cash Flow Hub'}</span>
+            <ArrowUpRight size={15} />
+          </Link>
+          <Link
+            to="/accountant/tally-pl"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-[#A11212] hover:bg-[#850e0e] text-white text-xs font-black shadow-md flex items-center justify-center gap-2 transition-transform active:scale-95 shrink-0"
+          >
+            <span>{isAr ? 'محطة تالي P&L' : 'Open Tally P&L'}</span>
+            <ArrowUpRight size={16} />
+          </Link>
+        </div>
       </div>
 
       {/* Notifications Drawer */}

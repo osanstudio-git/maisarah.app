@@ -73,6 +73,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean, toggleSidebar: ()
           { title: isAr ? 'سجل الخدمات اليومي (DSR)' : 'DSR Daily Register', icon: FileSpreadsheet, path: '/accountant/dsr' },
           { title: isAr ? 'مسير الرواتب المعتمد (WPS)' : 'Payroll Sheet (WPS)', icon: CreditCard, path: '/accountant/payroll' },
           { title: isAr ? 'قوائم تالي (Tally P&L)' : 'Tally Monthly P&L', icon: TrendingUp, path: '/accountant/tally-pl' },
+          { title: isAr ? 'تحليل التدفق النقدي (Cash Flow)' : 'Cash Flow Analysis', icon: FileBarChart, path: '/accountant/cashflow' },
           { title: isAr ? 'المطابقة البنكية الذكية' : 'Bank Reconciliation', icon: Landmark, path: '/accountant/reconciliation' },
           { title: isAr ? 'إدارة الفواتير والتحصيل' : 'Invoice Management', icon: FileText, path: '/accountant/invoices' },
           { title: isAr ? 'مدفوعات ودفعات العملاء' : 'Client Payments', icon: CreditCard, path: '/accountant/clients' },
