@@ -444,6 +444,41 @@ export default function AccountantDashboard() {
         </div>
       </div>
 
+      {/* ── TALLY P&L 10TH OF MONTH SLA REMINDER RIBBON ── */}
+      <div className="bg-gradient-to-r from-slate-900 via-rose-950 to-red-950 text-white rounded-3xl p-4 sm:p-5 border border-rose-900/50 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shrink-0 text-rose-300">
+            <TrendingUp size={22} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full border border-rose-500/30">
+                {isAr ? 'التزام شهري إلزامي' : 'Mandatory Monthly SLA'}
+              </span>
+              <span className="text-[11px] text-gray-300 font-semibold">
+                {isAr ? 'الموعد الأقصى: 10 من كل شهر' : 'Deadline: 10th of every month'}
+              </span>
+            </div>
+            <h3 className="text-sm sm:text-base font-black mt-0.5 text-white">
+              {isAr ? 'رفع القوائم المالية الشهرية (Tally P&L) وإرسالها للإدارة' : 'Upload Monthly Tally P&L & Dispatch to Management'}
+            </h3>
+            <p className="text-xs text-gray-300 hidden sm:block">
+              {isAr 
+                ? 'استيراد ميزان الأرباح والخسائر من تالي، فحص هوامش الربحية وإرسالها للمدير التنفيذي (بدور الحسني) بضغطة واحدة.' 
+                : 'Import Tally P&L statements, review operating margins, and submit directly to Managing Partner (Budoor Alhasani).'}
+            </p>
+          </div>
+        </div>
+
+        <Link
+          to="/accountant/tally-pl"
+          className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-[#A11212] hover:bg-[#850e0e] text-white text-xs font-black shadow-md flex items-center justify-center gap-2 transition-transform active:scale-95 shrink-0"
+        >
+          <span>{isAr ? 'محطة تالي P&L' : 'Open Tally P&L Station'}</span>
+          <ArrowUpRight size={16} />
+        </Link>
+      </div>
+
       {/* Notifications Drawer */}
       {showNotifPanel && (
         <div className="bg-amber-50/70 border border-amber-200 rounded-3xl p-5 space-y-3 animate-in fade-in duration-200 shadow-sm">
