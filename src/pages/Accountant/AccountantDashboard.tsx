@@ -384,6 +384,16 @@ export default function AccountantDashboard() {
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
 
+          {/* Download DSR Excel & Matrices Shortcut */}
+          <Link
+            to="/accountant/dsr"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-[#A11212] hover:bg-[#800d0d] text-white text-xs font-bold transition shadow-2xs whitespace-nowrap"
+            title={isAr ? 'تصدير وتحميل مصفوفة DSR وإكسل' : 'Download DSR Excel & Matrices'}
+          >
+            <Download size={15} />
+            <span>{isAr ? 'تحميل إكسل DSR' : 'DSR Excel'}</span>
+          </Link>
+
           {/* Quick Notification Bell */}
           <button
             onClick={() => setShowNotifPanel(!showNotifPanel)}

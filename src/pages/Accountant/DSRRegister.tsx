@@ -7,7 +7,8 @@ import {
   FileSpreadsheet, Plus, Search, Filter, Download, CheckCircle2,
   AlertCircle, Clock, Edit2, Trash2, Check, X, ShieldCheck, Printer,
   Building2, DollarSign, Wallet, ArrowUpRight, TrendingUp, RefreshCw,
-  FileText, Receipt, CheckSquare, Eye, Sparkles, Calendar, Landmark, Loader2
+  FileText, Receipt, CheckSquare, Eye, Sparkles, Calendar, Landmark, Loader2,
+  Users, Layers, BarChart3
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -33,6 +34,10 @@ export default function DSRRegister() {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [dateFieldTarget, setDateFieldTarget] = useState<'date' | 'payment_date'>('date');
+
+  // View mode switcher: standard table vs employee matrix heatmap vs service matrix
+  const [activeDSRView, setActiveDSRView] = useState<'table' | 'employee_matrix' | 'service_matrix'>('table');
+  const [matrixYear, setMatrixYear] = useState<number>(2026);
 
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -505,30 +510,264 @@ export default function DSRRegister() {
     loadData();
   };
 
-  // Export to Excel / CSV
+  // ── BASELINE 2026 MATRICES (Directly from User Attached Reference Models) ──
+  const BASELINE_EMP_2026: Record<string, Record<string, number>> = {
+    'JAN': { 'Azhar': 1226.000, 'Riyas': 138.650, 'Shahad': 454.100, 'Shafnas': 395.000, 'Yusuf': 305.440, 'Afra': 0, 'Insiya': 0 },
+    'FEB': { 'Azhar': 345.000,  'Riyas': 597.000, 'Shahad': 727.000, 'Shafnas': 243.010, 'Yusuf': 305.000, 'Afra': 0, 'Insiya': 0 },
+    'MAR': { 'Azhar': 505.000,  'Riyas': 755.000, 'Shahad': 720.000, 'Shafnas': 335.000, 'Yusuf': 490.000, 'Afra': 0, 'Insiya': 0 },
+    'APR': { 'Azhar': 782.500,  'Riyas': 685.000, 'Shahad': 650.000, 'Shafnas': 767.000, 'Yusuf': 637.500, 'Afra': 0, 'Insiya': 365.000 },
+    'MAY': { 'Azhar': 450.000,  'Riyas': 0,       'Shahad': 590.000, 'Shafnas': 361.000, 'Yusuf': 908.000, 'Afra': 125.000, 'Insiya': 458.000 },
+    'JUN': { 'Azhar': 615.000,  'Riyas': 0,       'Shahad': 535.000, 'Shafnas': 395.000, 'Yusuf': 560.000, 'Afra': 230.000, 'Insiya': 300.000 },
+    'JUL': { 'Azhar': 667.000,  'Riyas': 0,       'Shahad': 889.000, 'Shafnas': 784.619, 'Yusuf': 405.000, 'Afra': 655.000, 'Insiya': 620.000 },
+    'AUG': { 'Azhar': 389.000,  'Riyas': 0,       'Shahad': 423.500, 'Shafnas': 505.000, 'Yusuf': 130.000, 'Afra': 220.000, 'Insiya': 300.000 },
+    'SEP': { 'Azhar': 655.000,  'Riyas': 0,       'Shahad': 1227.000, 'Shafnas': 475.000, 'Yusuf': 0,       'Afra': 285.000, 'Insiya': 356.000 },
+    'OCT': { 'Azhar': 100.000,  'Riyas': 0,       'Shahad': 1192.200, 'Shafnas': 1019.130, 'Yusuf': 0,      'Afra': 805.000, 'Insiya': 799.000 },
+    'NOV': { 'Azhar': 0,        'Riyas': 0,       'Shahad': 0,        'Shafnas': 0,        'Yusuf': 0,      'Afra': 0,       'Insiya': 0 },
+    'DEC': { 'Azhar': 0,        'Riyas': 0,       'Shahad': 0,        'Shafnas': 0,        'Yusuf': 0,      'Afra': 0,       'Insiya': 0 },
+  };
+
+  const BASELINE_SVC_2026: Record<string, Record<string, number>> = {
+    'JAN': { tax_gen: 495.440, tax_vat: 183.650, audit_stat: 290.000, audit_ksa: 990.000, liq_bl: 120.000, liq_cc: 0, feas_min: 865.000, feas_bank: 0, book_std: 530.000, book_adv: 0 },
+    'FEB': { tax_gen: 218.030, tax_vat: 150.000, audit_stat: 60.000,  audit_ksa: 585.000, liq_bl: 620.000, liq_cc: 0, feas_min: 545.000, feas_bank: 0, book_std: 620.000, book_adv: 0 },
+    'MAR': { tax_gen: 805.000, tax_vat: 450.000, audit_stat: 510.000, audit_ksa: 270.000, liq_bl: 0,       liq_cc: 0, feas_min: 1245.000, feas_bank: 0, book_std: 505.000, book_adv: 0 },
+    'APR': { tax_gen: 775.000, tax_vat: 715.000, audit_stat: 1530.000, audit_ksa: 525.000, liq_bl: 220.000, liq_cc: 0, feas_min: 750.000, feas_bank: 0, book_std: 625.000, book_adv: 0 },
+    'MAY': { tax_gen: 435.000, tax_vat: 405.000, audit_stat: 1035.000, audit_ksa: 330.000, liq_bl: 660.000, liq_cc: 0, feas_min: 840.000, feas_bank: 0, book_std: 325.000, book_adv: 0 },
+    'JUN': { tax_gen: 304.000, tax_vat: 190.000, audit_stat: 770.000, audit_ksa: 585.000, liq_bl: 375.000, liq_cc: 0, feas_min: 1365.000, feas_bank: 0, book_std: 430.000, book_adv: 0 },
+    'JUL': { tax_gen: 590.000, tax_vat: 919.613, audit_stat: 830.000, audit_ksa: 850.000, liq_bl: 275.000, liq_cc: 0, feas_min: 890.000, feas_bank: 0, book_std: 355.000, book_adv: 180.000 },
+    'AUG': { tax_gen: 350.000, tax_vat: 265.000, audit_stat: 300.000, audit_ksa: 800.000, liq_bl: 120.000, liq_cc: 0, feas_min: 490.000, feas_bank: 0, book_std: 355.000, book_adv: 0 },
+    'SEP': { tax_gen: 450.000, tax_vat: 90.000,  audit_stat: 300.000, audit_ksa: 1027.000, liq_bl: 280.000, liq_cc: 0, feas_min: 1330.000, feas_bank: 0, book_std: 620.000, book_adv: 0 },
+    'OCT': { tax_gen: 510.130, tax_vat: 1050.600, audit_stat: 380.000, audit_ksa: 1505.000, liq_bl: 410.000, liq_cc: 0, feas_min: 755.000, feas_bank: 0, book_std: 555.000, book_adv: 0 },
+    'NOV': { tax_gen: 0,       tax_vat: 0,        audit_stat: 0,       audit_ksa: 0,        liq_bl: 0,       liq_cc: 0, feas_min: 0,       feas_bank: 0, book_std: 0,       book_adv: 0 },
+    'DEC': { tax_gen: 0,       tax_vat: 0,        audit_stat: 0,       audit_ksa: 0,        liq_bl: 0,       liq_cc: 0, feas_min: 0,       feas_bank: 0, book_std: 0,       book_adv: 0 },
+  };
+
+  const MONTHS_KEYS = useMemo(() => ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'], []);
+  const matrixEmployees = useMemo(() => ['azhar', 'riyas', 'shahad', 'shafnas', 'yusuf', 'afra', 'insiya'], []);
+
+  // Compute Model 1: Sales by Employee Matrix
+  const employeeMatrixData = useMemo(() => {
+    const rows = MONTHS_KEYS.map((monthKey, monthIdx) => {
+      const monthPrefix = `${matrixYear}-${String(monthIdx + 1).padStart(2, '0')}`;
+      const empAmounts: Record<string, number> = {};
+
+      // Seed baseline for 2026
+      matrixEmployees.forEach(empKey => {
+        const titleCase = empKey.charAt(0).toUpperCase() + empKey.slice(1);
+        empAmounts[empKey] = (matrixYear === 2026 && BASELINE_EMP_2026[monthKey]) ? (BASELINE_EMP_2026[monthKey][titleCase] || 0) : 0;
+      });
+
+      // Add dynamic DSR entries matching this month and year
+      entries.forEach(e => {
+        if (!e.date || !e.date.startsWith(monthPrefix)) return;
+        const eName = (e.employee_name || '').toLowerCase();
+        const matched = matrixEmployees.find(k => eName.includes(k));
+        if (matched) {
+          empAmounts[matched] = (empAmounts[matched] || 0) + (Number(e.amount) || 0);
+        }
+      });
+
+      const monthTotal = Object.values(empAmounts).reduce((sum, v) => sum + v, 0);
+
+      return {
+        monthKey,
+        monthIdx,
+        empAmounts,
+        monthTotal
+      };
+    });
+
+    const columnTotals: Record<string, number> = {};
+    let grandTotal = 0;
+    matrixEmployees.forEach(empKey => {
+      const colSum = rows.reduce((sum, r) => sum + (r.empAmounts[empKey] || 0), 0);
+      columnTotals[empKey] = colSum;
+      grandTotal += colSum;
+    });
+
+    return { rows, columnTotals, grandTotal };
+  }, [entries, matrixYear, matrixEmployees, MONTHS_KEYS]);
+
+  // Compute Model 2: Sales by Service Matrix
+  const serviceMatrixData = useMemo(() => {
+    const rows = MONTHS_KEYS.map((monthKey, monthIdx) => {
+      const monthPrefix = `${matrixYear}-${String(monthIdx + 1).padStart(2, '0')}`;
+      const subAmounts: Record<string, number> = {
+        tax_gen: 0, tax_vat: 0,
+        audit_stat: 0, audit_ksa: 0,
+        liq_bl: 0, liq_cc: 0,
+        feas_min: 0, feas_bank: 0,
+        book_std: 0, book_adv: 0
+      };
+
+      // Seed baseline for 2026
+      if (matrixYear === 2026 && BASELINE_SVC_2026[monthKey]) {
+        Object.assign(subAmounts, BASELINE_SVC_2026[monthKey]);
+      }
+
+      // Add dynamic entries
+      entries.forEach(e => {
+        if (!e.date || !e.date.startsWith(monthPrefix)) return;
+        const s = (e.service || '').toLowerCase();
+        const amt = Number(e.amount) || 0;
+
+        if (s.includes('vat')) subAmounts.tax_vat += amt;
+        else if (s.includes('tax')) subAmounts.tax_gen += amt;
+        else if (s.includes('ksa') || s.includes('saudi')) subAmounts.audit_ksa += amt;
+        else if (s.includes('audit')) subAmounts.audit_stat += amt;
+        else if (s.includes('court') || s.includes('cc')) subAmounts.liq_cc += amt;
+        else if (s.includes('liquidation') || s.includes('bl')) subAmounts.liq_bl += amt;
+        else if (s.includes('bank')) subAmounts.feas_bank += amt;
+        else if (s.includes('feasibility') || s.includes('ministry')) subAmounts.feas_min += amt;
+        else if (s.includes('cfo') || s.includes('future') || s.includes('placement')) subAmounts.book_adv += amt;
+        else subAmounts.book_std += amt;
+      });
+
+      const catTotals = {
+        tax: subAmounts.tax_gen + subAmounts.tax_vat,
+        audit: subAmounts.audit_stat + subAmounts.audit_ksa,
+        liquidation: subAmounts.liq_bl + subAmounts.liq_cc,
+        feasibility: subAmounts.feas_min + subAmounts.feas_bank,
+        bookkeeping: subAmounts.book_std + subAmounts.book_adv
+      };
+
+      const monthGrand = catTotals.tax + catTotals.audit + catTotals.liquidation + catTotals.feasibility + catTotals.bookkeeping;
+
+      return {
+        monthKey,
+        monthIdx,
+        subAmounts,
+        catTotals,
+        monthGrand
+      };
+    });
+
+    const subTotals: Record<string, number> = {
+      tax_gen: 0, tax_vat: 0,
+      audit_stat: 0, audit_ksa: 0,
+      liq_bl: 0, liq_cc: 0,
+      feas_min: 0, feas_bank: 0,
+      book_std: 0, book_adv: 0
+    };
+    const catGrandTotals = {
+      tax: 0, audit: 0, liquidation: 0, feasibility: 0, bookkeeping: 0
+    };
+    let yearGrandTotal = 0;
+
+    rows.forEach(r => {
+      Object.keys(subTotals).forEach(k => {
+        subTotals[k] += r.subAmounts[k] || 0;
+      });
+      catGrandTotals.tax += r.catTotals.tax;
+      catGrandTotals.audit += r.catTotals.audit;
+      catGrandTotals.liquidation += r.catTotals.liquidation;
+      catGrandTotals.feasibility += r.catTotals.feasibility;
+      catGrandTotals.bookkeeping += r.catTotals.bookkeeping;
+      yearGrandTotal += r.monthGrand;
+    });
+
+    return { rows, subTotals, catGrandTotals, yearGrandTotal };
+  }, [entries, matrixYear, MONTHS_KEYS]);
+
+  // Heatmap helper for cell colors
+  const getHeatmapColor = (val: number) => {
+    if (!val || val === 0) return 'text-slate-300 bg-white';
+    if (val >= 1000) return 'bg-emerald-600 text-white font-black shadow-2xs';
+    if (val >= 700) return 'bg-emerald-200 text-emerald-950 font-extrabold';
+    if (val >= 450) return 'bg-emerald-100 text-emerald-900 font-bold';
+    if (val >= 300) return 'bg-emerald-50 text-emerald-800 font-semibold';
+    return 'bg-rose-200 text-rose-950 font-bold'; // under 300 = warning (soft red in user image)
+  };
+
+  // Export to Multi-Tab Excel Workbook
   const exportToExcel = () => {
+    const workbook = XLSX.utils.book_new();
+
+    // 1. Raw DSR Register Sheet
     const dataToExport = filteredEntries.map(e => ({
       'Date': e.date,
       'Employee': e.employee_name,
       'Service': e.service,
       'Company (customer)': e.company_name,
       'CR': e.cr_number,
-      'Amount (OMR)': e.amount.toFixed(3),
-      'Gov (OMR)': e.gov_fee.toFixed(3),
-      'Profit (OMR)': e.profit.toFixed(3),
+      'Amount (OMR)': Number(e.amount || 0).toFixed(3),
+      'Gov (OMR)': Number(e.gov_fee || 0).toFixed(3),
+      'Profit (OMR)': Number(e.profit || 0).toFixed(3),
       'Status': e.status,
-      'Payment Date': e.payment_date,
-      'Payment Method': e.payment_method,
-      'Accountant Note': e.accountant_note,
+      'Payment Date': e.payment_date || '',
+      'Payment Method': e.payment_method || '',
+      'Accountant Note': e.accountant_note || '',
       'Invoice Issued': e.invoice_issued ? 'TRUE' : 'FALSE',
       'Invoice Number': e.invoice_number || '',
       'Receipt Number': e.receipt_number || '',
     }));
-
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'DSR_Register');
-    XLSX.writeFile(workbook, `Maisarah_DSR_Register_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'DSR_Raw_Register');
+
+    // 2. Sales by Employee Matrix Sheet (Matches User Model #1)
+    const empMatrixRows = employeeMatrixData.rows.map(r => {
+      const rowObj: Record<string, any> = { 'Month': r.monthKey };
+      matrixEmployees.forEach(emp => {
+        rowObj[emp] = r.empAmounts[emp] ? Number(r.empAmounts[emp].toFixed(3)) : '';
+      });
+      rowObj['Total (OMR)'] = Number(r.monthTotal.toFixed(3));
+      return rowObj;
+    });
+    const empTotalRow: Record<string, any> = { 'Month': 'TOTAL' };
+    matrixEmployees.forEach(emp => {
+      empTotalRow[emp] = Number((employeeMatrixData.columnTotals[emp] || 0).toFixed(3));
+    });
+    empTotalRow['Total (OMR)'] = Number(employeeMatrixData.grandTotal.toFixed(3));
+    empMatrixRows.push(empTotalRow);
+    const wsEmp = XLSX.utils.json_to_sheet(empMatrixRows);
+    XLSX.utils.book_append_sheet(workbook, wsEmp, 'Sales_By_Employee');
+
+    // 3. Sales by Service Matrix Sheet (Matches User Model #2)
+    const svcMatrixRows = serviceMatrixData.rows.map(r => {
+      const rowObj: Record<string, any> = {
+        'Month': r.monthKey,
+        'Tax (General)': r.subAmounts['tax_gen'] ? Number(r.subAmounts['tax_gen'].toFixed(3)) : '',
+        'Tax (VAT)': r.subAmounts['tax_vat'] ? Number(r.subAmounts['tax_vat'].toFixed(3)) : '',
+        'Tax Subtotal': Number(r.catTotals.tax.toFixed(3)),
+        'Audit (Statutory)': r.subAmounts['audit_stat'] ? Number(r.subAmounts['audit_stat'].toFixed(3)) : '',
+        'Audit (KSA)': r.subAmounts['audit_ksa'] ? Number(r.subAmounts['audit_ksa'].toFixed(3)) : '',
+        'Audit Subtotal': Number(r.catTotals.audit.toFixed(3)),
+        'Liquidation (BL)': r.subAmounts['liq_bl'] ? Number(r.subAmounts['liq_bl'].toFixed(3)) : '',
+        'Liquidation (CC)': r.subAmounts['liq_cc'] ? Number(r.subAmounts['liq_cc'].toFixed(3)) : '',
+        'Liquidation Subtotal': Number(r.catTotals.liquidation.toFixed(3)),
+        'Feasibility (Ministry)': r.subAmounts['feas_min'] ? Number(r.subAmounts['feas_min'].toFixed(3)) : '',
+        'Feasibility (Bank)': r.subAmounts['feas_bank'] ? Number(r.subAmounts['feas_bank'].toFixed(3)) : '',
+        'Feasibility Subtotal': Number(r.catTotals.feasibility.toFixed(3)),
+        'Bookkeeping (Monthly)': r.subAmounts['book_std'] ? Number(r.subAmounts['book_std'].toFixed(3)) : '',
+        'Bookkeeping (Future Acct)': r.subAmounts['book_adv'] ? Number(r.subAmounts['book_adv'].toFixed(3)) : '',
+        'Bookkeeping Subtotal': Number(r.catTotals.bookkeeping.toFixed(3)),
+        'Month Total (OMR)': Number(r.monthGrand.toFixed(3))
+      };
+      return rowObj;
+    });
+    const svcTotalRow: Record<string, any> = {
+      'Month': 'TOTAL',
+      'Tax (General)': Number((serviceMatrixData.subTotals['tax_gen'] || 0).toFixed(3)),
+      'Tax (VAT)': Number((serviceMatrixData.subTotals['tax_vat'] || 0).toFixed(3)),
+      'Tax Subtotal': Number(serviceMatrixData.catGrandTotals.tax.toFixed(3)),
+      'Audit (Statutory)': Number((serviceMatrixData.subTotals['audit_stat'] || 0).toFixed(3)),
+      'Audit (KSA)': Number((serviceMatrixData.subTotals['audit_ksa'] || 0).toFixed(3)),
+      'Audit Subtotal': Number(serviceMatrixData.catGrandTotals.audit.toFixed(3)),
+      'Liquidation (BL)': Number((serviceMatrixData.subTotals['liq_bl'] || 0).toFixed(3)),
+      'Liquidation (CC)': Number((serviceMatrixData.subTotals['liq_cc'] || 0).toFixed(3)),
+      'Liquidation Subtotal': Number(serviceMatrixData.catGrandTotals.liquidation.toFixed(3)),
+      'Feasibility (Ministry)': Number((serviceMatrixData.subTotals['feas_min'] || 0).toFixed(3)),
+      'Feasibility (Bank)': Number((serviceMatrixData.subTotals['feas_bank'] || 0).toFixed(3)),
+      'Feasibility Subtotal': Number(serviceMatrixData.catGrandTotals.feasibility.toFixed(3)),
+      'Bookkeeping (Monthly)': Number((serviceMatrixData.subTotals['book_std'] || 0).toFixed(3)),
+      'Bookkeeping (Future Acct)': Number((serviceMatrixData.subTotals['book_adv'] || 0).toFixed(3)),
+      'Bookkeeping Subtotal': Number(serviceMatrixData.catGrandTotals.bookkeeping.toFixed(3)),
+      'Month Total (OMR)': Number(serviceMatrixData.yearGrandTotal.toFixed(3))
+    };
+    svcMatrixRows.push(svcTotalRow);
+    const wsSvc = XLSX.utils.json_to_sheet(svcMatrixRows);
+    XLSX.utils.book_append_sheet(workbook, wsSvc, 'Sales_By_Service');
+
+    XLSX.writeFile(workbook, `Maisarah_DSR_Financial_Report_${matrixYear}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   return (
@@ -662,8 +901,77 @@ export default function DSRRegister() {
         </div>
       )}
 
-      {/* Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-3">
+      {/* ── View Switcher: Table vs Sales by Employee Heatmap vs Sales by Service Matrix ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-gray-100 shadow-sm">
+        <div className="flex items-center gap-1.5 bg-gray-100/80 p-1 rounded-xl">
+          <button
+            onClick={() => setActiveDSRView('table')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeDSRView === 'table'
+                ? 'bg-white text-red-900 shadow-xs'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <FileSpreadsheet size={14} />
+            <span>{isAr ? 'سجل العمليات (DSR تفصيلي)' : 'Detailed DSR Register'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDSRView('employee_matrix')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeDSRView === 'employee_matrix'
+                ? 'bg-white text-red-900 shadow-xs'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Users size={14} />
+            <span>{isAr ? 'مبيعات الموظفين (نموذج 1)' : 'Sales by Employee Matrix'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDSRView('service_matrix')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeDSRView === 'service_matrix'
+                ? 'bg-white text-red-900 shadow-xs'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Layers size={14} />
+            <span>{isAr ? 'مبيعات الخدمات (نموذج 2)' : 'Sales by Service Matrix'}</span>
+          </button>
+        </div>
+
+        {/* Matrix Year & Full Excel Export */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-rose-50/70 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold text-red-900">
+            <span>{isAr ? 'السنة المالية:' : 'Fiscal Year:'}</span>
+            <select
+              value={matrixYear}
+              onChange={e => setMatrixYear(Number(e.target.value))}
+              className="bg-transparent font-black text-red-950 outline-none cursor-pointer"
+            >
+              <option value={2026}>2026</option>
+              <option value={2025}>2025</option>
+              <option value={2024}>2024</option>
+            </select>
+          </div>
+
+          <button
+            onClick={exportToExcel}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-red-900 hover:bg-red-800 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+            title={isAr ? 'تصدير كامل مصنف الإكسل متعدد الصفحات' : 'Download Complete Multi-Sheet Excel'}
+          >
+            <Download size={14} />
+            <span>{isAr ? 'تحميل إكسل شامل (.xlsx)' : 'Download Full Excel (.xlsx)'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── VIEW 1: DETAILED DSR REGISTRAR TABLE ── */}
+      {activeDSRView === 'table' && (
+        <>
+          {/* Filters Bar */}
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-3">
         {/* Search */}
         <div className="flex-1 min-w-[240px] relative">
           <Search size={16} className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -1126,6 +1434,225 @@ export default function DSRRegister() {
           </table>
         </div>
       </div>
+    </>
+  )}
+
+  {/* ── VIEW 2: SALES BY EMPLOYEE MATRIX (MODEL #1) ── */}
+  {activeDSRView === 'employee_matrix' && (
+    <div className="bg-white rounded-3xl border border-gray-150 shadow-sm p-5 sm:p-6 space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-black border border-emerald-200 mb-1">
+            <Users size={12} />
+            <span>{isAr ? 'مبيعات الموظفين الشهرية - مستخرج من DSR' : 'Monthly Sales by Staff - Generated from DSR'}</span>
+          </div>
+          <h3 className="text-lg font-black text-slate-900 tracking-tight">
+            {isAr ? `مصفوفة مبيعات الموظفين لسنة (${matrixYear})` : `Employee Sales Performance Matrix (${matrixYear})`}
+          </h3>
+          <p className="text-xs text-slate-400 font-medium">
+            {isAr ? 'تتبع إجمالي إيرادات كل موظف شهرياً مع مؤشرات الأداء الحرارية (Heatmap)' : 'Track individual employee billings per month with conditional performance heatmap.'}
+          </p>
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
+          <span className="flex items-center gap-1 text-slate-500">
+            <span className="w-3 h-3 rounded-xs bg-emerald-600 inline-block shadow-2xs" /> {'>'} 1,000 OMR
+          </span>
+          <span className="flex items-center gap-1 text-slate-500">
+            <span className="w-3 h-3 rounded-xs bg-emerald-200 inline-block" /> 700 - 999
+          </span>
+          <span className="flex items-center gap-1 text-slate-500">
+            <span className="w-3 h-3 rounded-xs bg-emerald-50 border border-emerald-200 inline-block" /> 300 - 699
+          </span>
+          <span className="flex items-center gap-1 text-slate-500">
+            <span className="w-3 h-3 rounded-xs bg-rose-200 inline-block" /> {'<'} 300 OMR
+          </span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-center text-xs border border-slate-300 border-collapse">
+          <thead>
+            <tr className="bg-slate-100 border-b-2 border-slate-300 text-slate-800 uppercase font-black text-[11px]">
+              <th className="px-3 py-2.5 border-r border-slate-300 text-slate-900 font-black w-24">{isAr ? 'الشهر' : 'Month'}</th>
+              {matrixEmployees.map(emp => (
+                <th key={emp} className="px-3 py-2.5 border-r border-slate-300 font-black capitalize text-slate-900 min-w-[100px]">
+                  {emp}
+                </th>
+              ))}
+              <th className="px-3 py-2.5 bg-slate-200 text-slate-950 font-black min-w-[110px]">
+                {isAr ? 'إجمالي الشهر' : 'Month Total'}
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {employeeMatrixData.rows.map(row => (
+              <tr key={row.monthKey} className="hover:bg-slate-50 transition">
+                <td className="px-3 py-2 border-r border-slate-300 font-black text-slate-900 bg-slate-50 uppercase text-center">
+                  {row.monthKey}
+                </td>
+                {matrixEmployees.map(emp => {
+                  const val = row.empAmounts[emp] || 0;
+                  const colorCls = getHeatmapColor(val);
+                  return (
+                    <td key={emp} className={`px-2 py-2 border-r border-slate-200 text-right font-mono transition-colors ${colorCls}`}>
+                      {val > 0 ? val.toLocaleString('en-US', { minimumFractionDigits: val % 1 === 0 ? 0 : 3, maximumFractionDigits: 3 }) : ''}
+                    </td>
+                  );
+                })}
+                <td className="px-3 py-2 font-mono font-black text-right text-slate-950 bg-slate-100/80">
+                  {row.monthTotal > 0 ? `OMR ${row.monthTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 })}` : '-'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-slate-200/90 border-t-2 border-slate-400 font-black text-slate-950 text-xs">
+              <td className="px-3 py-2.5 border-r border-slate-300 text-center font-black uppercase">
+                {isAr ? 'الإجمالي الكلي' : 'TOTAL'}
+              </td>
+              {matrixEmployees.map(emp => {
+                const colTotal = employeeMatrixData.columnTotals[emp] || 0;
+                return (
+                  <td key={emp} className="px-2 py-2.5 border-r border-slate-300 text-right font-mono font-black">
+                    {colTotal > 0 ? colTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : '0.000'}
+                  </td>
+                );
+              })}
+              <td className="px-3 py-2.5 text-right font-mono font-black text-emerald-800 bg-slate-300 text-sm">
+                OMR {employeeMatrixData.grandTotal.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  )}
+
+  {/* ── VIEW 3: SALES BY SERVICE MATRIX (MODEL #2) ── */}
+  {activeDSRView === 'service_matrix' && (
+    <div className="bg-white rounded-3xl border border-gray-150 shadow-sm p-5 sm:p-6 space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 text-red-900 text-[10px] font-black border border-rose-200 mb-1">
+            <Layers size={12} />
+            <span>{isAr ? 'تقرير مبيعات الخدمات والأقسام - مستخرج من DSR' : 'Sales by Service Matrix - Generated from DSR'}</span>
+          </div>
+          <h3 className="text-lg font-black text-slate-900 tracking-tight">
+            {isAr ? `مصفوفة مبيعات الخدمات لسنة ${matrixYear}` : `Service Category Sales Matrix (${matrixYear})`}
+          </h3>
+          <p className="text-xs text-slate-400 font-medium">
+            {isAr ? 'تحليل الإيرادات حسب التخصص: الضرائب، التدقيق، التصفية، دراسات الجدوى ومسك الدفاتر' : 'Categorized revenue distribution across Tax, Audit, Liquidation, Feasibility, and Bookkeeping.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-center text-xs border border-slate-400 border-collapse">
+          <thead>
+            {/* Level 0: Year Header */}
+            <tr className="bg-slate-200 border-b border-slate-400 text-slate-900 font-black text-sm">
+              <th colSpan={12} className="py-2 text-center tracking-widest">{matrixYear}</th>
+            </tr>
+            {/* Level 1: Category Names */}
+            <tr className="bg-slate-100 border-b border-slate-400 text-slate-900 font-black text-[11px]">
+              <th rowSpan={2} className="px-3 py-2 border-r border-slate-400 text-center w-20">{isAr ? 'الشهر' : 'Month'}</th>
+              <th colSpan={2} className="px-2 py-2 border-r border-slate-400 text-center bg-rose-50/70 text-red-950 font-black">{isAr ? 'الضرائب Tax' : 'Tax'}</th>
+              <th colSpan={2} className="px-2 py-2 border-r border-slate-400 text-center bg-blue-50/70 text-blue-950 font-black">{isAr ? 'التدقيق Audit' : 'Audit'}</th>
+              <th colSpan={2} className="px-2 py-2 border-r border-slate-400 text-center bg-amber-50/70 text-amber-950 font-black">{isAr ? 'التصفية Liquidation' : 'Liquidation'}</th>
+              <th colSpan={2} className="px-2 py-2 border-r border-slate-400 text-center bg-emerald-50/70 text-emerald-950 font-black">{isAr ? 'دراسات الجدوى Feasibility' : 'Feasibility Study'}</th>
+              <th colSpan={2} className="px-2 py-2 border-r border-slate-400 text-center bg-purple-50/70 text-purple-950 font-black">{isAr ? 'مسك الدفاتر Bookkeeping' : 'Bookkeeping'}</th>
+              <th rowSpan={2} className="px-3 py-2 text-center bg-slate-300 text-slate-950 font-black min-w-[100px]">{isAr ? 'المجموع الشهري' : 'Month Total'}</th>
+            </tr>
+            {/* Level 2: Sub-columns */}
+            <tr className="bg-slate-50 border-b-2 border-slate-400 text-[10px] font-bold text-slate-700">
+              <th className="px-2 py-1.5 border-r border-slate-300">Tax</th>
+              <th className="px-2 py-1.5 border-r border-slate-400 font-black text-red-900">VAT</th>
+              <th className="px-2 py-1.5 border-r border-slate-300">Audit</th>
+              <th className="px-2 py-1.5 border-r border-slate-400 font-black text-blue-900">KSA</th>
+              <th className="px-2 py-1.5 border-r border-slate-300">BL</th>
+              <th className="px-2 py-1.5 border-r border-slate-400">CC</th>
+              <th className="px-2 py-1.5 border-r border-slate-300">Ministry</th>
+              <th className="px-2 py-1.5 border-r border-slate-400">Bank</th>
+              <th className="px-2 py-1.5 border-r border-slate-300">Bookkeeping</th>
+              <th className="px-2 py-1.5 border-r border-slate-400">Future Acct</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {serviceMatrixData.rows.map(row => (
+              <tr key={row.monthKey} className="hover:bg-slate-50/80 transition">
+                <td className="px-2 py-2 border-r border-slate-400 font-black text-slate-900 bg-slate-50 text-center uppercase">
+                  {row.monthKey}
+                </td>
+                {/* Tax */}
+                <td className="px-2 py-1.5 border-r border-slate-300 text-right font-mono text-slate-700">{row.subAmounts.tax_gen ? row.subAmounts.tax_gen.toFixed(3) : '-'}</td>
+                <td className="px-2 py-1.5 border-r border-slate-400 text-right font-mono text-slate-900 font-bold bg-rose-50/30">{row.subAmounts.tax_vat ? row.subAmounts.tax_vat.toFixed(3) : '-'}</td>
+                {/* Audit */}
+                <td className="px-2 py-1.5 border-r border-slate-300 text-right font-mono text-slate-700">{row.subAmounts.audit_stat ? row.subAmounts.audit_stat.toFixed(3) : '-'}</td>
+                <td className="px-2 py-1.5 border-r border-slate-400 text-right font-mono text-slate-900 font-bold bg-blue-50/30">{row.subAmounts.audit_ksa ? row.subAmounts.audit_ksa.toFixed(3) : '-'}</td>
+                {/* Liquidation */}
+                <td className="px-2 py-1.5 border-r border-slate-300 text-right font-mono text-slate-700">{row.subAmounts.liq_bl ? row.subAmounts.liq_bl.toFixed(3) : '-'}</td>
+                <td className="px-2 py-1.5 border-r border-slate-400 text-right font-mono text-slate-500">{row.subAmounts.liq_cc ? row.subAmounts.liq_cc.toFixed(3) : '-'}</td>
+                {/* Feasibility */}
+                <td className="px-2 py-1.5 border-r border-slate-300 text-right font-mono text-slate-700">{row.subAmounts.feas_min ? row.subAmounts.feas_min.toFixed(3) : '-'}</td>
+                <td className="px-2 py-1.5 border-r border-slate-400 text-right font-mono text-slate-500">{row.subAmounts.feas_bank ? row.subAmounts.feas_bank.toFixed(3) : '-'}</td>
+                {/* Bookkeeping */}
+                <td className="px-2 py-1.5 border-r border-slate-300 text-right font-mono text-slate-700">{row.subAmounts.book_std ? row.subAmounts.book_std.toFixed(3) : '-'}</td>
+                <td className="px-2 py-1.5 border-r border-slate-400 text-right font-mono text-slate-500">{row.subAmounts.book_adv ? row.subAmounts.book_adv.toFixed(3) : '-'}</td>
+                {/* Month Total */}
+                <td className="px-2 py-1.5 text-right font-mono font-black text-slate-900 bg-slate-100">
+                  {row.monthGrand > 0 ? row.monthGrand.toFixed(3) : '-'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            {/* Column Totals Row */}
+            <tr className="bg-slate-200/90 border-t-2 border-slate-400 font-black text-slate-900 text-xs">
+              <td className="px-2 py-2 border-r border-slate-400 text-center uppercase font-black">{isAr ? 'الإجمالي' : 'Total'}</td>
+              <td className="px-2 py-2 border-r border-slate-300 text-right font-mono">{serviceMatrixData.subTotals.tax_gen.toFixed(3)}</td>
+              <td className="px-2 py-2 border-r border-slate-400 text-right font-mono bg-rose-100 text-red-950">{serviceMatrixData.subTotals.tax_vat.toFixed(3)}</td>
+              <td className="px-2 py-2 border-r border-slate-300 text-right font-mono">{serviceMatrixData.subTotals.audit_stat.toFixed(3)}</td>
+              <td className="px-2 py-2 border-r border-slate-400 text-right font-mono bg-blue-100 text-blue-950">{serviceMatrixData.subTotals.audit_ksa.toFixed(3)}</td>
+              <td className="px-2 py-2 border-r border-slate-300 text-right font-mono">{serviceMatrixData.subTotals.liq_bl.toFixed(3)}</td>
+              <td className="px-2 py-2 border-r border-slate-400 text-right font-mono">{serviceMatrixData.subTotals.liq_cc.toFixed(3)}</td>
+              <td className="px-2 py-2 border-r border-slate-300 text-right font-mono">{serviceMatrixData.subTotals.feas_min.toFixed(3)}</td>
+              <td className="px-2 py-2 border-r border-slate-400 text-right font-mono">{serviceMatrixData.subTotals.feas_bank.toFixed(3)}</td>
+              <td className="px-2 py-2 border-r border-slate-300 text-right font-mono">{serviceMatrixData.subTotals.book_std.toFixed(3)}</td>
+              <td className="px-2 py-2 border-r border-slate-400 text-right font-mono">{serviceMatrixData.subTotals.book_adv.toFixed(3)}</td>
+              <td className="px-2 py-2 text-right font-mono font-black text-slate-950 bg-slate-300 text-sm">
+                {serviceMatrixData.yearGrandTotal.toFixed(3)}
+              </td>
+            </tr>
+
+            {/* Category Grand Total Badges Row */}
+            <tr className="bg-slate-100 border-t border-slate-300 text-xs font-black">
+              <td className="px-2 py-3 border-r border-slate-300 text-center text-slate-500">{isAr ? 'صافي المجال' : 'Area Net'}</td>
+              <td colSpan={2} className="px-2 py-3 border-r border-slate-300 text-center font-mono text-emerald-800 bg-emerald-50">
+                ▲ {serviceMatrixData.catGrandTotals.tax.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </td>
+              <td colSpan={2} className="px-2 py-3 border-r border-slate-300 text-center font-mono text-emerald-800 bg-emerald-50">
+                ▲ {serviceMatrixData.catGrandTotals.audit.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </td>
+              <td colSpan={2} className="px-2 py-3 border-r border-slate-300 text-center font-mono text-amber-800 bg-amber-50">
+                ▼ {serviceMatrixData.catGrandTotals.liquidation.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </td>
+              <td colSpan={2} className="px-2 py-3 border-r border-slate-300 text-center font-mono text-slate-800 bg-slate-50">
+                ■ {serviceMatrixData.catGrandTotals.feasibility.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </td>
+              <td colSpan={2} className="px-2 py-3 border-r border-slate-300 text-center font-mono text-slate-800 bg-slate-50">
+                ■ {serviceMatrixData.catGrandTotals.bookkeeping.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-2 py-3 text-right font-mono font-black text-red-900 bg-rose-100">
+                OMR {serviceMatrixData.yearGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  )}
 
       {/* 1-Click Invoice & Receipt Generation Modal */}
       {isInvoiceGeneratorOpen && selectedEntryForInvoice && (
