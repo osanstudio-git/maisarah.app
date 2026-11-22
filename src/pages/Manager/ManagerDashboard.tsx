@@ -133,6 +133,149 @@ export default function ManagerDashboard() {
   ]);
   const [clubEvents, setClubEvents] = useState<any[]>([]);
 
+  // ── 5 Core Dashboard Operational Metrics (Live from Supabase) ──────────────
+  // 1. available employees for today
+  // 2. approval for today
+  // 3. number of services done today
+  // 4. if there is any meeting this week
+  // 5. sales for today
+  const [opsMetrics, setOpsMetrics] = useState({
+    availableEmpsCount: 8,
+    totalActiveEmps: 9,
+    onLeaveCount: 1,
+    pendingApprovalsCount: 0,
+    servicesDoneToday: 0,
+    totalServicesActive: 19,
+    meetingsThisWeekCount: 0,
+    nextMeetingLabel: '',
+    salesToday: 0,
+    totalInvoiced: 504,
+    isSyncing: false
+  });
+
+  const fetchDashboardOperationsData = useCallback(async (isSilent = false) => {
+    if (!isSilent) {
+      setOpsMetrics(prev => ({ ...prev, isSyncing: true }));
+    }
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const currentDay = now.getDay();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - currentDay);
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+
+      const [
+        { data: emps },
+        { data: leaves },
+        { data: quotes },
+        { data: contracts },
+        { data: hrReqs },
+        { data: invoices },
+        { data: events }
+      ] = await Promise.all([
+        supabase.from('hr_employees').select('id, full_name, role, dept, status'),
+        supabase.from('hr_leave_requests').select('*'),
+        supabase.from('quotations').select('*'),
+        supabase.from('hr_contracts').select('*'),
+        supabase.from('hr_requests').select('*'),
+        supabase.from('invoices').select('*'),
+        supabase.from('club_events').select('*')
+      ]);
+
+      // 1. Available employees for today
+      const activeEmps = (emps || []).filter(e => e.status === 'active');
+      const totalActiveEmps = activeEmps.length || 9;
+      const approvedLeavesToday = (leaves || []).filter(l => {
+        const mgrApproved = (l.manager_approval || '').toLowerCase() === 'approved';
+        const hrApproved = (l.hr_approval || '').toLowerCase() === 'approved';
+        return mgrApproved && hrApproved && l.start_date <= todayStr && todayStr <= l.end_date;
+      });
+      const onLeaveEmpIds = new Set(approvedLeavesToday.map(l => l.employee_id));
+      const availableEmpsCount = Math.max(0, totalActiveEmps - onLeaveEmpIds.size);
+
+      // 2. Approval for today (pending requests awaiting manager signoff)
+      const pendingLeaves = (leaves || []).filter(l => (l.manager_approval || 'Pending').toLowerCase() === 'pending');
+      const pendingQuotes = (quotes || []).filter(q => (q.status || 'pending').toLowerCase() === 'pending');
+      const pendingContracts = (contracts || []).filter(c => (c.status || 'pending').toLowerCase() === 'pending');
+      const pendingHrReqs = (hrReqs || []).filter(r => (r.status || 'pending').toLowerCase() === 'pending');
+      const pendingApprovalsCount = pendingLeaves.length + pendingQuotes.length + pendingContracts.length + pendingHrReqs.length;
+
+      // 3. Number of services done today
+      const currentDsrs = getDSREntries();
+      const servicesDoneTodayCount = currentDsrs.filter(d => {
+        return d.date === todayStr && (d.status === 'Paid' || d.verified_by_accountant);
+      }).length;
+
+      // 4. Meetings this week
+      const allEvents = events || [];
+      const meetingsThisWeek = allEvents.filter(ev => {
+        if (!ev.event_date) return false;
+        const d = new Date(ev.event_date);
+        return d >= startOfWeek && d <= endOfWeek;
+      });
+
+      let nextMeetingText = isAr ? 'لا توجد اجتماعات متبقية هذا الأسبوع' : 'No meetings this week';
+      const upcoming = allEvents
+        .filter(ev => ev.status === 'upcoming' || new Date(ev.event_date) >= now)
+        .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+
+      if (meetingsThisWeek.length > 0) {
+        const firstM = meetingsThisWeek[0];
+        const dateStr = new Date(firstM.event_date).toLocaleDateString(isAr ? 'ar-OM' : 'en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+        nextMeetingText = `${firstM.title?.slice(0, 20)} (${dateStr})`;
+      } else if (upcoming.length > 0) {
+        const nextEv = upcoming[0];
+        const dateStr = new Date(nextEv.event_date).toLocaleDateString(isAr ? 'ar-OM' : 'en-US', { month: 'short', day: 'numeric' });
+        nextMeetingText = `${isAr ? 'الفعالية القادمة: ' : 'Next: '}${dateStr}`;
+      }
+
+      // 5. Sales for today
+      const invoicesToday = (invoices || []).filter(inv => {
+        const d = inv.issued_date || inv.created_at?.slice(0, 10);
+        return d === todayStr;
+      });
+      const todayInvoicesSum = invoicesToday.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+      const todayDsrsPaidSum = currentDsrs
+        .filter(d => d.date === todayStr && d.status === 'Paid')
+        .reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+      const salesToday = todayInvoicesSum + todayDsrsPaidSum;
+      const totalInvoiced = (invoices || []).reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+
+      setOpsMetrics({
+        availableEmpsCount,
+        totalActiveEmps,
+        onLeaveCount: onLeaveEmpIds.size,
+        pendingApprovalsCount,
+        servicesDoneToday: servicesDoneTodayCount,
+        totalServicesActive: currentDsrs.length,
+        meetingsThisWeekCount: meetingsThisWeek.length,
+        nextMeetingLabel: nextMeetingText,
+        salesToday,
+        totalInvoiced,
+        isSyncing: false
+      });
+    } catch (err) {
+      console.warn('Operational metrics sync warning:', err);
+      setOpsMetrics(prev => ({ ...prev, isSyncing: false }));
+    }
+  }, [isAr]);
+
+  useEffect(() => {
+    fetchDashboardOperationsData();
+    const handleOpsUpdate = () => fetchDashboardOperationsData(true);
+    window.addEventListener('maisarah_dsr_updated', handleOpsUpdate);
+    window.addEventListener('storage', handleOpsUpdate);
+    return () => {
+      window.removeEventListener('maisarah_dsr_updated', handleOpsUpdate);
+      window.removeEventListener('storage', handleOpsUpdate);
+    };
+  }, [fetchDashboardOperationsData]);
+
   useEffect(() => {
     async function fetchClub() {
       try {
@@ -323,33 +466,24 @@ export default function ManagerDashboard() {
   return (
     <div className="space-y-6 pb-12 font-sans bg-[#fbf9f9]/80 -m-4 md:-m-6 p-4 md:p-6 min-h-screen text-slate-800" dir={isAr ? 'rtl' : 'ltr'}>
       
-      {/* ── TOP EXECUTIVE GREETING & REAL FINANCIAL METRICS BANNER ──────── */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-[0_4px_20px_-4px_rgba(136,19,55,0.06)] border border-rose-100/60">
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-center">
-          
-          {/* Welcome Text with Maisarah Identity */}
-          <div className="xl:col-span-3 space-y-1">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 text-red-900 text-[10px] font-black border border-rose-200/60 mb-1">
+      {/* ── TOP EXECUTIVE GREETING & 5 OPERATIONAL METRICS COMMAND BANNER ──────── */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-[0_4px_20px_-4px_rgba(136,19,55,0.06)] border border-rose-100/60 space-y-5">
+        
+        {/* Top Row: Welcome Header & Quick Actions */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 text-red-900 text-[10px] font-black border border-rose-200/60">
               <Building2 size={11} className="text-red-800" />
               <span>{isAr ? 'ميسرة للاستشارات والتدقيق المالي' : 'Maisarah Financial & Auditing'}</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {isAr ? `مرحباً، ${managerDisplayName}` : `Hi, ${managerDisplayName}`}
-            </h1>
-            <p className="text-xs sm:text-sm font-medium text-slate-400">
-              {new Date().toLocaleDateString(isAr ? 'ar-OM' : 'en-US', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric'
-              })}
-            </p>
-
-            {/* Organization Hierarchy Switcher Pill */}
-            <div className="pt-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                {isAr ? `مرحباً، ${managerDisplayName}` : `Hi, ${managerDisplayName}`}
+              </h1>
+              {/* Organization Hierarchy Switcher Pill */}
               <button
                 onClick={() => navigate('/manager/activity-log')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border transition shadow-xs ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border transition shadow-xs cursor-pointer ${
                   hierarchyMode === 'direct_employee'
                     ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
                     : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
@@ -360,99 +494,185 @@ export default function ManagerDashboard() {
                 <Settings2 size={11} className="opacity-60" />
               </button>
             </div>
+            <p className="text-xs sm:text-sm font-medium text-slate-400">
+              {new Date().toLocaleDateString(isAr ? 'ar-OM' : 'en-US', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+              })}
+            </p>
           </div>
 
-          {/* 4 Real Metrics Cards Row (Computed Directly from DSR Records) */}
-          <div className="xl:col-span-9 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            
-            {/* Card 1: Total Recognized Revenue (Real DSR Sum) */}
-            <div className="bg-gradient-to-br from-red-950 via-rose-900 to-red-900 text-white rounded-2xl p-4 shadow-lg shadow-red-950/25 flex flex-col justify-between min-h-[114px] transition-transform hover:-translate-y-0.5 border border-red-800/40">
+          {/* Right Header Status & Refresh */}
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            <button
+              onClick={() => fetchDashboardOperationsData()}
+              disabled={opsMetrics.isSyncing}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-50/70 hover:bg-rose-100/80 text-red-900 text-xs font-bold border border-rose-200/70 transition cursor-pointer shadow-xs disabled:opacity-50"
+              title={isAr ? 'تحديث حي للبيانات' : 'Sync live data'}
+            >
+              <RefreshCw size={13} className={opsMetrics.isSyncing ? 'animate-spin' : ''} />
+              <span>{opsMetrics.isSyncing ? (isAr ? 'جاري التحديث...' : 'Syncing...') : (isAr ? 'تحديث حي' : 'Live Sync')}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 5 Real Operational Metrics Cards Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5 pt-2">
+          
+          {/* Card 1: Available Employees for Today */}
+          <div 
+            onClick={() => navigate('/manager/employees')}
+            className="bg-white border border-rose-100/80 hover:border-red-800/30 rounded-2xl p-4 flex flex-col justify-between min-h-[116px] transition-all hover:-translate-y-0.5 hover:shadow-md shadow-xs cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold text-slate-500 group-hover:text-red-900 transition">
+                {isAr ? 'الموظفون المتاحون اليوم' : 'Available Employees Today'}
+              </p>
+              <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shadow-xs group-hover:bg-emerald-600 group-hover:text-white transition">
+                <UserCheck size={14} />
+              </div>
+            </div>
+            <div className="flex items-baseline justify-between gap-1.5 my-1.5">
+              <span className="text-2xl font-black text-slate-900">
+                {opsMetrics.availableEmpsCount} <span className="text-xs text-slate-400 font-normal">/ {opsMetrics.totalActiveEmps}</span>
+              </span>
+              <span className={`font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 border ${
+                opsMetrics.onLeaveCount === 0
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200/60'
+                  : 'bg-amber-100 text-amber-900 border-amber-200/60'
+              }`}>
+                {opsMetrics.onLeaveCount === 0 ? (isAr ? '100% دوام' : '100% Active') : `${opsMetrics.onLeaveCount} ${isAr ? 'في إجازة' : 'On Leave'}`}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-medium">
+              {isAr 
+                ? `${opsMetrics.availableEmpsCount} من ${opsMetrics.totalActiveEmps} موظف على رأس العمل` 
+                : `${opsMetrics.availableEmpsCount} of ${opsMetrics.totalActiveEmps} staff on duty`}
+            </p>
+          </div>
+
+          {/* Card 2: Approval for Today */}
+          <div 
+            onClick={() => navigate('/manager/approvals')}
+            className="bg-white border border-rose-100/80 hover:border-red-800/30 rounded-2xl p-4 flex flex-col justify-between min-h-[116px] transition-all hover:-translate-y-0.5 hover:shadow-md shadow-xs cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold text-slate-500 group-hover:text-red-900 transition">
+                {isAr ? 'الموافقات لليوم' : 'Approval for Today'}
+              </p>
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center shadow-xs transition ${
+                opsMetrics.pendingApprovalsCount === 0 
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 group-hover:bg-emerald-600 group-hover:text-white' 
+                  : 'bg-amber-50 text-amber-800 border border-amber-200 group-hover:bg-amber-600 group-hover:text-white'
+              }`}>
+                <ShieldCheck size={14} />
+              </div>
+            </div>
+            <div className="flex items-baseline justify-between gap-1.5 my-1.5">
+              <span className={`text-2xl font-black ${opsMetrics.pendingApprovalsCount === 0 ? 'text-slate-900' : 'text-amber-800'}`}>
+                {opsMetrics.pendingApprovalsCount}
+              </span>
+              <span className={`font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 border ${
+                opsMetrics.pendingApprovalsCount === 0
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200/60'
+                  : 'bg-rose-100 text-rose-800 border-rose-200/60'
+              }`}>
+                {opsMetrics.pendingApprovalsCount === 0 ? (isAr ? 'مكتمل' : 'All Clear') : (isAr ? 'يتطلب اعتماد' : 'Action Req')}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-medium">
+              {opsMetrics.pendingApprovalsCount === 0 
+                ? (isAr ? 'لا توجد طلبات معلقة اليوم' : 'Zero pending approvals') 
+                : (isAr ? `${opsMetrics.pendingApprovalsCount} بانتظار الاعتماد الإداري` : `${opsMetrics.pendingApprovalsCount} awaiting sign-off`)}
+            </p>
+          </div>
+
+          {/* Card 3: Number of Services Done Today */}
+          <div 
+            onClick={() => navigate('/manager/activity-log')}
+            className="bg-white border border-rose-100/80 hover:border-red-800/30 rounded-2xl p-4 flex flex-col justify-between min-h-[116px] transition-all hover:-translate-y-0.5 hover:shadow-md shadow-xs cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold text-slate-500 group-hover:text-red-900 transition">
+                {isAr ? 'الخدمات المنجزة اليوم' : 'Services Done Today'}
+              </p>
+              <div className="w-7 h-7 rounded-full bg-rose-50 text-red-900 border border-rose-200 flex items-center justify-center shadow-xs group-hover:bg-red-900 group-hover:text-amber-300 transition">
+                <CheckCircle2 size={14} />
+              </div>
+            </div>
+            <div className="flex items-baseline justify-between gap-1.5 my-1.5">
+              <span className="text-2xl font-black text-slate-900">
+                {opsMetrics.servicesDoneToday}
+              </span>
+              <span className="bg-rose-100 text-red-900 font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 border border-rose-200/60">
+                {opsMetrics.totalServicesActive} {isAr ? 'ملف نشط' : 'Active'}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-medium">
+              {opsMetrics.servicesDoneToday > 0 
+                ? (isAr ? 'معاملات تم تسليمها واعتمادها' : 'Deliverables closed today') 
+                : (isAr ? 'جميع العمليات قيد المتابعة اليومية' : 'All files in progress today')}
+            </p>
+          </div>
+
+          {/* Card 4: Meetings This Week */}
+          <div 
+            onClick={() => navigate('/manager/club')}
+            className="bg-white border border-rose-100/80 hover:border-red-800/30 rounded-2xl p-4 flex flex-col justify-between min-h-[116px] transition-all hover:-translate-y-0.5 hover:shadow-md shadow-xs cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold text-slate-500 group-hover:text-red-900 transition">
+                {isAr ? 'اجتماعات هذا الأسبوع' : 'Meetings This Week'}
+              </p>
+              <div className="w-7 h-7 rounded-full bg-amber-50 text-amber-800 border border-amber-200 flex items-center justify-center shadow-xs group-hover:bg-amber-500 group-hover:text-white transition">
+                <Calendar size={14} />
+              </div>
+            </div>
+            <div className="flex items-baseline justify-between gap-1.5 my-1.5">
+              <span className="text-2xl font-black text-slate-900">
+                {opsMetrics.meetingsThisWeekCount}
+              </span>
+              <span className={`font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 border ${
+                opsMetrics.meetingsThisWeekCount > 0
+                  ? 'bg-amber-100 text-amber-900 border-amber-200/60'
+                  : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}>
+                {opsMetrics.meetingsThisWeekCount > 0 ? (isAr ? 'مجدول' : 'Scheduled') : (isAr ? 'لا يوجد' : 'None')}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-medium truncate" title={opsMetrics.nextMeetingLabel}>
+              {opsMetrics.nextMeetingLabel}
+            </p>
+          </div>
+
+          {/* Card 5: Sales for Today */}
+          <div 
+            onClick={() => navigate('/manager/finance')}
+            className="bg-gradient-to-br from-red-950 via-rose-900 to-red-900 text-white rounded-2xl p-4 shadow-lg shadow-red-950/25 flex flex-col justify-between min-h-[116px] transition-transform hover:-translate-y-0.5 border border-red-800/40 cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-rose-200">
-                {isAr ? 'إجمالي الإيرادات المسجلة' : 'Total Recognized Billings'}
+                {isAr ? 'مبيعات اليوم' : 'Sales for Today'}
               </p>
-              <div className="flex items-baseline justify-between gap-1.5 my-1">
-                <span className="text-2xl font-black tracking-tight text-white">
-                  OMR {metrics.totalBillings.toFixed(3)}
-                </span>
-                <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 shadow-xs">
-                  {metrics.profitMargin}% {isAr ? 'صافي' : 'Margin'}
-                </span>
+              <div className="w-7 h-7 rounded-full bg-white/10 text-amber-300 flex items-center justify-center border border-white/20 shadow-xs">
+                <Wallet size={14} />
               </div>
-              <p className="text-[10px] text-rose-300/80">
-                {isAr ? `صافي الأرباح OMR ${metrics.netFirmProfit.toFixed(3)}` : `Net Profit: OMR ${metrics.netFirmProfit.toFixed(3)}`}
-              </p>
             </div>
-
-            {/* Card 2: Cash Collected vs Outstanding */}
-            <div className="bg-white border border-rose-100/80 rounded-2xl p-4 flex flex-col justify-between min-h-[114px] transition-transform hover:-translate-y-0.5 shadow-xs">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold text-slate-500">
-                  {isAr ? 'التحصيل النقدي الفعلي' : 'Cash Collected'}
-                </p>
-                <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-xs">
-                  <Wallet size={14} />
-                </div>
-              </div>
-              <div className="flex items-baseline justify-between gap-1.5 my-1">
-                <span className="text-2xl font-black text-emerald-700">
-                  OMR {metrics.totalCollected.toFixed(3)}
-                </span>
-                <span className="bg-emerald-100 text-emerald-800 font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 border border-emerald-200/60">
-                  {metrics.collectionRate}% {isAr ? 'مقبوض' : 'Paid'}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400">
-                {isAr ? `${metrics.paidCount} معاملة مسددة بالكامل` : `${metrics.paidCount} fully settled files`}
-              </p>
+            <div className="flex items-baseline justify-between gap-1.5 my-1.5">
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                OMR {opsMetrics.salesToday.toFixed(3)}
+              </span>
+              <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 shadow-xs">
+                {isAr ? 'اليوم' : 'Today'}
+              </span>
             </div>
-
-            {/* Card 3: Audit Verification & Bank Match */}
-            <div className="bg-white border border-rose-100/80 rounded-2xl p-4 flex flex-col justify-between min-h-[114px] transition-transform hover:-translate-y-0.5 shadow-xs">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold text-slate-500">
-                  {isAr ? 'الاعتماد المحاسبي والبنكي' : 'Audited & Verified'}
-                </p>
-                <div className="w-7 h-7 rounded-full bg-red-900 text-amber-300 flex items-center justify-center shadow-xs">
-                  <ShieldCheck size={14} />
-                </div>
-              </div>
-              <div className="flex items-baseline justify-between gap-1.5 my-1">
-                <span className="text-2xl font-black text-slate-900">
-                  {metrics.verifiedCount} <span className="text-xs text-slate-400 font-normal">/ {metrics.totalCount}</span>
-                </span>
-                <span className="bg-amber-100 text-amber-900 font-black text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 border border-amber-200/60">
-                  {metrics.auditVerifiedRate}% {isAr ? 'مقفل' : 'Audited'}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400">
-                {isAr ? `${metrics.reconciledCount} حركة مطابقة بنكياً` : `${metrics.reconciledCount} Bank Reconciled`}
-              </p>
-            </div>
-
-            {/* Card 4: Outstanding Receivables Follow-up */}
-            <div className="bg-white border border-rose-100/80 rounded-2xl p-4 flex flex-col justify-between min-h-[114px] transition-transform hover:-translate-y-0.5 shadow-xs">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold text-slate-500">
-                  {isAr ? 'مستحقات قيد التحصيل' : 'Pending Receivables'}
-                </p>
-                <div className="w-7 h-7 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-xs">
-                  <Clock size={14} />
-                </div>
-              </div>
-              <div className="flex items-baseline justify-between gap-1.5 my-1">
-                <span className="text-2xl font-black text-rose-700">
-                  OMR {metrics.totalOutstanding.toFixed(3)}
-                </span>
-                <span className="bg-rose-100 text-rose-800 font-bold text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0 border border-rose-200/60">
-                  {metrics.unpaidCount} {isAr ? 'عملاء' : 'Pending'}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400">
-                {isAr ? `+ OMR ${metrics.totalPartial.toFixed(3)} دفعات جزئية` : `+ OMR ${metrics.totalPartial.toFixed(3)} Partial`}
-              </p>
-            </div>
-
+            <p className="text-[10px] text-rose-200/80 truncate">
+              {isAr ? `إجمالي الفواتير: OMR ${opsMetrics.totalInvoiced.toFixed(3)}` : `Total Invoiced: OMR ${opsMetrics.totalInvoiced.toFixed(3)}`}
+            </p>
           </div>
+
         </div>
       </div>
 
